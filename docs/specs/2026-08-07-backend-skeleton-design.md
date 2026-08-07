@@ -1,7 +1,7 @@
 # 设计文档：后端项目骨架 + 数据模型 + 数据库迁移（issue #1）
 
 - **Issue**: [BinLiang1990/knowledgebase#1](https://github.com/BinLiang1990/knowledgebase/issues/1)
-- **状态**: Draft → 待对抗式自校验
+- **状态**: 已实现，Codex 外门审查发现并修复 2 项（时间戳精度、ON UPDATE 未渲染进 DDL），见 §9
 - **依赖**: 无（本仓库第一个后端 issue）
 - **相关 PRD**: `docs/PRD.md` §5（数据模型）、§4.10（响应结构）、§6（业务规则 #6/#12）
 
@@ -195,3 +195,12 @@ backend/
 ## 8. Out of Scope（与 issue 描述一致）
 
 知识库/维度/知识点/答案的业务 CRUD 与查询接口——全部留给 issue #2-#5。
+
+## 9. Codex 外门审查发现的问题（实现后发现，已修复）
+
+Codex 对 PR #17 的结构性审查发现了 2 个在 CTO 自审和对抗式设计自审阶段都没抓到的问题：
+
+- **[P1] `created_at` 缺少亚秒精度**：MySQL `DATETIME` 默认只精确到秒；同一秒内写入同一知识点+同一条件组合的两条答案，`created_at` 会完全相同，导致 §4.6.1 依赖的"`effective_time` 相同时按 `created_at` 取最新"这条排序规则失去确定性——恰好是本 issue 为了修另一个对抗式审查发现而加的规则，精度不够又把它变得不确定。**修复**：所有 `created_at`/`updated_at` 列改为 `DATETIME(6)`（微秒精度），`server_default` 相应改成 `CURRENT_TIMESTAMP(6)`。
+- **[P2] `updated_at` 的 `ON UPDATE CURRENT_TIMESTAMP` 从未真正写进 DDL**：SQLAlchemy 的 `server_onupdate=` 在 MySQL 方言下只是 Python 侧的元数据，不会渲染进 `CREATE TABLE`；绕过 ORM 的原始 SQL UPDATE 会让 `updated_at` 悄悄过期。**修复**：把 `ON UPDATE CURRENT_TIMESTAMP(6)` 直接拼进 `server_default` 的原始 SQL 文本里（MySQL 的 DDL 语法本身就是把 DEFAULT 和 ON UPDATE 写在同一个子句里），迁移脚本与 ORM 模型都同步改了，两处保持一致。
+
+两处改动都集中在 `backend/src/kb_backend/models/base.py`（新增 `created_at_column()`/`updated_at_column()` 两个工厂函数，四个模型文件复用）和迁移脚本对应的 `created_at_col()`/`updated_at_col()`，避免同样的写法散落在 5 张表里各写一遍下次又漏改。

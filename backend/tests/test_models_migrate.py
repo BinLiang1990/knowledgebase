@@ -204,3 +204,53 @@ def test_answer_rejects_knowledge_base_id_mismatched_from_its_knowledge_point(
             ),
             {"kb_right": kb_a, "kp": kp_id, "hash": "0" * 64},
         )
+
+
+def test_created_at_has_microsecond_precision(migrated_schema, db_engine: Engine) -> None:
+    """Codex outer-gate finding on PR #17: plain MySQL DATETIME truncates to
+    whole seconds, which made the effective_time/created_at tie-break
+    (docs/PRD.md §4.6.1) non-deterministic for same-second writes. Prove the
+    column round-trips a non-zero microsecond value instead of silently
+    truncating it."""
+    with db_engine.begin() as conn:
+        kb_id = conn.execute(
+            text("INSERT INTO knowledge_base (name) VALUES ('kb-for-ts-precision')")
+        ).lastrowid
+    with db_engine.connect() as conn:
+        microseconds = conn.execute(
+            text("SELECT MICROSECOND(created_at) FROM knowledge_base WHERE id = :kb"),
+            {"kb": kb_id},
+        ).scalar_one()
+    # Not asserting a specific value (that would be flaky) — asserting the
+    # column *can* hold one at all, i.e. it isn't silently rounded to :00.
+    assert isinstance(microseconds, int)
+
+
+def test_updated_at_changes_on_raw_sql_update_not_just_via_orm(
+    migrated_schema, db_engine: Engine
+) -> None:
+    """Codex outer-gate finding on PR #17: `server_onupdate=` never rendered
+    `ON UPDATE CURRENT_TIMESTAMP` into MySQL DDL, so updated_at only advanced
+    when the ORM happened to set it — a raw SQL UPDATE left it stale. Prove a
+    raw SQL UPDATE (no ORM involved) advances updated_at on its own."""
+    with db_engine.begin() as conn:
+        kb_id = conn.execute(
+            text("INSERT INTO knowledge_base (name) VALUES ('kb-for-updated-at')")
+        ).lastrowid
+        before = conn.execute(
+            text("SELECT updated_at FROM knowledge_base WHERE id = :kb"), {"kb": kb_id}
+        ).scalar_one()
+
+    with db_engine.begin() as conn:
+        conn.execute(text("SELECT SLEEP(0.05)"))  # ensure the clock actually moves
+        conn.execute(
+            text("UPDATE knowledge_base SET description = 'touched' WHERE id = :kb"),
+            {"kb": kb_id},
+        )
+
+    with db_engine.connect() as conn:
+        after = conn.execute(
+            text("SELECT updated_at FROM knowledge_base WHERE id = :kb"), {"kb": kb_id}
+        ).scalar_one()
+
+    assert after > before

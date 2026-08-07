@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.mysql import BIGINT
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base
+from .base import Base, created_at_column, updated_at_column
 from .knowledge_base import TABLE_ARGS
 
 
@@ -25,9 +25,7 @@ class KnowledgePoint(Base):
         Enum("active", "deleted", name="knowledge_point_status"), nullable=False, server_default="active"
     )
     operator: Mapped[str] = mapped_column(String(100), nullable=False, server_default="admin")
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
-    )
+    created_at = created_at_column()
+    updated_at = updated_at_column()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     delete_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)

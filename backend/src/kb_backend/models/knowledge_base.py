@@ -1,10 +1,8 @@
-from datetime import datetime
-
-from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy import Enum, String, Text
 from sqlalchemy.dialects.mysql import BIGINT
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base
+from .base import Base, created_at_column, updated_at_column
 
 TABLE_ARGS = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_0900_ai_ci"}
 
@@ -21,7 +19,5 @@ class KnowledgeBase(Base):
         nullable=False,
         server_default="active",
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
-    )
+    created_at = created_at_column()
+    updated_at = updated_at_column()

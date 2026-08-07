@@ -1,10 +1,10 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKeyConstraint, Index, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKeyConstraint, Index, String, Text
 from sqlalchemy.dialects.mysql import BIGINT, JSON, LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base
+from .base import Base, created_at_column
 from .knowledge_base import TABLE_ARGS
 
 
@@ -35,4 +35,4 @@ class Answer(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    created_at = created_at_column()

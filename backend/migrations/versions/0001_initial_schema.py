@@ -21,6 +21,28 @@ depends_on = None
 CHARSET_KW = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_0900_ai_ci"}
 
 
+# Microsecond precision (fsp=6): plain MySQL DATETIME only has whole-second
+# resolution, which breaks the "effective_time DESC, created_at DESC"
+# tie-break the resolve algorithm (docs/PRD.md §4.6.1) needs to be
+# deterministic. `server_onupdate=` is Python-metadata-only for MySQL and
+# never renders into DDL, so the "ON UPDATE" clause has to be spelled out in
+# the server_default text itself. Both found by the Codex outer-gate review
+# on PR #17 — see docs/specs/2026-08-07-backend-skeleton-design.md.
+def created_at_col() -> sa.Column:
+    return sa.Column(
+        "created_at", mysql.DATETIME(fsp=6), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP(6)")
+    )
+
+
+def updated_at_col() -> sa.Column:
+    return sa.Column(
+        "updated_at",
+        mysql.DATETIME(fsp=6),
+        nullable=False,
+        server_default=sa.text("CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)"),
+    )
+
+
 def upgrade() -> None:
     op.create_table(
         "knowledge_base",
@@ -33,14 +55,8 @@ def upgrade() -> None:
             nullable=False,
             server_default="active",
         ),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(),
-            nullable=False,
-            server_default=sa.func.now(),
-            server_onupdate=sa.func.now(),
-        ),
+        created_at_col(),
+        updated_at_col(),
         sa.UniqueConstraint("name", name="uq_knowledge_base_name"),
         **CHARSET_KW,
     )
@@ -64,14 +80,8 @@ def upgrade() -> None:
             nullable=False,
             server_default="active",
         ),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(),
-            nullable=False,
-            server_default=sa.func.now(),
-            server_onupdate=sa.func.now(),
-        ),
+        created_at_col(),
+        updated_at_col(),
         sa.CheckConstraint("weight BETWEEN 1 AND 100", name="ck_dimension_weight"),
         **CHARSET_KW,
     )
@@ -101,14 +111,8 @@ def upgrade() -> None:
             server_default="active",
         ),
         sa.Column("operator", sa.String(100), nullable=False, server_default="admin"),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(),
-            nullable=False,
-            server_default=sa.func.now(),
-            server_onupdate=sa.func.now(),
-        ),
+        created_at_col(),
+        updated_at_col(),
         sa.Column("deleted_at", sa.DateTime(), nullable=True),
         sa.Column("delete_reason", sa.String(500), nullable=True),
         sa.ForeignKeyConstraint(
@@ -135,7 +139,7 @@ def upgrade() -> None:
         sa.Column("revoked_at", sa.DateTime(), nullable=True),
         sa.Column("revoked_by", sa.String(100), nullable=True),
         sa.Column("revoke_reason", sa.String(500), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        created_at_col(),
         sa.ForeignKeyConstraint(
             ["knowledge_point_id", "knowledge_base_id"],
             ["knowledge_point.id", "knowledge_point.knowledge_base_id"],
