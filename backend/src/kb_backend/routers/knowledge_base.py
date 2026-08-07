@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..envelope import BusinessError, envelope
+from ..models.dimension import DimensionDefinition, KnowledgeBaseEnabledDimension
 from ..models.knowledge_base import KnowledgeBase
 from ..models.knowledge_point import KnowledgePoint
+from ..schemas.dimension import DimensionOut
 from ..schemas.knowledge_base import KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBaseUpdate
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-base"])
@@ -161,3 +163,36 @@ def activate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
 @router.post("/{kb_id}/deactivate")
 def deactivate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
     return _set_status(db, kb_id, "deprecated")
+
+
+@router.get("/{kb_id}/enabled-dimensions")
+def list_enabled_dimensions(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    # A knowledge base's own active/deprecated status does not gate this
+    # endpoint — read-only, no PRD text explicitly blocks it for a
+    # deactivated KB. See design doc §3.3 for the reasoning; this is a
+    # judgment call pending product confirmation, locked in by a test.
+    _get_or_404(db, kb_id)
+
+    # INNER JOIN (not outerjoin): a dimension that has been globally
+    # deprecated must disappear from every KB's enabled list even though the
+    # join-table row still exists (PRD §4.3). An outer join would let the
+    # deprecated dimension's row survive with nulled-out columns instead of
+    # being excluded.
+    rows = (
+        db.execute(
+            select(DimensionDefinition)
+            .join(
+                KnowledgeBaseEnabledDimension,
+                KnowledgeBaseEnabledDimension.dimension_key == DimensionDefinition.key,
+            )
+            .where(
+                KnowledgeBaseEnabledDimension.knowledge_base_id == kb_id,
+                DimensionDefinition.status == "active",
+            )
+            .order_by(DimensionDefinition.key)
+        )
+        .scalars()
+        .all()
+    )
+    out = [DimensionOut.model_validate(row) for row in rows]
+    return envelope([o.model_dump(mode="json") for o in out])
