@@ -50,6 +50,12 @@ def _get_or_404(db: Session, kb_id: int) -> KnowledgeBase:
 
 
 def _ensure_name_available(db: Session, name: str, exclude_id: int | None = None) -> None:
+    # `knowledge_base.name` uses utf8mb4_0900_ai_ci (issue #1), so this
+    # comparison — and the backing unique index — are already case- and
+    # accent-insensitive ("FAQ" collides with "faq"). That is treated as the
+    # intended reading of PRD §4.1's "完全重复": it prevents confusing
+    # near-duplicates, and changing it would mean altering an already-shipped
+    # column collation. Flagged by the Codex outer-gate review on PR #18.
     stmt = select(KnowledgeBase.id).where(KnowledgeBase.name == name)
     if exclude_id is not None:
         stmt = stmt.where(KnowledgeBase.id != exclude_id)
@@ -102,10 +108,15 @@ def update_knowledge_base(
 ) -> dict:
     kb = _get_or_404(db, kb_id)
 
+    fields_set = payload.model_fields_set
     if payload.name is not None and payload.name != kb.name:
         _ensure_name_available(db, payload.name, exclude_id=kb_id)
         kb.name = payload.name
-    if payload.description is not None:
+    # `description` must distinguish "field omitted" (no change) from
+    # "field explicitly sent as null" (clear it) — payload.description is
+    # None in both cases, so check model_fields_set instead of the value.
+    # Found by the Codex outer-gate review on PR #18.
+    if "description" in fields_set:
         kb.description = payload.description
 
     try:

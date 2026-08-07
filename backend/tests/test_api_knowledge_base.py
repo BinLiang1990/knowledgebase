@@ -55,6 +55,16 @@ def test_create_duplicate_name_against_deprecated_kb_is_rejected(
     assert resp.json()["code"] == 444
 
 
+def test_create_duplicate_name_different_case_is_rejected(client: TestClient, migrated_schema) -> None:
+    """`knowledge_base.name` uses utf8mb4_0900_ai_ci (issue #1) — comparisons
+    and the unique index are case/accent-insensitive by design (see design
+    doc §3.3, corrected after the Codex outer-gate review on PR #18)."""
+    _create(client, "faq-case-test")
+    resp = _create(client, "FAQ-CASE-TEST")
+    assert resp.status_code == 400
+    assert resp.json()["code"] == 444
+
+
 def test_create_blank_name_is_rejected_with_422(client: TestClient, migrated_schema) -> None:
     resp = _create(client, "   ")
     assert resp.status_code == 422
@@ -134,6 +144,22 @@ def test_update_description_only_does_not_false_positive_self_duplicate(
     resp = client.patch(f"/knowledge-bases/{kb['id']}", json={"description": "only desc changed"})
     assert resp.status_code == 200
     assert resp.json()["data"]["name"] == "kb-self-rename"
+
+
+def test_update_can_clear_description_to_null(client: TestClient, migrated_schema) -> None:
+    """Found by the Codex outer-gate review on PR #18: an explicit
+    {"description": null} must clear the field, distinct from omitting it."""
+    kb = _create(client, "kb-clear-desc", "will be cleared").json()["data"]
+    resp = client.patch(f"/knowledge-bases/{kb['id']}", json={"description": None})
+    assert resp.status_code == 200
+    assert resp.json()["data"]["description"] is None
+
+
+def test_update_omitting_description_leaves_it_unchanged(client: TestClient, migrated_schema) -> None:
+    kb = _create(client, "kb-keep-desc", "keep me").json()["data"]
+    resp = client.patch(f"/knowledge-bases/{kb['id']}", json={"name": "kb-keep-desc-renamed"})
+    assert resp.status_code == 200
+    assert resp.json()["data"]["description"] == "keep me"
 
 
 def test_update_name_to_existing_other_kb_name_is_rejected(client: TestClient, migrated_schema) -> None:
