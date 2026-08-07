@@ -5,9 +5,11 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .envelope import BusinessError, envelope, register_exception_handlers
+from .routers.knowledge_base import router as knowledge_base_router
 
 app = FastAPI(title="Knowledge Base Backend")
 register_exception_handlers(app)
+app.include_router(knowledge_base_router)
 
 
 @app.get("/health")

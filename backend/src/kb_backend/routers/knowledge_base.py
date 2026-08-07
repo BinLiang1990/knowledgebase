@@ -1,0 +1,140 @@
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from ..db import get_db
+from ..envelope import BusinessError, envelope
+from ..models.knowledge_base import KnowledgeBase
+from ..models.knowledge_point import KnowledgePoint
+from ..schemas.knowledge_base import KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBaseUpdate
+
+router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-base"])
+
+_DUPLICATE_NAME_MSG = "知识库名称已存在，请使用其他名称"
+_NOT_FOUND_MSG = "知识库不存在"
+
+
+def _get_active_point_count(db: Session, knowledge_base_id: int) -> int:
+    return (
+        db.execute(
+            select(func.count())
+            .select_from(KnowledgePoint)
+            .where(
+                KnowledgePoint.knowledge_base_id == knowledge_base_id,
+                KnowledgePoint.status == "active",
+            )
+        ).scalar_one()
+    )
+
+
+def _to_out(kb: KnowledgeBase, active_point_count: int) -> KnowledgeBaseOut:
+    return KnowledgeBaseOut(
+        id=kb.id,
+        name=kb.name,
+        description=kb.description,
+        status=kb.status,
+        active_knowledge_point_count=active_point_count,
+        created_at=kb.created_at,
+        updated_at=kb.updated_at,
+    )
+
+
+def _get_or_404(db: Session, kb_id: int) -> KnowledgeBase:
+    kb = db.get(KnowledgeBase, kb_id)
+    if kb is None:
+        raise BusinessError(_NOT_FOUND_MSG, status_code=404)
+    return kb
+
+
+def _ensure_name_available(db: Session, name: str, exclude_id: int | None = None) -> None:
+    stmt = select(KnowledgeBase.id).where(KnowledgeBase.name == name)
+    if exclude_id is not None:
+        stmt = stmt.where(KnowledgeBase.id != exclude_id)
+    if db.execute(stmt).first() is not None:
+        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400)
+
+
+@router.post("")
+def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(get_db)) -> dict:
+    _ensure_name_available(db, payload.name)
+
+    kb = KnowledgeBase(name=payload.name, description=payload.description, status="active")
+    db.add(kb)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400) from exc
+    db.refresh(kb)
+
+    out = _to_out(kb, active_point_count=0)
+    return envelope(out.model_dump(mode="json"))
+
+
+@router.get("")
+def list_knowledge_bases(
+    status: Literal["active", "deprecated"] | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    count_by_kb = dict(
+        db.execute(
+            select(KnowledgePoint.knowledge_base_id, func.count())
+            .where(KnowledgePoint.status == "active")
+            .group_by(KnowledgePoint.knowledge_base_id)
+        ).all()
+    )
+
+    stmt = select(KnowledgeBase).order_by(KnowledgeBase.id)
+    if status is not None:
+        stmt = stmt.where(KnowledgeBase.status == status)
+
+    rows = db.execute(stmt).scalars().all()
+    out = [_to_out(kb, count_by_kb.get(kb.id, 0)) for kb in rows]
+    return envelope([o.model_dump(mode="json") for o in out])
+
+
+@router.patch("/{kb_id}")
+def update_knowledge_base(
+    kb_id: int, payload: KnowledgeBaseUpdate, db: Session = Depends(get_db)
+) -> dict:
+    kb = _get_or_404(db, kb_id)
+
+    if payload.name is not None and payload.name != kb.name:
+        _ensure_name_available(db, payload.name, exclude_id=kb_id)
+        kb.name = payload.name
+    if payload.description is not None:
+        kb.description = payload.description
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400) from exc
+    db.refresh(kb)
+
+    out = _to_out(kb, _get_active_point_count(db, kb_id))
+    return envelope(out.model_dump(mode="json"))
+
+
+def _set_status(db: Session, kb_id: int, target_status: Literal["active", "deprecated"]) -> dict:
+    kb = _get_or_404(db, kb_id)
+    if kb.status != target_status:
+        kb.status = target_status
+        db.commit()
+        db.refresh(kb)
+
+    out = _to_out(kb, _get_active_point_count(db, kb_id))
+    return envelope(out.model_dump(mode="json"))
+
+
+@router.post("/{kb_id}/activate")
+def activate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    return _set_status(db, kb_id, "active")
+
+
+@router.post("/{kb_id}/deactivate")
+def deactivate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    return _set_status(db, kb_id, "deprecated")

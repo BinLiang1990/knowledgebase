@@ -14,19 +14,6 @@ EXPECTED_TABLES = {
 }
 
 
-@pytest.fixture
-def migrated_schema(alembic_cfg: AlembicConfig, db_engine: Engine):
-    """Bring the real test database to a known state: clean -> head, and always
-    clean up back to base afterwards so this test never leaves data behind for
-    other issues/tests."""
-    command.downgrade(alembic_cfg, "base")
-    command.upgrade(alembic_cfg, "head")
-    try:
-        yield
-    finally:
-        command.downgrade(alembic_cfg, "base")
-
-
 def _index_rows(engine: Engine, table: str, index: str) -> list:
     with engine.connect() as conn:
         return list(
