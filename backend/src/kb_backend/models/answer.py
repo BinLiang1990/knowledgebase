@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKeyConstraint, Index, String, Text
+from sqlalchemy import Boolean, CHAR, DateTime, ForeignKeyConstraint, Index, String, Text
 from sqlalchemy.dialects.mysql import BIGINT, JSON, LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,7 +25,7 @@ class Answer(Base):
     knowledge_base_id: Mapped[int] = mapped_column(BIGINT(unsigned=True), nullable=False)
     knowledge_point_id: Mapped[int] = mapped_column(BIGINT(unsigned=True), nullable=False)
     coord: Mapped[dict] = mapped_column(JSON, nullable=False)
-    coord_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    coord_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     content: Mapped[str] = mapped_column(LONGTEXT, nullable=False)
     effective_time: Mapped[date] = mapped_column(nullable=False)
     operator: Mapped[str] = mapped_column(String(100), nullable=False, server_default="admin")
