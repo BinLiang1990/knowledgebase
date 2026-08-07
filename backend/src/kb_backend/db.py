@@ -19,6 +19,15 @@ def get_engine() -> Engine:
 def get_session_factory() -> sessionmaker[Session]:
     global _SessionLocal
     if _SessionLocal is None:
+        # expire_on_commit=False: objects stay usable after commit (needed since
+        # FastAPI serializes the response after the request's `yield` resumes,
+        # by which point the session has already committed). The tradeoff:
+        # server-generated columns (created_at/updated_at, and any DB default)
+        # keep whatever value was last loaded/set in Python and are NOT
+        # refreshed from the row MySQL actually wrote. Future CRUD issues
+        # (#2-5) that return a freshly-created row's timestamps to the client
+        # must `db.refresh(obj)` after commit to get the real server value.
+        # Found by the Kimi review gate on PR #17.
         _SessionLocal = sessionmaker(bind=get_engine(), autoflush=False, expire_on_commit=False)
     return _SessionLocal
 

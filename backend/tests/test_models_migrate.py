@@ -206,24 +206,52 @@ def test_answer_rejects_knowledge_base_id_mismatched_from_its_knowledge_point(
         )
 
 
-def test_created_at_has_microsecond_precision(migrated_schema, db_engine: Engine) -> None:
+@pytest.mark.parametrize("table", ["knowledge_base", "dimension_definition", "knowledge_point", "answer"])
+def test_created_at_column_is_declared_with_microsecond_precision(
+    migrated_schema, db_engine: Engine, table: str
+) -> None:
     """Codex outer-gate finding on PR #17: plain MySQL DATETIME truncates to
     whole seconds, which made the effective_time/created_at tie-break
-    (docs/PRD.md §4.6.1) non-deterministic for same-second writes. Prove the
-    column round-trips a non-zero microsecond value instead of silently
-    truncating it."""
+    (docs/PRD.md §4.6.1) non-deterministic for same-second writes.
+
+    Asserting `isinstance(MICROSECOND(created_at), int)` (the first version
+    of this test) doesn't actually prove fsp=6 is in effect — a plain
+    DATETIME column returns 0 for MICROSECOND(), which is *also* an int.
+    Asserting the column's declared DATETIME_PRECISION instead — found by the
+    Kimi review gate — is deterministic regardless of what the real-time
+    clock happens to land on.
+    """
+    with db_engine.connect() as conn:
+        precision = conn.execute(
+            text(
+                "SELECT DATETIME_PRECISION FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND COLUMN_NAME = 'created_at'"
+            ),
+            {"table": table},
+        ).scalar_one()
+    assert precision == 6
+
+
+def test_created_at_round_trips_an_explicit_microsecond_value(
+    migrated_schema, db_engine: Engine
+) -> None:
+    """Belt-and-suspenders alongside the DATETIME_PRECISION check: insert an
+    explicit fractional-second value and confirm MySQL doesn't silently
+    truncate it back to :00 on write."""
     with db_engine.begin() as conn:
-        kb_id = conn.execute(
-            text("INSERT INTO knowledge_base (name) VALUES ('kb-for-ts-precision')")
-        ).lastrowid
+        conn.execute(
+            text(
+                "INSERT INTO knowledge_base (name, created_at) "
+                "VALUES ('kb-explicit-microseconds', '2026-08-07 10:00:00.123456')"
+            )
+        )
     with db_engine.connect() as conn:
         microseconds = conn.execute(
-            text("SELECT MICROSECOND(created_at) FROM knowledge_base WHERE id = :kb"),
-            {"kb": kb_id},
+            text(
+                "SELECT MICROSECOND(created_at) FROM knowledge_base WHERE name = 'kb-explicit-microseconds'"
+            )
         ).scalar_one()
-    # Not asserting a specific value (that would be flaky) — asserting the
-    # column *can* hold one at all, i.e. it isn't silently rounded to :00.
-    assert isinstance(microseconds, int)
+    assert microseconds == 123456
 
 
 def test_updated_at_changes_on_raw_sql_update_not_just_via_orm(

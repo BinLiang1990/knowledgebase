@@ -1,7 +1,15 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
+
+# backend/src/kb_backend/config.py -> backend/.env. Resolved relative to this
+# file rather than left as a bare ".env" (which pydantic-settings would
+# resolve against the process's current working directory) — otherwise
+# running tests/the app from anywhere other than `backend/` silently fails to
+# load real config. Found by the Kimi review gate on PR #17.
+_ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -12,7 +20,7 @@ class Settings(BaseSettings):
     to an empty string (see docs/specs/2026-08-07-backend-skeleton-design.md §6).
     """
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
     db_host: str
     db_port: int = 3306
