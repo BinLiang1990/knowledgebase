@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>回收站 · 知识库管理</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1>回收站</h1>
+      <span class="crumb" id="pageCrumb">回收站</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+
+    <main class="content" id="pageContent">
+      <div id="kbTabsHost"></div>
+      <div class="notice">
+        知识点删除为<b>软删除</b>：删除后不再出现在知识点列表与查询结果中，但全部历史答案与留痕永久保留，且可以在这里<b>恢复</b>。
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="tick"></span>
+          <h3>已删除的知识点</h3>
+          <span class="sub">软删除快照，可恢复</span>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>标题</th>
+                <th>删除时间</th>
+                <th>删除原因</th>
+                <th>操作人</th>
+                <th class="op-col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="trashBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- 恢复确认 -->
+<div class="mask" id="restoreMask">
+  <div class="modal">
+    <div class="mo-head"><h3>恢复知识点</h3><button class="mo-close" onclick="closeModal('restoreMask')">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">
+        即将恢复知识点 <b id="restoreTitle" style="color:var(--ink-1)"></b>，恢复后全部历史答案与版本照常可用。
+      </p>
+      <input type="hidden" id="restoreId" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('restoreMask')">取 消</button>
+      <button class="btn primary" onclick="submitRestore()">确 定 恢 复</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/app.js"></script>
+<script>
+  function renderTrash() {
+    const items = listTrash(kb.id);
+    const tbody = document.getElementById("trashBody");
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">回收站暂无记录</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(kp => `
+      <tr>
+        <td>${escapeHtml(kp.title)}</td>
+        <td class="num" style="font-weight:400">${escapeHtml((kp.deleted_at || "").slice(0, 10))}</td>
+        <td>${escapeHtml(kp.delete_reason || "—")}</td>
+        <td>${escapeHtml(kp.operator)}</td>
+        <td class="op-col ops">
+          <a href="detail.html?kb=${kb.id}&id=${kp.id}">查看详情</a>
+          <a onclick="openRestoreModal('${kp.id}','${escapeHtml(kp.title)}')">恢复</a>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  function openRestoreModal(id, title) {
+    document.getElementById("restoreId").value = id;
+    document.getElementById("restoreTitle").textContent = title;
+    openModal("restoreMask");
+  }
+
+  function submitRestore() {
+    const id = document.getElementById("restoreId").value;
+    const res = restoreKnowledgePoint(kb.id, id);
+    if (!res.ok) { toast(res.error, "err"); return; }
+    toast(`已恢复 ID ${id}`, "ok");
+    closeModal("restoreMask");
+    renderTrash();
+  }
+
+  const kbId = getKbIdFromUrl();
+  const kb = kbId ? getKnowledgeBase(kbId) : null;
+
+  if (!kb || kb.status !== "active") {
+    initShell("trash");
+    document.getElementById("pageContent").innerHTML = `
+      <div class="card"><div class="empty-block">
+        没有指定有效的知识库（可能已被停用或不存在）<br />
+        <span style="display:inline-block;margin-top:12px"><a class="btn primary" href="kb-list.html">‹ 返回知识库列表</a></span>
+      </div></div>`;
+  } else {
+    initShell("trash");
+    document.getElementById("pageCrumb").textContent = `${kb.name} / 回收站`;
+    document.getElementById("kbTabsHost").innerHTML = renderKbTabs("trash", kb.id);
+    renderTrash();
+  }
+</script>
+</body>
+</html>

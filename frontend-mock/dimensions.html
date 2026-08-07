@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>维度管理 · 知识库管理</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1>维度管理</h1>
+      <span class="crumb">全局 / 维度管理</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+
+    <main class="content">
+      <div class="notice">
+        维度的<b>字段类型</b>创建后不可修改（避免破坏已有数据的类型一致性）；如需变更类型，请停用旧维度并新建一个新维度。停用维度不影响历史答案已经写入的取值，只影响之后新增/编辑答案时是否还能选用它。每个知识库需要在「知识库设置」里单独<b>启用</b>想用的维度，才能在该知识库的答案里使用。<b>权重</b>用于查询条件没有精确命中时的回退排序：条件更具体的答案优先；同样具体时，涉及维度的权重总和更高的答案优先。
+      </div>
+
+      <div class="card ov">
+        <div class="card-head">
+          <span class="tick"></span>
+          <h3>维度定义</h3>
+          <span class="sub">知识点答案可携带的可扩展条件</span>
+          <span class="spacer"></span>
+          <span class="ops"><button class="btn primary" onclick="openAddDimModal()">+ 新增维度</button></span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>key</th>
+                <th>显示名称</th>
+                <th>字段类型</th>
+                <th>权重</th>
+                <th>状态</th>
+                <th>使用中的答案</th>
+                <th class="op-col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="dimBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- 新增/编辑维度 -->
+<div class="mask" id="dimMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="dimModalTitle">新增维度</h3><button class="mo-close" onclick="closeModal('dimMask')">✕</button></div>
+    <div class="mo-body">
+      <div class="mf">
+        <label><span class="req">*</span>维度名称</label>
+        <input type="text" id="dimLabel" placeholder="例如：部门 / 标签 / 复核周期" />
+        <div class="hint" id="dimKeyHint">新增时会同时作为内部标识(key)；创建后 key 不可更改，显示名称之后仍可修改。</div>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>字段类型</label>
+        <select id="dimType" onchange="onDimTypeChange()">
+          <option value="text">文本</option>
+          <option value="number">数值</option>
+          <option value="date">时间</option>
+          <option value="boolean">布尔</option>
+        </select>
+        <div class="hint">创建后不可修改，用于答案条件的取值输入校验。</div>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>权重(1–100)</label>
+        <input type="number" id="dimWeight" value="50" min="1" max="100" />
+        <div class="hint">两条答案条件同样具体、又都没有精确命中查询时，涉及维度的权重总和更高的答案优先返回。</div>
+      </div>
+      <div class="mf" id="dimDefaultWrap">
+        <label>默认取值提示(可选)</label>
+        <input type="text" id="dimDefault" />
+        <div class="hint">仅作为「写答案」时该维度输入框的预填提示，不做强制校验。</div>
+      </div>
+      <p class="hint" id="dimFormHint" style="color:var(--red)"></p>
+      <input type="hidden" id="dimKeyField" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('dimMask')">取 消</button>
+      <button class="btn primary" onclick="submitDim()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 停用/启用确认 -->
+<div class="mask" id="toggleDimMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="toggleDimTitle">停用维度</h3><button class="mo-close" onclick="closeModal('toggleDimMask')">✕</button></div>
+    <div class="mo-body">
+      <p id="toggleDimBody" style="font-size:13.5px;color:var(--ink-2);line-height:1.8;"></p>
+      <div class="risk" id="toggleDimRisk"></div>
+      <input type="hidden" id="toggleDimKey" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('toggleDimMask')">取 消</button>
+      <button class="btn danger" id="toggleDimConfirmBtn" onclick="confirmToggleDim()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/app.js"></script>
+<script>
+  function renderDimBody() {
+    const dims = getDimensions();
+    const tbody = document.getElementById("dimBody");
+    if (!dims.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">暂无维度定义，点击右上角「+ 新增维度」创建</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = dims.map(d => {
+      const usage = dimensionUsageCount(d.key);
+      const statusHtml = d.status === "active"
+        ? `<span class="status-dot ok"><i></i>启用中</span>`
+        : `<span class="status-dot off"><i></i>已停用</span>`;
+      const toggleLabel = d.status === "active" ? "停用" : "启用";
+      return `<tr>
+        <td class="num" style="font-weight:400">${escapeHtml(d.key)}</td>
+        <td>${escapeHtml(d.label)}</td>
+        <td><span class="tag blue ftype-tag">${FIELD_TYPE_LABEL[d.field_type]}</span></td>
+        <td class="num" style="font-weight:400">${d.weight ?? 50}</td>
+        <td>${statusHtml}</td>
+        <td class="num" style="font-weight:400">${usage}</td>
+        <td class="op-col ops">
+          <a onclick="openEditDimModal('${d.key}')">编辑</a>
+          <a class="${d.status === "active" ? "danger" : ""}" onclick="openToggleDimModal('${d.key}')">${toggleLabel}</a>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  function onDimTypeChange() {
+    const type = document.getElementById("dimType").value;
+    const wrap = document.getElementById("dimDefaultWrap");
+    if (type === "number") {
+      wrap.innerHTML = `<label>默认取值提示(可选)</label><input type="number" id="dimDefault" />`;
+    } else if (type === "date") {
+      wrap.innerHTML = `<label>默认取值提示(可选)</label><input type="date" id="dimDefault" />`;
+    } else if (type === "boolean") {
+      wrap.innerHTML = `<label>默认取值提示(可选)</label><select id="dimDefault"><option value="">未设置</option><option value="true">是</option><option value="false">否</option></select>`;
+    } else {
+      wrap.innerHTML = `<label>默认取值提示(可选)</label><input type="text" id="dimDefault" />`;
+    }
+  }
+
+  function openAddDimModal() {
+    document.getElementById("dimModalTitle").textContent = "新增维度";
+    document.getElementById("dimLabel").value = "";
+    document.getElementById("dimLabel").disabled = false;
+    document.getElementById("dimType").value = "text";
+    document.getElementById("dimType").disabled = false;
+    document.getElementById("dimWeight").value = 50;
+    document.getElementById("dimKeyHint").textContent = "新增时会同时作为内部标识(key)；创建后 key 不可更改，显示名称之后仍可修改。";
+    document.getElementById("dimKeyField").value = "";
+    document.getElementById("dimFormHint").textContent = "";
+    onDimTypeChange();
+    openModal("dimMask");
+  }
+
+  function openEditDimModal(key) {
+    const d = getDimensions().find(x => x.key === key);
+    document.getElementById("dimModalTitle").textContent = `编辑维度 · ${d.label}`;
+    document.getElementById("dimLabel").value = d.label;
+    document.getElementById("dimLabel").disabled = false;
+    document.getElementById("dimType").value = d.field_type;
+    document.getElementById("dimType").disabled = true;
+    document.getElementById("dimWeight").value = d.weight ?? 50;
+    document.getElementById("dimKeyHint").textContent = `key「${d.key}」创建后不可修改；字段类型「${FIELD_TYPE_LABEL[d.field_type]}」创建后不可修改。`;
+    document.getElementById("dimKeyField").value = d.key;
+    document.getElementById("dimFormHint").textContent = "";
+    onDimTypeChange();
+    document.getElementById("dimDefault").value = d.default_value || "";
+    openModal("dimMask");
+  }
+
+  function submitDim() {
+    const label = document.getElementById("dimLabel").value.trim();
+    const type = document.getElementById("dimType").value;
+    const weight = Math.min(100, Math.max(1, parseInt(document.getElementById("dimWeight").value, 10) || 50));
+    const defaultRaw = document.getElementById("dimDefault").value;
+    const existingKey = document.getElementById("dimKeyField").value;
+    const hint = document.getElementById("dimFormHint");
+
+    if (!label) { hint.textContent = "请填写维度名称。"; return; }
+
+    const v = validateDimValue(type, defaultRaw);
+    if (!v.ok) { hint.textContent = "默认取值提示" + v.error; return; }
+
+    if (existingKey) {
+      updateDimension(existingKey, { label, weight, default_value: v.value || "" });
+      toast(`已更新维度「${label}」`, "ok");
+    } else {
+      const res = addDimension({ key: label, label, field_type: type, weight, default_value: v.value || "" });
+      if (!res.ok) { hint.textContent = res.error; return; }
+      toast(`已新增维度「${label}」，需要到「知识库设置」里为具体知识库启用后才能使用`, "ok");
+    }
+    closeModal("dimMask");
+    renderDimBody();
+  }
+
+  function openToggleDimModal(key) {
+    const d = getDimensions().find(x => x.key === key);
+    const willDeactivate = d.status === "active";
+    const usage = dimensionUsageCount(key);
+    document.getElementById("toggleDimKey").value = key;
+    document.getElementById("toggleDimTitle").textContent = willDeactivate ? "停用维度" : "启用维度";
+    document.getElementById("toggleDimBody").innerHTML = `即将${willDeactivate ? "停用" : "启用"}维度 <b style="color:var(--ink-1)">${escapeHtml(d.label)}</b>。`;
+    document.getElementById("toggleDimConfirmBtn").className = willDeactivate ? "btn danger" : "btn primary";
+    if (willDeactivate) {
+      document.getElementById("toggleDimRisk").style.display = "";
+      document.getElementById("toggleDimRisk").textContent = `已有 ${usage} 条答案写入过该维度的取值，停用不会影响这些历史数据，仅新增/编辑答案时不再出现该字段。`;
+    } else {
+      document.getElementById("toggleDimRisk").style.display = "none";
+    }
+    openModal("toggleDimMask");
+  }
+
+  function confirmToggleDim() {
+    const key = document.getElementById("toggleDimKey").value;
+    toggleDimensionStatus(key);
+    toast("已更新维度状态", "ok");
+    closeModal("toggleDimMask");
+    renderDimBody();
+  }
+
+  initShell("dimensions");
+  renderDimBody();
+</script>
+</body>
+</html>

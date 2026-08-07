@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>知识点列表 · 知识库管理</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1 id="pageTitle">知识点列表</h1>
+      <span class="crumb" id="pageCrumb">知识库列表 / 知识点列表</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+
+    <main class="content" id="pageContent">
+      <!-- 由 JS 渲染：知识库无效时显示引导，否则渲染知识点列表 -->
+    </main>
+  </div>
+</div>
+
+<!-- 新增知识点 -->
+<div class="mask" id="kpMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="kpModalTitle">新增知识点</h3><button class="mo-close" onclick="closeModal('kpMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="kpId" />
+      <div class="mf">
+        <label><span class="req">*</span>标题</label>
+        <input type="text" id="kpTitle" placeholder="知识点标题，例如：退款政策" />
+      </div>
+      <div class="mf">
+        <label>默认答案内容(可选)</label>
+        <textarea id="kpContent" rows="3" placeholder="不填条件、处处适用的默认说法；也可以先留空，之后再到详情页写答案"></textarea>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>生效时间</label>
+        <input type="date" id="kpTime" />
+      </div>
+      <p class="hint" id="kpFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('kpMask')">取 消</button>
+      <button class="btn primary" onclick="submitKp(renderListPage)">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 删除知识点确认 -->
+<div class="mask" id="delMask">
+  <div class="modal">
+    <div class="mo-head"><h3>删除知识点</h3><button class="mo-close" onclick="closeModal('delMask')">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;">
+        即将删除知识点 <b id="delTitle" style="color:var(--ink-1)"></b>，及其全部答案。
+      </p>
+      <div class="mf">
+        <label><span class="req">*</span>删除原因</label>
+        <textarea id="delReason" rows="2" placeholder="请说明删除原因，将记录在留痕中"></textarea>
+      </div>
+      <div class="risk">
+        采用软删除：删除后不再出现在知识点列表与查询结果中；可在「回收站」中恢复，恢复后全部答案与历史照常可用。
+      </div>
+      <input type="hidden" id="delId" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('delMask')">取 消</button>
+      <button class="btn danger" onclick="submitDelete(renderListPage)">确 定 删 除</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/app.js"></script>
+<script>
+  let kb = null;
+  let S = { kw: "", filters: {}, qMode: "now", qTime: MOCK_NOW, page: 1, ddOpen: false, ddDim: null, expanded: {} };
+  const PAGE_SIZE = 6;
+
+  function condPicker() {
+    const dims = getKbEnabledDims(kb.id);
+    const chips = Object.keys(S.filters).filter(k => S.filters[k] !== undefined && S.filters[k] !== "").map(k => {
+      const d = dimByKey(k);
+      return `<span class="tag blue" style="cursor:pointer" title="点击移除该条件" onclick="removeFilter('${k}')">${escapeHtml(d ? d.label : k)} = ${escapeHtml(dimValueDisplay(d, S.filters[k]))} ✕</span>`;
+    }).join("");
+
+    let ddMenu = "";
+    if (S.ddOpen) {
+      if (S.ddDim) {
+        const d = dimByKey(S.ddDim);
+        ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+          <div class="dd-group">「${escapeHtml(d.label)}」= ?</div>
+          <div style="padding:2px 12px 10px">
+            <div id="ddValWrap">${valueInputHtmlFor(d, S.filters[d.key] ?? "")}</div>
+            <button class="btn primary sm" style="margin-top:8px" onclick="commitDdFilter()">确 定</button>
+          </div>
+          <div class="dd-sep"></div>
+          <div class="dd-item" onclick="S.ddDim=null;renderListPage()"><span class="t" style="color:var(--ink-5)">‹ 返回维度列表</span></div>
+        </div>`;
+      } else {
+        ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+          <div class="dd-group">按哪个维度加条件？(本知识库已启用 ${dims.length} 个维度)</div>
+          ${dims.length ? dims.map(d => `<div class="dd-item" onclick="S.ddDim='${d.key}';renderListPage()"><span class="t">${escapeHtml(d.label)}${S.filters[d.key] !== undefined && S.filters[d.key] !== "" ? " · 已选 " + escapeHtml(dimValueDisplay(d, S.filters[d.key])) : ""}</span><span class="d">${FIELD_TYPE_LABEL[d.field_type]} · 权重 ${d.weight ?? 50}</span></div>`).join("")
+            : `<div class="dd-item" style="color:var(--ink-6);cursor:default">本知识库还没有启用任何维度，去「知识库设置」启用</div>`}
+        </div>`;
+      }
+    }
+
+    return `<span class="f-lbl">时间</span>
+      <span class="seg">
+        <button class="${S.qMode !== "day" ? "on" : ""}" onclick="S.qMode='now';S.qTime=MOCK_NOW;renderListPage()">最新</button>
+        <button class="${S.qMode === "day" ? "on" : ""}" onclick="S.qMode='day';renderListPage()">回看某天</button>
+      </span>
+      ${S.qMode === "day" ? `<input type="date" value="${S.qTime}" max="${MOCK_NOW}" onchange="if(this.value){S.qTime=this.value;renderListPage()}" />` : ""}
+      ${chips}
+      <span class="dd ${S.ddOpen ? "open" : ""}">
+        <button class="btn sm" onclick="event.stopPropagation();S.ddOpen=!S.ddOpen;S.ddDim=null;renderListPage()">+ 加一个条件</button>
+        ${ddMenu}
+      </span>`;
+  }
+
+  function commitDdFilter() {
+    const d = dimByKey(S.ddDim);
+    const inp = document.getElementById("ddValWrap").querySelector("[data-dim]");
+    const v = validateDimValue(d.field_type, inp.value);
+    if (!v.ok) { toast(d.label + v.error, "err"); return; }
+    if (v.value === undefined) { toast("请输入取值", "err"); return; }
+    S.filters[d.key] = v.value;
+    S.ddOpen = false; S.ddDim = null; S.page = 1;
+    renderListPage();
+  }
+  function removeFilter(k) { delete S.filters[k]; S.page = 1; renderListPage(); }
+  document.addEventListener("click", e => {
+    if (S.ddOpen && !e.target.closest(".dd")) { S.ddOpen = false; S.ddDim = null; renderListPage(); }
+  });
+
+  function doQuery() {
+    const kwEl = document.getElementById("fKeyword");
+    if (kwEl) S.kw = kwEl.value.trim().toLowerCase();
+    S.page = 1;
+    renderListPage();
+  }
+  function resetQuery() {
+    S = { kw: "", filters: {}, qMode: "now", qTime: MOCK_NOW, page: 1, ddOpen: false, ddDim: null, expanded: S.expanded };
+    renderListPage();
+  }
+  function toggleExpand(id) { S.expanded[id] = !S.expanded[id]; renderListPage(); }
+
+  function ansPreview(kp) {
+    const hasQ = Object.keys(S.filters).some(k => S.filters[k] !== undefined && S.filters[k] !== "");
+    const r = resolveAnswer(kb.id, kp.id, S.filters, S.qTime);
+    if (r.status === "none") {
+      return `<span style="color:var(--ink-7)">${hasQ ? "这个条件、这个时间点还没有匹配的答案" : "还没有写过任何答案"}</span>`;
+    }
+    const otherCount = (r.groups ? r.groups.length : 1) - 1;
+    if (r.status === "default" || r.status === "fallback-latest") {
+      const tag = r.status === "default" ? '<span class="tag gray">默认</span>' : '<span class="tag orange">无默认 · 取最新</span>';
+      return `${tag} ${escapeHtml(r.live.content)}${otherCount > 0 ? ` <span style="font-size:12px;color:var(--ink-6)">· 另有 ${otherCount} 条带条件的说法，展开看</span>` : ""}`;
+    }
+    if (r.status === "exact") {
+      return `${escapeHtml(r.live.content)} ${coordLabel(r.coord)}<span class="tag green" style="margin-left:4px">精确命中</span>`;
+    }
+    return `${escapeHtml(r.live.content)} ${coordLabel(r.coord)}<span class="tag orange" style="margin-left:4px">未精确命中 · 按权重回退</span>`;
+  }
+
+  function kpAnswerTree(kpId, atTime) {
+    const groupsMap = new Map();
+    getAnswersByKp(kb.id, kpId).forEach(a => {
+      const k = coordKeyOf(a.coord);
+      if (!groupsMap.has(k)) groupsMap.set(k, { coord: a.coord, chain: [] });
+      groupsMap.get(k).chain.push(a);
+    });
+    if (!groupsMap.size) return `<div class="kids"><div class="mini-note" style="padding:8px 0">还没有任何答案</div></div>`;
+    const sections = { def: [], single: {}, multi: [] };
+    for (const g of groupsMap.values()) {
+      g.chain.sort((x, y) => y.time.localeCompare(x.time));
+      g.live = g.chain.find(a => a.time <= atTime && !a.revoked) || null;
+      const ks = Object.keys(g.coord).filter(k => g.coord[k] !== undefined && g.coord[k] !== "");
+      if (!ks.length) sections.def.push(g);
+      else if (ks.length === 1) (sections.single[ks[0]] = sections.single[ks[0]] || []).push(g);
+      else sections.multi.push(g);
+    }
+    const leaf = (g, labelHtml) => {
+      const arrow = labelHtml ? labelHtml + ' <span style="color:var(--ink-6)">→</span> ' : "· ";
+      if (!g.live) {
+        const last = g.chain[0];
+        return `<div class="tnode" style="cursor:default;color:var(--ink-6)">${arrow}<s>${escapeHtml(last.content)}</s> <span class="cnt">已撤回，留痕保存</span></div>`;
+      }
+      const verCount = g.chain.filter(a => !a.revoked).length;
+      return `<div class="tnode" style="cursor:default">${arrow}${escapeHtml(g.live.content)} <span class="cnt"><span class="num" style="font-weight:400">${g.live.time}</span> 起 · 共 ${verCount} 版</span></div>`;
+    };
+    let h = '<div class="kids">';
+    if (sections.def.length) h += `<div class="tnode" style="cursor:default">▾ <span class="tag gray">默认答案</span></div><div class="kids">${sections.def.map(g => leaf(g)).join("")}</div>`;
+    for (const k in sections.single) {
+      const d = dimByKey(k);
+      h += `<div class="tnode" style="cursor:default">▾ <span class="tag purple">${escapeHtml(d ? d.label : k)}</span> <span class="cnt">${sections.single[k].length} 个取值</span></div>
+        <div class="kids">${sections.single[k].map(g => leaf(g, `<span class="tag blue">${escapeHtml(g.coord[k])}</span>`)).join("")}</div>`;
+    }
+    if (sections.multi.length) {
+      h += `<div class="tnode" style="cursor:default">▾ <span class="tag purple">组合条件</span> <span class="cnt">${sections.multi.length} 条</span></div>
+        <div class="kids">${sections.multi.map(g => leaf(g, coordLabel(g.coord))).join("")}</div>`;
+    }
+    return h + "</div>";
+  }
+
+  function visibleKps() {
+    const hasQ = Object.keys(S.filters).some(k => S.filters[k] !== undefined && S.filters[k] !== "");
+    return listActiveKPs(kb.id).filter(kp => {
+      if (S.kw && !kp.title.toLowerCase().includes(S.kw)) return false;
+      if (hasQ) {
+        const r = resolveAnswer(kb.id, kp.id, S.filters, S.qTime);
+        if (r.status === "none") return false;
+      }
+      return true;
+    });
+  }
+
+  function renderList() {
+    const all = visibleKps();
+    const start = (S.page - 1) * PAGE_SIZE;
+    const pageItems = all.slice(start, start + PAGE_SIZE);
+    const hasFilter = S.kw || Object.keys(S.filters).some(k => S.filters[k] !== undefined && S.filters[k] !== "");
+
+    const rowsHtml = !pageItems.length
+      ? `<div class="empty-block">${hasFilter ? "没有知识点在这些条件下有匹配的答案：减少条件，或换个条件试试" : "暂无知识点，点击右上角「+ 新增知识点」创建"}</div>`
+      : pageItems.map(kp => {
+          const answers = getAnswersByKp(kb.id, kp.id);
+          const total = answers.filter(a => !a.revoked).length;
+          const dimsUsed = [...new Set(answers.flatMap(a => Object.keys(a.coord)))].map(k => { const d = dimByKey(k); return d ? d.label : k; });
+          const exp = !!S.expanded[kp.id];
+          return `<div class="trow">
+            <div class="trow-main" onclick="toggleExpand('${kp.id}')">
+              <span class="arrow">${exp ? "▾" : "▸"}</span>
+              <a onclick="event.stopPropagation();location.href='detail.html?kb=${kb.id}&id=${kp.id}'" style="font-weight:600;font-size:14.5px">${escapeHtml(kp.title)}</a>
+              <span class="trm-meta">${total} 条答案 · 维度：${dimsUsed.join("、") || "仅默认"}</span>
+              <span style="flex:1"></span>
+              <span class="ops" onclick="event.stopPropagation()">
+                <a href="detail.html?kb=${kb.id}&id=${kp.id}">查看详情</a>
+                <a class="danger" onclick="openDeleteModal('${kp.id}','${escapeHtml(kp.title)}')">删除</a>
+              </span>
+            </div>
+            <div class="trow-ans">${S.qMode === "day" ? ("回看 <span class=\"num\">" + S.qTime + "</span>") : "当前"}：${ansPreview(kp)}</div>
+            ${exp ? kpAnswerTree(kp.id, S.qTime) : ""}
+          </div>`;
+        }).join("");
+
+    document.getElementById("kpRows").innerHTML = rowsHtml;
+    renderPager(document.getElementById("kpPager"), {
+      total: all.length, page: S.page, pageSize: PAGE_SIZE,
+      onChange: (p) => { S.page = p; renderListPage(); },
+    });
+  }
+
+  function renderNoKb() {
+    document.getElementById("pageTitle").textContent = "知识点列表";
+    document.getElementById("pageCrumb").textContent = "知识库列表 / 知识点列表";
+    document.getElementById("pageContent").innerHTML = `
+      <div class="card"><div class="empty-block">
+        没有指定有效的知识库（可能已被停用或不存在）<br />
+        <span style="display:inline-block;margin-top:12px">
+          <a class="btn primary" href="kb-list.html">‹ 返回知识库列表</a>
+        </span>
+      </div></div>`;
+  }
+
+  function renderListPage() {
+    const stats = computeKbStats(kb.id);
+    document.getElementById("pageTitle").textContent = "知识点列表";
+    document.getElementById("pageCrumb").textContent = `${kb.name} / 知识点列表`;
+    document.getElementById("pageContent").innerHTML = `
+      ${renderKbTabs("kp-list", kb.id)}
+
+      <div class="stat-grid">
+        <div class="stat"><div class="lbl">知识主题</div><div class="val num">${stats.subjectCount}<small>个</small></div><div class="foot">当前生效的知识点</div></div>
+        <div class="stat c2"><div class="lbl">在用答案</div><div class="val num">${stats.activeAnswers}<small>条</small></div><div class="foot">未撤回的答案总数</div></div>
+        <div class="stat c3"><div class="lbl">启用维度</div><div class="val num">${stats.enabledDimCount}<small>个</small></div><div class="foot">本知识库已启用</div></div>
+        <div class="stat c4"><div class="lbl">今日变更</div><div class="val num">${stats.todayChanges}<small>条</small></div><div class="foot">写入 / 撤回的答案变更</div></div>
+      </div>
+
+      <div class="card ov">
+        <div class="card-head">
+          <span class="tick"></span>
+          <h3>带条件提问</h3>
+          <span class="sub">钉住你关心的维度条件；不钉的不参与过滤</span>
+          <span class="spacer"></span>
+          <span class="ops"><button class="btn primary" onclick="openAddModal()">+ 新增知识点</button></span>
+        </div>
+        <div class="form-row">
+          <input type="text" id="fKeyword" placeholder="搜索知识点标题" value="${escapeHtml(S.kw)}" onkeydown="if(event.key==='Enter')doQuery()" />
+          ${condPicker()}
+          <button class="btn primary sm" onclick="doQuery()">查 询</button>
+          <button class="btn sm" onclick="resetQuery()">重 置</button>
+        </div>
+      </div>
+
+      <div class="card ov">
+        <div class="card-head">
+          <span class="tick"></span>
+          <h3>知识点</h3>
+          <span class="sub">「${escapeHtml(kb.name)}」· 点行展开查看全部答案</span>
+        </div>
+        <div id="kpRows"></div>
+        <div class="pager" id="kpPager"></div>
+      </div>`;
+    renderList();
+  }
+
+  const kbId = getKbIdFromUrl();
+  kb = kbId ? getKnowledgeBase(kbId) : null;
+
+  if (!kb || kb.status !== "active") {
+    initShell("kp-list");
+    renderNoKb();
+  } else {
+    setCurrentKb(kb.id);
+    initShell("kp-list");
+    renderListPage();
+  }
+</script>
+</body>
+</html>

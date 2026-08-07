@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>知识库列表 · 知识库管理</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1>知识库列表</h1>
+      <span class="crumb">知识库管理 / 知识库列表</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+
+    <main class="content">
+      <div class="notice">
+        <b>知识库</b>是知识点的容器，不同知识库之间的知识点互不影响；<b>维度定义</b>是全局的，所有知识库共享同一套维度（在「维度管理」里统一维护）。点击知识库名称进入其知识点列表。
+      </div>
+
+      <div class="card ov">
+        <div class="card-head">
+          <span class="tick"></span>
+          <h3>知识库列表</h3>
+          <span class="sub">全部知识库</span>
+          <span class="spacer"></span>
+          <span class="ops"><button class="btn primary" onclick="openAddKbModal()">+ 新增知识库</button></span>
+        </div>
+
+        <div class="form-row">
+          <input type="text" id="fKeyword" placeholder="搜索知识库名称或描述" onkeydown="if(event.key==='Enter'){applyKbFilters()}" />
+          <button class="btn primary sm" onclick="applyKbFilters()">查 询</button>
+          <button class="btn sm" onclick="resetKbFilters()">重 置</button>
+        </div>
+
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>描述</th>
+              <th>知识点数</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th class="op-col">操作</th>
+            </tr>
+          </thead>
+          <tbody id="kbBody"></tbody>
+        </table>
+        <div class="pager" id="kbPager"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- 新增/编辑知识库 -->
+<div class="mask" id="kbMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="kbModalTitle">新增知识库</h3><button class="mo-close" onclick="closeModal('kbMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="kbId" />
+      <div class="mf">
+        <label><span class="req">*</span>名称</label>
+        <input type="text" id="kbName" placeholder="例如：产品知识库" />
+      </div>
+      <div class="mf">
+        <label>描述(可选)</label>
+        <textarea id="kbDesc" rows="2" placeholder="这个知识库用来存放什么类型的知识点"></textarea>
+      </div>
+      <p class="hint" id="kbFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('kbMask')">取 消</button>
+      <button class="btn primary" onclick="submitKb()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 停用/启用确认 -->
+<div class="mask" id="toggleKbMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="toggleKbTitle">停用知识库</h3><button class="mo-close" onclick="closeModal('toggleKbMask')">✕</button></div>
+    <div class="mo-body">
+      <p id="toggleKbBody" style="font-size:13.5px;color:var(--ink-2);line-height:1.8;"></p>
+      <div class="risk" id="toggleKbRisk"></div>
+      <input type="hidden" id="toggleKbId" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('toggleKbMask')">取 消</button>
+      <button class="btn danger" id="toggleKbConfirmBtn" onclick="confirmToggleKb()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/app.js"></script>
+<script>
+  let kbPage = 1;
+  const KB_PAGE_SIZE = 8;
+  let kbFilters = { keyword: "" };
+
+  function applyKbFilters() {
+    kbFilters.keyword = document.getElementById("fKeyword").value.trim().toLowerCase();
+    kbPage = 1;
+    renderKbList();
+  }
+  function resetKbFilters() {
+    document.getElementById("fKeyword").value = "";
+    kbFilters = { keyword: "" };
+    kbPage = 1;
+    renderKbList();
+  }
+
+  function renderKbList() {
+    const all = getKnowledgeBases();
+    const filtered = all.filter(b => {
+      if (!kbFilters.keyword) return true;
+      const hay = (b.name + " " + b.description).toLowerCase();
+      return hay.includes(kbFilters.keyword);
+    });
+
+    const tbody = document.getElementById("kbBody");
+    const start = (kbPage - 1) * KB_PAGE_SIZE;
+    const pageItems = filtered.slice(start, start + KB_PAGE_SIZE);
+
+    if (!pageItems.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">暂无符合条件的知识库${kbFilters.keyword ? "，试试调整搜索关键词" : "，点击右上角「+ 新增知识库」创建"}</td></tr>`;
+    } else {
+      tbody.innerHTML = pageItems.map(b => {
+        const count = knowledgeBaseKpCount(b.id);
+        const statusHtml = b.status === "active"
+          ? `<span class="status-dot ok"><i></i>启用中</span>`
+          : `<span class="status-dot off"><i></i>已停用</span>`;
+        const toggleLabel = b.status === "active" ? "停用" : "启用";
+        const enterLink = b.status === "active" ? `<a href="index.html?kb=${b.id}">${escapeHtml(b.name)}</a>` : escapeHtml(b.name);
+        return `<tr>
+          <td>${enterLink}</td>
+          <td>${escapeHtml(b.description || "—")}</td>
+          <td class="num" style="font-weight:400">${count}</td>
+          <td>${statusHtml}</td>
+          <td class="num" style="font-weight:400">${escapeHtml(b.created_at.slice(0, 10))}</td>
+          <td class="op-col ops">
+            ${b.status === "active" ? `<a href="index.html?kb=${b.id}">进入</a>` : ""}
+            <a onclick="openEditKbModal('${b.id}')">编辑</a>
+            <a class="${b.status === "active" ? "danger" : ""}" onclick="openToggleKbModal('${b.id}')">${toggleLabel}</a>
+          </td>
+        </tr>`;
+      }).join("");
+    }
+
+    renderPager(document.getElementById("kbPager"), {
+      total: filtered.length, page: kbPage, pageSize: KB_PAGE_SIZE,
+      onChange: (p) => { kbPage = p; renderKbList(); },
+    });
+  }
+
+  function openAddKbModal() {
+    document.getElementById("kbModalTitle").textContent = "新增知识库";
+    document.getElementById("kbId").value = "";
+    document.getElementById("kbName").value = "";
+    document.getElementById("kbDesc").value = "";
+    document.getElementById("kbFormHint").textContent = "";
+    openModal("kbMask");
+  }
+
+  function openEditKbModal(id) {
+    const b = getKnowledgeBase(id);
+    document.getElementById("kbModalTitle").textContent = `编辑知识库 · ${b.name}`;
+    document.getElementById("kbId").value = id;
+    document.getElementById("kbName").value = b.name;
+    document.getElementById("kbDesc").value = b.description || "";
+    document.getElementById("kbFormHint").textContent = "";
+    openModal("kbMask");
+  }
+
+  function submitKb() {
+    const id = document.getElementById("kbId").value;
+    const name = document.getElementById("kbName").value.trim();
+    const description = document.getElementById("kbDesc").value.trim();
+    const hint = document.getElementById("kbFormHint");
+    if (!name) { hint.textContent = "请填写知识库名称。"; return; }
+
+    if (id) {
+      updateKnowledgeBase(id, { name, description });
+      toast(`已更新知识库「${name}」`, "ok");
+    } else {
+      addKnowledgeBase({ name, description });
+      toast(`已创建知识库「${name}」`, "ok");
+    }
+    closeModal("kbMask");
+    renderKbList();
+  }
+
+  function openToggleKbModal(id) {
+    const b = getKnowledgeBase(id);
+    const willDeactivate = b.status === "active";
+    const count = knowledgeBaseKpCount(id);
+    document.getElementById("toggleKbId").value = id;
+    document.getElementById("toggleKbTitle").textContent = willDeactivate ? "停用知识库" : "启用知识库";
+    document.getElementById("toggleKbBody").innerHTML = `即将${willDeactivate ? "停用" : "启用"}知识库 <b style="color:var(--ink-1)">${escapeHtml(b.name)}</b>。`;
+    document.getElementById("toggleKbConfirmBtn").className = willDeactivate ? "btn danger" : "btn primary";
+    if (willDeactivate) {
+      document.getElementById("toggleKbRisk").style.display = "";
+      document.getElementById("toggleKbRisk").textContent = `该知识库下有 ${count} 个知识点，停用后知识库列表不再显示、无法进入；知识点数据不会被删除，重新启用后可继续访问。`;
+    } else {
+      document.getElementById("toggleKbRisk").style.display = "none";
+    }
+    openModal("toggleKbMask");
+  }
+
+  function confirmToggleKb() {
+    const id = document.getElementById("toggleKbId").value;
+    toggleKnowledgeBaseStatus(id);
+    toast("已更新知识库状态", "ok");
+    closeModal("toggleKbMask");
+    renderKbList();
+  }
+
+  initShell("kb-list");
+  renderKbList();
+</script>
+</body>
+</html>

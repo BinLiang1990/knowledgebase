@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>知识点详情 · 知识库管理</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1>知识点详情</h1>
+      <span class="crumb" id="pageCrumb">知识点列表 / 详情</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+
+    <main class="content" id="pageContent">
+      <!-- 由 JS 渲染 -->
+    </main>
+  </div>
+</div>
+
+<!-- 编辑标题 -->
+<div class="mask" id="titleMask">
+  <div class="modal">
+    <div class="mo-head"><h3>编辑标题</h3><button class="mo-close" onclick="closeModal('titleMask')">✕</button></div>
+    <div class="mo-body">
+      <div class="mf">
+        <label><span class="req">*</span>标题</label>
+        <input type="text" id="titleInput" />
+      </div>
+      <p class="hint" id="titleFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('titleMask')">取 消</button>
+      <button class="btn primary" onclick="submitTitle()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 删除知识点 -->
+<div class="mask" id="delMask">
+  <div class="modal">
+    <div class="mo-head"><h3>删除知识点</h3><button class="mo-close" onclick="closeModal('delMask')">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;">即将删除知识点 <b id="delTitle" style="color:var(--ink-1)"></b>，及其全部答案。</p>
+      <div class="mf">
+        <label><span class="req">*</span>删除原因</label>
+        <textarea id="delReason" rows="2" placeholder="请说明删除原因，将记录在留痕中"></textarea>
+      </div>
+      <div class="risk">采用软删除：删除后不再出现在知识点列表与查询结果中；可在「回收站」中恢复。</div>
+      <input type="hidden" id="delId" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('delMask')">取 消</button>
+      <button class="btn danger" onclick="submitDelete(renderDetail)">确 定 删 除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 写答案 / 编辑答案 -->
+<div class="mask" id="ansMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="ansModalTitle">写一条答案</h3><button class="mo-close" onclick="closeModal('ansMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="ansKpId" /><input type="hidden" id="ansOldCoord" />
+      <div class="mf">
+        <label><span class="req">*</span>答案内容</label>
+        <textarea id="ansContent" rows="3" placeholder="这个条件组合下的说法"></textarea>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>生效时间</label>
+        <input type="date" id="ansTime" />
+      </div>
+      <div class="mf">
+        <label>适用条件(只写你关心的；全部移除 = 默认答案，处处适用)</label>
+        <div id="ansCondRows"></div>
+        <button class="btn sm" style="margin-top:8px" onclick="addCondRow()">+ 加一个条件</button>
+        <div class="hint">维度只能从本知识库「知识库设置」里已启用的维度中选择；条件不变 = 同组追加新版本，条件改了 = 迁移到新条件组</div>
+      </div>
+      <div class="mf">
+        <label>变更说明(可选)</label>
+        <input type="text" id="ansNote" placeholder="例如：流程调整" />
+      </div>
+      <p class="hint" id="ansFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('ansMask')">取 消</button>
+      <button class="btn primary" onclick="submitAnswer(renderDetail)">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 设为默认 -->
+<div class="mask" id="promoteMask">
+  <div class="modal">
+    <div class="mo-head"><h3>设为默认答案</h3><button class="mo-close" onclick="closeModal('promoteMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="promoteKpId" />
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将把这条答案的内容，作为「<b>默认答案</b>」的新版本，自生效时间起处处适用：</p>
+      <div style="background:var(--pale);border-radius:10px;padding:12px 16px;font-size:13.5px;color:var(--ink-1);margin:10px 0;line-height:1.8" id="promoteContent"></div>
+      <div class="mf">
+        <label><span class="req">*</span>生效时间</label>
+        <input type="date" id="promoteTime" />
+      </div>
+      <div class="hint">原默认答案自动留档；这条带条件的答案本身保持不变，操作留痕。</div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('promoteMask')">取 消</button>
+      <button class="btn primary" onclick="submitPromote(renderDetail)">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 撤回答案 -->
+<div class="mask" id="revokeMask">
+  <div class="modal">
+    <div class="mo-head"><h3>撤回答案</h3><button class="mo-close" onclick="closeModal('revokeMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="revokeKbId" /><input type="hidden" id="revokeKpId" /><input type="hidden" id="revokeCoord" />
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将撤回这个条件下的答案：<br><b id="revokeContent" style="color:var(--ink-1)"></b></p>
+      <div class="mf">
+        <label><span class="req">*</span>撤回原因</label>
+        <input type="text" id="revokeReason" placeholder="必填，写入留痕" />
+      </div>
+      <div class="risk">撤回为逻辑删除：该条件下将不再返回此答案；历史版本与留痕永久保留，可在「变更留痕」查看。</div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('revokeMask')">取 消</button>
+      <button class="btn danger" onclick="submitRevoke(renderDetail)">确认撤回</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/app.js"></script>
+<script>
+  function currentId() { return new URLSearchParams(location.search).get("id") || ""; }
+  function attrJson(obj) { return JSON.stringify(obj).replace(/'/g, "&#39;"); }
+  let S = { filters: {}, qMode: "now", qTime: MOCK_NOW, ddOpen: false, ddDim: null, tab: "now" };
+  let TL_COORD = null;
+  let TREE_AXIS_A = null, TREE_AXIS_B = "__init", TREE_EXP = false;
+
+  function detailCondPicker() {
+    const dims = getKbEnabledDims(kb.id);
+    const chips = Object.keys(S.filters).filter(k => S.filters[k] !== undefined && S.filters[k] !== "").map(k => {
+      const d = dimByKey(k);
+      return `<span class="tag blue" style="cursor:pointer" title="点击移除该条件" onclick="removeFilter('${k}')">${escapeHtml(d ? d.label : k)} = ${escapeHtml(dimValueDisplay(d, S.filters[k]))} ✕</span>`;
+    }).join("");
+    let ddMenu = "";
+    if (S.ddOpen) {
+      if (S.ddDim) {
+        const d = dimByKey(S.ddDim);
+        ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+          <div class="dd-group">「${escapeHtml(d.label)}」= ?</div>
+          <div style="padding:2px 12px 10px">
+            <div id="ddValWrap">${valueInputHtmlFor(d, S.filters[d.key] ?? "")}</div>
+            <button class="btn primary sm" style="margin-top:8px" onclick="commitDdFilter()">确 定</button>
+          </div>
+          <div class="dd-sep"></div>
+          <div class="dd-item" onclick="S.ddDim=null;renderDetail()"><span class="t" style="color:var(--ink-5)">‹ 返回维度列表</span></div>
+        </div>`;
+      } else {
+        ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+          <div class="dd-group">按哪个维度加条件？</div>
+          ${dims.length ? dims.map(d => `<div class="dd-item" onclick="S.ddDim='${d.key}';renderDetail()"><span class="t">${escapeHtml(d.label)}</span><span class="d">${FIELD_TYPE_LABEL[d.field_type]} · 权重 ${d.weight ?? 50}</span></div>`).join("")
+            : `<div class="dd-item" style="color:var(--ink-6);cursor:default">本知识库还没有启用任何维度</div>`}
+        </div>`;
+      }
+    }
+    return `<span class="f-lbl">时间</span>
+      <span class="seg">
+        <button class="${S.qMode !== "day" ? "on" : ""}" onclick="S.qMode='now';S.qTime=MOCK_NOW;renderDetail()">最新</button>
+        <button class="${S.qMode === "day" ? "on" : ""}" onclick="S.qMode='day';renderDetail()">回看某天</button>
+      </span>
+      ${S.qMode === "day" ? `<input type="date" value="${S.qTime}" max="${MOCK_NOW}" onchange="if(this.value){S.qTime=this.value;renderDetail()}" />` : ""}
+      ${chips}
+      <span class="dd ${S.ddOpen ? "open" : ""}">
+        <button class="btn sm" onclick="event.stopPropagation();S.ddOpen=!S.ddOpen;S.ddDim=null;renderDetail()">+ 加一个条件</button>
+        ${ddMenu}
+      </span>`;
+  }
+  function commitDdFilter() {
+    const d = dimByKey(S.ddDim);
+    const inp = document.getElementById("ddValWrap").querySelector("[data-dim]");
+    const v = validateDimValue(d.field_type, inp.value);
+    if (!v.ok) { toast(d.label + v.error, "err"); return; }
+    if (v.value === undefined) { toast("请输入取值", "err"); return; }
+    S.filters[d.key] = v.value;
+    S.ddOpen = false; S.ddDim = null;
+    renderDetail();
+  }
+  function removeFilter(k) { delete S.filters[k]; renderDetail(); }
+  document.addEventListener("click", e => {
+    if (S.ddOpen && !e.target.closest(".dd")) { S.ddOpen = false; S.ddDim = null; renderDetail(); }
+  });
+
+  function tabNow(kpId) {
+    const hasQ = Object.keys(S.filters).some(k => S.filters[k] !== undefined && S.filters[k] !== "");
+    const groups = liveGroups(kb.id, kpId, S.qTime).filter(g => coordCompatible(g.coord, S.filters));
+    groups.sort((a, b) => b.spec - a.spec || b.weight - a.weight || b.live.time.localeCompare(a.live.time));
+    const uniqueTop = hasQ && groups.length > 0 && (groups.length === 1 || groups[0].spec > groups[1].spec);
+
+    const list = !groups.length
+      ? `<div class="empty-block">这个条件、这个时间点还没有答案：换个时间，或放宽条件</div>`
+      : groups.map((g, i) => {
+          const condTxt = coordSpec(g.coord) ? "适用条件：" + coordText(g.coord) : "默认答案 · 处处适用";
+          const canPromote = coordSpec(g.coord) > 0;
+          return `<div class="ans-item">
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="ai-content" style="flex:1">${escapeHtml(g.live.content)}</div>
+              <span class="ops" style="font-size:12.5px;white-space:nowrap;padding-top:3px">
+                <a onclick='openWriteAnswerModal("${kpId}", ${attrJson({ coord: g.coord, content: g.live.content })})'>编辑</a>
+                ${canPromote ? `<a onclick='openPromoteModal("${kpId}", ${attrJson(g.live.content)})'>设为默认</a>` : ""}
+                <a class="danger" onclick='openRevokeAnswerModal("${kb.id}", "${kpId}", ${attrJson(g.coord)}, ${attrJson(g.live.content)})'>撤回</a>
+              </span>
+            </div>
+            <div class="ai-cond">${uniqueTop && i === 0 ? '<span class="live"><i></i>此条件下生效</span>' : ""}<span>${escapeHtml(condTxt)}</span><span><span class="num">${escapeHtml(g.live.time)}</span> 起 · 共 ${g.versionCount} 版</span><span>${escapeHtml(g.live.operator)} 录入</span></div>
+          </div>`;
+        }).join("");
+
+    return `
+    <div class="form-row">${detailCondPicker()}${hasQ ? '<button class="btn sm" onclick="S.filters={};renderDetail()">清空条件</button>' : ""}</div>
+    <div style="font-size:12.5px;color:var(--ink-6);margin:12px 2px 2px">${hasQ ? `满足条件的答案 ${groups.length} 条` : `全部答案 ${groups.length} 条 · 一个知识点本来就可以有多种答案，各管各的条件`}</div>
+    ${list}`;
+  }
+
+  const CUBE_PALETTE = [["#0f9d58", "#e6f6ec"], ["#1a56f0", "#e8effe"], ["#0fa8a2", "#e5f5f4"], ["#7a5af8", "#f0ebfe"], ["#e08600", "#fdf3e0"], ["#e5484d", "#fdecec"], ["#b0399f", "#fbeaf8"], ["#5b6b85", "#eef1f6"]];
+
+  function tabTree(kpId) {
+    const enabledDims = getKbEnabledDims(kb.id);
+    const answers = getAnswersByKp(kb.id, kpId);
+    const usedKeys = [...new Set(answers.flatMap(a => Object.keys(a.coord).filter(k => a.coord[k] !== undefined && a.coord[k] !== "")))];
+    const used = enabledDims.filter(d => usedKeys.includes(d.key));
+    if (!used.length) return `<div class="mini-note">这个知识点还没有带条件的答案，谈不上立体展开；先去「当前答案」写一条带维度条件的答案。</div>`;
+
+    if (!TREE_AXIS_A || !used.find(d => d.key === TREE_AXIS_A)) TREE_AXIS_A = used[0].key;
+    const bOpts = used.filter(d => d.key !== TREE_AXIS_A);
+    if (TREE_AXIS_B === "__init") TREE_AXIS_B = bOpts.length ? bOpts[0].key : "";
+    if (TREE_AXIS_B && !bOpts.find(d => d.key === TREE_AXIS_B)) TREE_AXIS_B = bOpts.length ? bOpts[0].key : "";
+    const dimA = dimByKey(TREE_AXIS_A), dimB = TREE_AXIS_B ? dimByKey(TREE_AXIS_B) : null;
+
+    const uvals = k => [...new Set(answers.filter(a => a.coord[k] !== undefined && a.coord[k] !== "").map(a => a.coord[k]))];
+    const rows = ["(默认)", ...uvals(TREE_AXIS_A)];
+    const lays = dimB ? ["(默认)", ...uvals(TREE_AXIS_B)] : ["(全部)"];
+    let times = [...new Set(answers.map(a => a.time))].sort();
+    if (times.length > 5) times = times.slice(-5);
+    const offAxis = answers.filter(a => Object.keys(a.coord).some(k => a.coord[k] !== undefined && a.coord[k] !== "" && k !== TREE_AXIS_A && k !== (TREE_AXIS_B || "__none__"))).length;
+
+    const colorOf = {}; let ci = 0; const legend = {};
+    function cellBest(rv, lv, t) {
+      const groups = {};
+      answers.forEach(a => {
+        if (a.time > t) return;
+        for (const k in a.coord) {
+          if (a.coord[k] === undefined || a.coord[k] === "") continue;
+          if (k === TREE_AXIS_A) { if (a.coord[k] !== rv) return; }
+          else if (dimB && k === TREE_AXIS_B) { if (a.coord[k] !== lv) return; }
+          else return;
+        }
+        const key = coordKeyOf(a.coord);
+        (groups[key] = groups[key] || []).push(a);
+      });
+      let best = null, bs = -1, bw = -1, bv = "";
+      for (const k in groups) {
+        groups[k].sort((m, n) => n.time.localeCompare(m.time));
+        const cur = groups[k].find(y => !y.revoked);
+        if (!cur) continue;
+        const sp = coordSpec(cur.coord), w = coordWeight(cur.coord);
+        if (sp > bs || (sp === bs && w > bw) || (sp === bs && w === bw && cur.time > bv)) { best = cur; bs = sp; bw = w; bv = cur.time; }
+      }
+      return best;
+    }
+
+    const CELL = 72, GAP = 6;
+    const W = times.length * CELL + (times.length - 1) * GAP, H = rows.length * CELL + (rows.length - 1) * GAP;
+    const zGap = Math.min(Math.max(80, H * 0.3), 115);
+    const layersHtml = lays.map((lv, li) => {
+      const z = ((lays.length - 1) / 2 - li) * (TREE_EXP ? zGap * 1.55 : zGap);
+      const cells = rows.map(rv => times.map(t => {
+        const bAns = cellBest(rv, dimB ? lv : null, t);
+        if (!bAns) return `<div class="c3cell emptyc" data-tip="${escapeHtml(dimA.label)}=${escapeHtml(rv)}${dimB ? " · " + escapeHtml(dimB.label) + "=" + escapeHtml(lv) : ""} · ${escapeHtml(t.slice(5))}：这一天还没有适用答案">无</div>`;
+        const key = coordKeyOf(bAns.coord);
+        if (!(key in colorOf)) { colorOf[key] = CUBE_PALETTE[ci++ % CUBE_PALETTE.length]; legend[key] = { c: colorOf[key], a: bAns }; }
+        const fg = colorOf[key][0], bg = colorOf[key][1];
+        const inherited = (rv !== "(默认)" && bAns.coord[TREE_AXIS_A] === undefined) || (dimB && lv !== "(默认)" && bAns.coord[TREE_AXIS_B] === undefined);
+        const tip = (`${escapeHtml(dimA.label)}=${escapeHtml(rv)}${dimB ? " · " + escapeHtml(dimB.label) + "=" + escapeHtml(lv) : ""} · ${escapeHtml(t.slice(5))}<br>「${escapeHtml(bAns.content)}」<br>来自「${escapeHtml(coordText(bAns.coord))}」那条${inherited ? " · <b>继承而来</b>" : ""}`);
+        return `<div class="c3cell" style="background:${bg};color:${fg}" data-tip="${tip}">${escapeHtml(bAns.content.slice(0, 4))}</div>`;
+      }).join("")).join("");
+      return `<div class="layer3" style="transform:translateZ(${z}px);grid-template-columns:repeat(${times.length},${CELL}px);grid-auto-rows:${CELL}px">${dimB ? `<div class="layer3-lbl">${escapeHtml(dimB.label)} = ${escapeHtml(lv)}</div>` : ""}${cells}</div>`;
+    }).join("");
+
+    const legendHtml = Object.values(legend).map(v => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${v.c[1]};border:1.5px solid ${v.c[0]};margin-right:6px;vertical-align:-1px"></i>${escapeHtml(coordText(v.a.coord))}：${escapeHtml(v.a.content.length > 16 ? v.a.content.slice(0, 16) + "…" : v.a.content)}</span>`).join("");
+
+    return `
+    <div class="form-row" style="margin-bottom:2px">
+      <span class="f-lbl">行(斜向)</span><select onchange="TREE_AXIS_A=this.value;renderDetail()">${used.map(d => `<option value="${escapeHtml(d.key)}" ${TREE_AXIS_A === d.key ? "selected" : ""}>${escapeHtml(d.label)}</option>`).join("")}</select>
+      ${bOpts.length ? `<span class="f-lbl">层(纵向)</span><select onchange="TREE_AXIS_B=this.value;renderDetail()"><option value="" ${!TREE_AXIS_B ? "selected" : ""}>(不分层)</option>${bOpts.map(d => `<option value="${escapeHtml(d.key)}" ${TREE_AXIS_B === d.key ? "selected" : ""}>${escapeHtml(d.label)}</option>`).join("")}</select>` : ""}
+      ${dimB && lays.length > 1 ? `<button class="btn sm" onclick="TREE_EXP=!TREE_EXP;renderDetail()">${TREE_EXP ? "合 上" : "拆开看"}</button>` : ""}
+      <span class="mini-note">列 = 时间(${times.map(t => t.slice(5)).join(" → ")}) · 颜色 = 同一条答案的领地 · 悬停格子看来源</span>
+    </div>
+    <div class="cube-stage" style="${TREE_EXP ? `padding:120px 0 240px` : ``}"><div class="cube3" style="width:${W}px;height:${H}px${TREE_EXP ? ";transform:rotateX(58deg) rotateZ(45deg) scale(.85)" : ""}">${layersHtml}</div></div>
+    <div class="cube-legend">${legendHtml}</div>
+    ${offAxis ? `<div class="mini-note" style="text-align:center;margin-top:12px">另有 ${offAxis} 条答案挂在其他维度上，切换上方「行 / 层」可见。</div>` : ""}`;
+  }
+
+  function tabTimeline(kpId, atTime) {
+    const groupsMap = new Map();
+    getAnswersByKp(kb.id, kpId).forEach(a => {
+      const k = coordKeyOf(a.coord);
+      if (!groupsMap.has(k)) groupsMap.set(k, { coord: a.coord, chain: [] });
+      groupsMap.get(k).chain.push(a);
+    });
+    const keys = [...groupsMap.keys()];
+    if (!keys.length) return `<div class="mini-note">还没有任何答案</div>`;
+    if (!TL_COORD || !keys.includes(TL_COORD)) TL_COORD = keys[0];
+    const g = groupsMap.get(TL_COORD);
+    const chain = [...g.chain].sort((x, y) => y.time.localeCompare(x.time));
+    const liveId = (chain.find(a => a.time <= atTime && !a.revoked) || {}).id;
+    return `
+    <div class="form-row" style="margin-bottom:14px">
+      <span class="f-lbl">选择条件组合(每组条件一条独立版本链)</span>
+      <select onchange="TL_COORD=this.value;renderDetail()">${keys.map(k => `<option value="${escapeHtml(k)}" ${TL_COORD === k ? "selected" : ""}>${escapeHtml(coordText(groupsMap.get(k).coord))}</option>`).join("")}</select>
+    </div>
+    <div class="timeline">
+      ${chain.map((a, i) => `
+        <div class="tl-item">
+          <div class="tl-dot-col"><div class="tl-dot ${a.id === liveId ? "cur" : ""}"></div>${i < chain.length - 1 ? '<div class="tl-line"></div>' : ""}</div>
+          <div class="tl-body">
+            <div class="tl-head">
+              <span class="time num" style="font-weight:400">${escapeHtml(a.time)}</span>
+              ${a.revoked ? '<span class="tag gray">已撤回</span>' : (a.id === liveId ? '<span class="tag blue">当前</span>' : (a.time > atTime ? '<span class="tag orange">晚于查询时间，暂不生效</span>' : '<span class="tag gray">已被新版替代</span>'))}
+              <span class="field-hint">操作人：${escapeHtml(a.operator)}</span>
+            </div>
+            <div class="tl-content">${escapeHtml(a.content)}</div>
+            ${a.note ? `<div class="field-hint" style="margin-top:4px">说明：${escapeHtml(a.note)}</div>` : ""}
+          </div>
+        </div>`).join("")}
+    </div>
+    <div class="mini-note" style="margin-top:8px">旧版本与撤回版永不删除。当前查询时间为 <span class="num">${escapeHtml(atTime)}</span>。</div>`;
+  }
+
+  function stateTag(state) {
+    if (state === "生效") return `<span class="tag green">生效</span>`;
+    if (state === "已撤回") return `<span class="tag red">已撤回</span>`;
+    return `<span class="tag gray">已被新版替代</span>`;
+  }
+
+  function tabLogs(kpId) {
+    const rows = buildChangeLog(kb.id, kpId);
+    if (!rows.length) return `<div class="empty-block">暂无变更记录</div>`;
+    return `<div class="table-wrap"><table class="tbl"><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>条件</th><th>变更前</th><th>变更后</th><th>来源</th><th>状态</th><th class="op-col">操作</th></tr></thead><tbody>
+      ${rows.map(l => `<tr>
+        <td class="num" style="font-weight:400">${escapeHtml(l.t.replace("T", " ").slice(0, 19))}</td>
+        <td>${escapeHtml(l.who)}</td>
+        <td>${escapeHtml(l.act)}</td>
+        <td style="color:var(--ink-4)">${escapeHtml(l.tgt)}</td>
+        <td style="max-width:200px;color:var(--ink-4)">${escapeHtml(l.before)}</td>
+        <td style="max-width:200px">${escapeHtml(l.after)}</td>
+        <td><span class="tag purple">${escapeHtml(l.src)}</span></td>
+        <td>${stateTag(l.state)}</td>
+        <td class="op-col ops">${l.revocable ? `<a class="danger" onclick='openRevokeAnswerModal("${l.kbId}", "${l.kpId}", ${attrJson(l.coord)}, ${attrJson(l.after)})'>撤回</a>` : `<span style="color:var(--ink-7)">—</span>`}</td>
+      </tr>`).join("")}
+    </tbody></table></div>`;
+  }
+
+  function openRenameModal() {
+    document.getElementById("titleInput").value = currentKpTitle();
+    document.getElementById("titleFormHint").textContent = "";
+    openModal("titleMask");
+  }
+  function currentKpTitle() { const kp = getKnowledgePoint(kb.id, currentId()); return kp ? kp.title : ""; }
+  function submitTitle() {
+    const title = document.getElementById("titleInput").value.trim();
+    if (!title) { document.getElementById("titleFormHint").textContent = "请填写标题。"; return; }
+    updateKnowledgePointTitle(kb.id, currentId(), title);
+    toast("已更新标题", "ok");
+    closeModal("titleMask");
+    renderDetail();
+  }
+
+  function renderDetail() {
+    const id = currentId();
+    const kp = getKnowledgePoint(kb.id, id);
+    const content = document.getElementById("pageContent");
+    document.getElementById("pageCrumb").textContent = `${kb.name} / 知识点列表 / 详情`;
+
+    if (!kp) {
+      content.innerHTML = `
+        <a class="back-link" href="index.html?kb=${kb.id}">‹ 返回列表</a>
+        <div class="card"><div class="empty-block">找不到 ID「${escapeHtml(id)}」对应的知识点</div></div>`;
+      return;
+    }
+
+    const isDeleted = kp.status === "deleted";
+    const answers = getAnswersByKp(kb.id, id);
+    const totalAnswers = answers.filter(a => !a.revoked).length;
+    const statusTag = isDeleted ? `<span class="tag gray">已删除</span>` : `<span class="tag green">正常</span>`;
+
+    const opsHtml = isDeleted
+      ? `<a class="btn" href="trash.html?kb=${kb.id}">前往回收站恢复</a>`
+      : `<button class="btn primary" onclick='openWriteAnswerModal("${id}", null)'>+ 写一条答案</button>
+         <button class="btn" onclick="openRenameModal()">编辑标题</button>
+         <button class="btn danger" onclick="openDeleteModal('${id}','${escapeHtml(kp.title)}')">删 除</button>`;
+
+    const tabs = [["now", "当前答案"], ["tree", "立体全景"], ["timeline", "版本历史"], ["logs", "变更留痕"]];
+    let body = "";
+    if (S.tab === "now") body = tabNow(id);
+    else if (S.tab === "tree") body = tabTree(id);
+    else if (S.tab === "timeline") body = tabTimeline(id, S.qTime);
+    else body = tabLogs(id);
+
+    content.innerHTML = `
+      <a class="back-link" href="index.html?kb=${kb.id}">‹ 返回列表</a>
+      <div class="card">
+        <div class="detail-head">
+          <div>
+            <h2>${escapeHtml(kp.title)}</h2>
+            <div class="meta">
+              <span>ID <b class="num">${escapeHtml(id)}</b></span>
+              <span>${totalAnswers} 条在用答案</span>
+              <span>创建 <b class="num">${escapeHtml((kp.created_at || "").slice(0, 10))}</b> · ${escapeHtml(kp.operator)}</span>
+              ${statusTag}
+            </div>
+          </div>
+          <div class="ops">${opsHtml}</div>
+        </div>
+      </div>
+
+      ${isDeleted ? `<div class="notice">该知识点已被<b>软删除</b>（删除时间 <b>${escapeHtml((kp.deleted_at || "").slice(0, 10))}</b>，原因：${escapeHtml(kp.delete_reason || "—")}）。以下仍可查看其全部历史答案。</div>` : ""}
+
+      <div class="card ov">
+        <div class="tabs" id="tabs">${tabs.map(t => `<div class="tab ${S.tab === t[0] ? "active" : ""}" data-tab="${t[0]}">${t[1]}</div>`).join("")}</div>
+        ${body}
+      </div>
+    `;
+
+    document.querySelectorAll("#tabs .tab").forEach(tab => {
+      tab.addEventListener("click", () => { S.tab = tab.dataset.tab; renderDetail(); });
+    });
+  }
+
+  const tipCube = document.createElement("div");
+  tipCube.id = "tipCube";
+  document.body.appendChild(tipCube);
+  document.addEventListener("mousemove", e => {
+    const c = e.target.closest && e.target.closest(".c3cell");
+    if (c && c.dataset.tip) {
+      tipCube.innerHTML = c.dataset.tip;
+      tipCube.style.opacity = 1;
+      tipCube.style.left = Math.min(e.clientX + 14, innerWidth - 310) + "px";
+      tipCube.style.top = (e.clientY + 16) + "px";
+    } else {
+      tipCube.style.opacity = 0;
+    }
+  });
+
+  const kbId = getKbIdFromUrl();
+  const kb = kbId ? getKnowledgeBase(kbId) : null;
+
+  if (!kb || kb.status !== "active") {
+    initShell("kp-list");
+    document.getElementById("pageContent").innerHTML = `
+      <div class="card"><div class="empty-block">
+        没有指定有效的知识库（可能已被停用或不存在）<br />
+        <span style="display:inline-block;margin-top:12px"><a class="btn primary" href="kb-list.html">‹ 返回知识库列表</a></span>
+      </div></div>`;
+  } else {
+    setCurrentKb(kb.id);
+    initShell("kp-list");
+    renderDetail();
+  }
+</script>
+</body>
+</html>

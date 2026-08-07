@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多维知识库 · 管理后台 Demo</title>
+<style>
+:root{
+  --brand:#2f6bff; --brand-deep:#1a56f0; --brand-light:#6aa9ff; --brand-light2:#5a8ffb; --brand-pale:#9dbdfb;
+  --grad-btn:linear-gradient(135deg,#2f6bff,#5a8ffb);
+  --grad-bar:linear-gradient(90deg,#2f6bff,#6aa9ff);
+  --grad-mark:linear-gradient(180deg,#2f6bff,#6aa9ff);
+  --blue:#2f6bff;   --blue-bd:#c9dcfc;   --blue-bg:#eef4ff;
+  --green:#0f9d58;  --green-bd:#bfe9d2;  --green-bg:#f2fbf6;
+  --orange:#e08600; --orange-bd:#f5ddb0; --orange-bg:#fdf7ea;
+  --red:#e5484d;    --red-bd:#f7c6c8;    --red-bg:#fff2f2;
+  --purple:#7a5af8; --purple-bd:#e0d7fb; --purple-bg:#f7f4ff;
+  --gray:#7f8ca3;   --gray-bd:#dde5f1;   --gray-bg:#f5f8fd;
+  --ink-1:#1f2b43; --ink-2:#33415c; --ink-3:#5b6b85; --ink-4:#7f8ca3;
+  --ink-5:#8a97ad; --ink-6:#9aa7bd; --ink-7:#b6c0d2;
+  --page-bg:radial-gradient(circle at 50% 40%, #eef2f9 0%, #e3e9f4 70%, #d8e0ee 100%);
+  --surface:#fff; --pale:#f5f8fd; --row-hover:#fafcff;
+  --line:#edf1f8; --line-weak:#f0f4fa; --bd-input:#dde5f1; --bd-card:#e8eef8; --bd-float:#e2e9f4;
+  --rule:linear-gradient(90deg,#e4ebf7,transparent);
+  --r-sm:8px; --r-md:9px; --r-lg:12px; --r-card:14px; --r-modal:18px; --r-pill:999px;
+  --sh-card:0 4px 18px rgba(31,66,135,.05);
+  --sh-btn:0 5px 12px rgba(47,107,255,.3);
+  --sh-float:0 14px 38px rgba(18,35,68,.16);
+  --sh-toast:0 10px 26px rgba(10,25,60,.3);
+  --sh-modal:0 30px 80px rgba(10,25,60,.35);
+  --t:.15s;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--page-bg)}
+body{font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;color:var(--ink-1);font-size:14px;overflow:hidden}
+a{color:var(--brand);text-decoration:none;cursor:pointer}
+a.danger{color:var(--red)}
+.num{font-family:"Bahnschrift","DIN Alternate","Arial Narrow",sans-serif;font-weight:700;letter-spacing:.5px}
+.h-bar{width:5px;border-radius:3px;background:var(--grad-mark);flex:none}
+::-webkit-scrollbar{width:6px;height:6px} ::-webkit-scrollbar-thumb{background:#cfd9ea;border-radius:3px}
+
+/* ===== 布局骨架 A 型 ===== */
+#app{display:flex;width:100%;height:100%}
+#side{width:228px;flex:none;background:#fff;border-right:1px solid #e9eef7;box-shadow:2px 0 12px rgba(31,66,135,.04);z-index:6;display:flex;flex-direction:column}
+#side .logo{height:64px;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--line)}
+#side .logo .h-bar{height:36px}
+#side .logo .t1{font-size:16px;font-weight:700;color:var(--ink-1)}
+#side .logo .t2{font-size:10px;color:var(--ink-6);letter-spacing:2.5px}
+#side nav{flex:1;overflow-y:auto;padding:12px 0}
+#side nav::-webkit-scrollbar{width:5px} #side nav::-webkit-scrollbar-thumb{background:#d5deee}
+.nav-group{font-size:12px;color:var(--ink-6);letter-spacing:2px;padding:14px 20px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:14px;color:var(--ink-3);cursor:pointer;position:relative;transition:all var(--t)}
+.nav-item .ico{width:16px;text-align:center;flex:none}
+.nav-item:hover{background:var(--pale);color:var(--brand)}
+.nav-item.on{background:var(--blue-bg);color:var(--brand-deep);font-weight:600}
+.nav-item.on::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand)}
+#side .side-foot{padding:14px 20px;border-top:1px solid var(--line);font-size:11px;color:var(--ink-6);line-height:1.7}
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#top{height:64px;flex:none;background:#fff;box-shadow:0 2px 10px rgba(31,66,135,.06);z-index:5;display:flex;align-items:center;gap:14px;padding:0 28px}
+#top .h-bar{height:30px}
+#top h1{font-size:18px;color:var(--ink-1);font-weight:700}
+#top .crumb{font-size:13px;color:var(--ink-5)}
+#top .spacer{flex:1}
+.badge-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 12px;border-radius:var(--r-pill);border:1px solid var(--green-bd);background:var(--green-bg);color:var(--green)}
+.badge-pill i{width:7px;height:7px;border-radius:50%;background:var(--green)}
+#clock{text-align:right}
+#clock .tm{font-size:20px;color:var(--ink-1)}
+#clock .dt{font-size:12px;color:var(--ink-5)}
+#avatar{width:34px;height:34px;border-radius:50%;background:var(--grad-btn);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+#content{flex:1;overflow-y:auto;padding:18px 28px 32px}
+
+/* ===== 组件 ===== */
+.card{background:#fff;border-radius:var(--r-card);box-shadow:var(--sh-card);padding:18px 22px;margin-bottom:16px;overflow-x:auto}
+.card.ov{overflow:visible}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-head .tick{width:4px;height:16px;border-radius:2px;background:var(--brand);flex:none}
+.card-head h3{font-size:17px;color:var(--ink-1);white-space:nowrap}
+.card-head .sub{font-size:12px;color:var(--ink-5);margin-left:4px;white-space:nowrap}
+.card-head .spacer{flex:1;height:1px;background:var(--rule);margin:0 10px;min-width:20px}
+
+.btn{height:34px;padding:0 16px;border-radius:var(--r-md);border:1px solid var(--bd-input);background:#fff;color:var(--ink-3);font-size:13px;transition:all var(--t);cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn:hover{border-color:var(--brand-pale);color:var(--brand)}
+.btn.primary{background:var(--grad-btn);border:none;color:#fff;font-weight:600;box-shadow:var(--sh-btn)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.danger{color:var(--red);border-color:#f3c1c3}
+.btn.danger:hover{background:var(--red-bg)}
+.btn.sm{height:28px;padding:0 12px;font-size:12px;border-radius:var(--r-sm)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+input[type=text],input[type=date],select,textarea{
+  border:1px solid var(--bd-input);border-radius:var(--r-md);padding:8px 12px;font-size:13.5px;
+  color:var(--ink-2);background:#fff;outline:none;min-width:150px;font-family:inherit;transition:all var(--t)}
+input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(47,107,255,.12)}
+input::placeholder{color:var(--ink-7)}
+select{cursor:pointer}
+textarea{resize:vertical;min-height:70px;width:100%}
+.form-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.f-lbl{font-size:13px;color:var(--ink-4);white-space:nowrap}
+
+.tag{display:inline-block;font-size:12px;padding:2.5px 10px;border-radius:var(--r-pill);border:1px solid;margin:1px 4px 1px 0;white-space:nowrap}
+.tag.blue{color:var(--blue);border-color:var(--blue-bd);background:var(--blue-bg)}
+.tag.green{color:var(--green);border-color:var(--green-bd);background:var(--green-bg)}
+.tag.orange{color:var(--orange);border-color:var(--orange-bd);background:var(--orange-bg)}
+.tag.red{color:var(--red);border-color:var(--red-bd);background:var(--red-bg)}
+.tag.purple{color:var(--purple);border-color:var(--purple-bd);background:var(--purple-bg)}
+.tag.gray{color:var(--gray);border-color:var(--gray-bd);background:var(--gray-bg)}
+
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{background:var(--pale);color:var(--ink-4);font-size:13px;font-weight:600;text-align:left;padding:11px 12px;white-space:nowrap}
+.tbl th:first-child{border-radius:9px 0 0 9px}
+.tbl th:last-child{border-radius:0 9px 9px 0}
+.tbl td{padding:11px 12px;font-size:13.5px;border-bottom:1px solid var(--line-weak);color:var(--ink-2)}
+.tbl tr:hover td{background:var(--row-hover)}
+.tbl .empty{text-align:center;color:var(--ink-7);font-size:13.5px;padding:30px 0}
+.tbl .tm{color:var(--ink-5);white-space:nowrap;font-size:12.5px}
+.ops a{margin-right:12px;font-size:13px}
+.ops a:last-child{margin-right:0}
+.ops span.na{color:var(--ink-7)}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid var(--bd-card);border-radius:var(--r-card);box-shadow:var(--sh-card);padding:18px 20px}
+.stat .lbl{font-size:14px;color:var(--ink-3);display:flex;align-items:center;gap:7px}
+.stat .lbl::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--brand-deep)}
+.stat .val{font-size:36px;margin-top:8px;color:var(--brand-deep);line-height:1.1}
+.stat .val small{font-size:14px;color:var(--ink-5);font-weight:600;margin-left:4px}
+.stat .foot{font-size:12px;color:var(--ink-5);margin-top:8px}
+.stat.c2 .lbl::before{background:var(--green)} .stat.c2 .val{color:var(--green)}
+.stat.c3 .lbl::before{background:var(--purple)} .stat.c3 .val{color:var(--purple)}
+.stat.c4 .lbl::before{background:var(--orange)} .stat.c4 .val{color:var(--orange)}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap}
+.tabs .tab{padding:12px 17px;font-size:14.5px;color:var(--ink-3);cursor:pointer;position:relative;transition:color var(--t)}
+.tabs .tab:hover{color:var(--brand)}
+.tabs .tab.active{color:var(--brand);font-weight:700}
+.tabs .tab.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:2px;background:var(--brand)}
+
+.desc{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.desc .di{display:flex;border-bottom:1px solid var(--line-weak);border-right:1px solid var(--line-weak);min-height:44px}
+.desc .di .k{width:120px;flex-shrink:0;background:var(--pale);color:var(--ink-4);font-size:12.5px;padding:12px 14px}
+.desc .di .v{flex:1;padding:12px 14px;font-size:13.5px;color:var(--ink-1);font-weight:600;word-break:break-all}
+.desc .di.span3{grid-column:span 3}
+
+.mask{position:fixed;inset:0;background:rgba(43,58,94,.55);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;z-index:100;overflow-y:auto;padding:60px 20px}
+.mask.show{display:flex}
+.modal{background:#fff;border-radius:var(--r-modal);width:560px;max-width:96vw;box-shadow:var(--sh-modal);overflow:hidden}
+.modal.wide{width:1100px}
+.mo-head{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;color:var(--ink-1)}
+.mo-head::before{content:"";width:4px;height:18px;border-radius:2px;background:var(--brand)}
+.mo-close{margin-left:auto;width:34px;height:34px;border-radius:var(--r-md);background:#f1f4fa;color:var(--ink-3);border:none;cursor:pointer;font-size:15px}
+.mo-body{padding:20px 24px;max-height:62vh;overflow-y:auto}
+.mo-foot{padding:14px 24px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;align-items:center}
+.mf{margin-bottom:14px}
+.mf label{font-size:13px;color:var(--ink-4);margin-bottom:6px;display:block}
+.mf label .req{color:var(--red);margin-right:2px}
+.mf .hint{font-size:12px;color:var(--ink-6);margin-top:4px}
+.mf input[type=text],.mf input[type=date],.mf select{width:100%}
+.risk{background:var(--red-bg);border:1px solid var(--red-bd);border-radius:10px;padding:12px 16px;font-size:13px;color:#c0353a;line-height:1.8;margin-top:10px}
+
+/* 下拉菜单(规范 §3.11,此前缺失导致"加一个条件"渲染成裸文本) */
+.dd{position:relative;display:inline-block}
+.dd-menu{position:absolute;left:0;top:calc(100% + 6px);min-width:280px;background:#fff;border:1px solid var(--bd-float);border-radius:12px;box-shadow:var(--sh-float);padding:6px;display:none;z-index:40;text-align:left}
+.dd.open .dd-menu{display:block}
+.dd-item{padding:9px 12px;border-radius:9px;cursor:pointer;display:block}
+.dd-item:hover{background:var(--pale)}
+.dd-item .t{font-size:13.5px;color:var(--ink-2);font-weight:600;display:block}
+.dd-item .d{font-size:12px;color:var(--ink-6);margin-top:3px;line-height:1.6;display:block}
+.dd-sep{height:1px;background:var(--line-weak);margin:5px 8px}
+.dd-group{font-size:11px;color:var(--ink-7);letter-spacing:1px;padding:7px 12px 3px}
+/* 立体全景(等距立方体) */
+.cube-stage{perspective:1500px;display:flex;justify-content:center;padding:70px 0 210px}
+.cube3{transform-style:preserve-3d;transform:rotateX(58deg) rotateZ(45deg);position:relative;transition:transform .8s cubic-bezier(.16,1,.3,1)}
+.layer3{position:absolute;inset:0;transform-style:preserve-3d;display:grid;gap:6px;transition:transform .8s cubic-bezier(.16,1,.3,1)}
+.c3cell{border-radius:8px;border:1.5px solid rgba(255,255,255,.85);box-shadow:0 2px 0 rgba(31,66,135,.12);display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600;cursor:default;user-select:none;white-space:nowrap;overflow:hidden}
+.c3cell.emptyc{background:#f0f3f9;color:var(--ink-7);border-style:dashed;font-weight:400}
+.layer3-lbl{position:absolute;left:-12px;top:50%;transform:rotateZ(-45deg) rotateX(-58deg) translate(-100%,-50%);font-size:12.5px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.cube-legend{display:flex;gap:12px 20px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);justify-content:center;margin-top:-70px;position:relative}
+#tipCube{position:fixed;z-index:300;pointer-events:none;background:rgba(31,43,67,.94);color:#fff;font-size:12.5px;line-height:1.7;padding:8px 13px;border-radius:9px;opacity:0;transition:opacity .15s;max-width:300px;box-shadow:var(--sh-toast)}
+#tipCube b{color:#8fb5ff}
+#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast-item{background:rgba(31,43,67,.92);color:#fff;border-radius:10px;padding:11px 22px;font-size:13.5px;box-shadow:var(--sh-toast);animation:tin .25s;display:flex;gap:8px;align-items:center}
+.toast-item.ok::before{content:"✓";color:#4cd48f;font-weight:700}
+.toast-item.err::before{content:"✕";color:#ff9a9e;font-weight:700}
+.toast-item.info::before{content:"ℹ";color:#8fb5ff;font-weight:700}
+@keyframes tin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+.notice{background:linear-gradient(135deg,#eef4ff,#f7faff);border:1px solid #d9e6fd;border-radius:var(--r-lg);padding:13px 18px;font-size:13px;color:var(--ink-2);line-height:1.8;margin-bottom:16px}
+.notice b{color:var(--brand-deep)}
+
+.detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.detail-head h2{font-size:21px;color:var(--ink-1)}
+.detail-head .meta{font-size:13px;color:var(--ink-5);margin-top:8px;display:flex;gap:18px;flex-wrap:wrap}
+.back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--blue-bd);background:var(--blue-bg);color:var(--brand);font-size:13px;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;margin-bottom:14px}
+
+.pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:14px;font-size:13px;color:var(--ink-4)}
+.pager button{min-width:32px;height:32px;padding:0 10px;border-radius:var(--r-md);border:1px solid var(--bd-input);background:#fff;color:var(--ink-3);font-size:13px;cursor:pointer}
+.pager button.cur{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.pager button:disabled{opacity:.45;cursor:not-allowed}
+
+.trow{border-bottom:1px solid var(--line-weak);padding:6px 2px}
+.trow:last-of-type{border-bottom:none}
+.trow-main{display:flex;align-items:center;gap:10px;cursor:pointer;border-radius:9px;padding:8px 10px;transition:background var(--t)}
+.trow-main:hover{background:var(--pale)}
+.trow-main .arrow{color:var(--ink-6);width:14px;flex:none;font-size:12px}
+.trm-meta{font-size:12.5px;color:var(--ink-5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow-ans{margin:0 0 6px 34px;font-size:13px;color:var(--ink-2);line-height:1.9}
+.tnode{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:var(--r-md);color:var(--ink-2);cursor:pointer;transition:background var(--t)}
+.tnode:hover{background:var(--pale)}
+.tnode.sel{background:var(--blue-bg);color:var(--brand-deep);font-weight:600}
+.tnode .cnt{font-size:12px;color:var(--ink-6);font-weight:400}
+.kids{margin-left:18px;border-left:1px dashed #dbe3f0;padding-left:8px}
+
+.status-dot{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.status-dot i{width:7px;height:7px;border-radius:50%}
+.status-dot.ok{color:var(--green)} .status-dot.ok i{background:var(--green)}
+.status-dot.off{color:var(--ink-5)} .status-dot.off i{background:var(--ink-6)}
+.status-dot.warn{color:var(--orange)} .status-dot.warn i{background:var(--orange)}
+
+/* demo 专属:答案清单 / 时间轴 */
+.ans-item{padding:16px 6px;border-bottom:1px solid var(--line-weak)}
+.ans-item:last-child{border-bottom:none}
+.ans-item .ai-content{font-size:15px;font-weight:600;color:var(--ink-1);line-height:1.8}
+.ans-item .ai-cond{font-size:12.5px;color:var(--ink-5);margin-top:7px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.ans-item .ai-cond .live{display:inline-flex;align-items:center;gap:5px;color:var(--green);font-weight:600}
+.ans-item .ai-cond .live i{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.tl{position:relative;padding-left:22px}
+.tl::before{content:"";position:absolute;left:6px;top:6px;bottom:6px;width:1px;background:#dbe3f0}
+.tl-item{position:relative;padding:0 0 18px 12px}
+.tl-item::before{content:"";position:absolute;left:-20px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 1px var(--blue-bd)}
+.tl-item.dead::before{background:var(--ink-7);box-shadow:0 0 0 1px var(--gray-bd)}
+.tl-item .tl-t{font-size:12.5px;color:var(--ink-5)}
+.tl-item .tl-c{font-size:14px;color:var(--ink-1);font-weight:600;margin-top:4px;line-height:1.7}
+.tl-item.dead .tl-c{color:var(--ink-6);text-decoration:line-through;font-weight:400}
+.coordkey{font-size:12px;color:var(--ink-5)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1100px){.two-col{grid-template-columns:1fr}}
+.mini-note{font-size:12px;color:var(--ink-6);line-height:1.8}
+.seg{display:inline-flex;border:1px solid var(--bd-input);border-radius:var(--r-md);overflow:hidden}
+.seg button{border:none;background:#fff;color:var(--ink-3);font-size:12.5px;padding:6px 14px;cursor:pointer;font-family:inherit}
+.seg button.on{background:var(--blue-bg);color:var(--brand-deep);font-weight:600}
+.seg button+button{border-left:1px solid var(--line)}
+.quick-dates{display:inline-flex;gap:6px}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="logo"><div class="h-bar"></div><div><div class="t1">多维知识库</div><div class="t2">MULTI-DIM KB</div></div></div>
+    <nav id="nav"></nav>
+    <div class="side-foot">Demo v0.1 · 数据为演示样例<br>规范:《UI规范-企业信息管理平台》</div>
+  </aside>
+  <div id="main">
+    <header id="top">
+      <div class="h-bar"></div>
+      <h1 id="pageTitle">知识主体列表</h1>
+      <span class="crumb" id="crumb">知识管理 / 知识主体列表</span>
+      <div class="spacer"></div>
+      <span class="badge-pill"><i></i>演示环境 · 运行正常</span>
+      <div id="clock"><div class="tm num" id="clkT">--:--:--</div><div class="dt" id="clkD">----</div></div>
+      <div id="avatar">彭</div>
+    </header>
+    <main id="content"></main>
+  </div>
+</div>
+<div class="mask" id="mask"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+/* ================= 数据模型 ================= */
+// 维度注册表:加维度 = 加一行,不动任何数据表结构
+let DIMS = [
+  {key:'scene',  name:'场景', type:'枚举', values:['科技场景','农业场景','政务场景','金融场景','医疗场景'], strategy:'查询未提供时忽略', enabled:true, weight:80},
+  {key:'person', name:'人员', type:'人员', values:['Eden','牛哥','吴老板'], strategy:'查询未提供时忽略', enabled:true, weight:60},
+  {key:'region', name:'地区', type:'层级', values:['拱墅区','祥符街道','东新街道','小河街道','西湖区'],
+   parent:{'祥符街道':'拱墅区','东新街道':'拱墅区','小河街道':'拱墅区'}, strategy:'就近匹配(子级没有答案时取父级)', enabled:true, weight:70},
+];
+const SUBJECTS = [
+  {id:'S1',  title:'苹果',   cat:'认知/概念', code:'KB-0001', created:'2026-07-01', by:'Eden'},
+  {id:'N2',  title:'小米',   cat:'认知/概念', code:'KB-0002', created:'2026-07-05', by:'Eden'},
+  {id:'N3',  title:'云',     cat:'认知/概念', code:'KB-0003', created:'2026-07-05', by:'牛哥'},
+  {id:'N4',  title:'窗口',   cat:'政务用语', code:'KB-0004', created:'2026-07-06', by:'彭总'},
+  {id:'N5',  title:'抓手',   cat:'政务用语', code:'KB-0005', created:'2026-07-08', by:'彭总'},
+  {id:'N6',  title:'画像',   cat:'业务术语', code:'KB-0006', created:'2026-07-08', by:'涛哥'},
+  {id:'N7',  title:'标签',   cat:'业务术语', code:'KB-0007', created:'2026-07-09', by:'涛哥'},
+  {id:'N8',  title:'病毒',   cat:'认知/概念', code:'KB-0008', created:'2026-07-10', by:'Eden'},
+  {id:'N9',  title:'独角兽', cat:'认知/概念', code:'KB-0009', created:'2026-07-10', by:'吴老板'},
+  {id:'N10', title:'沙盒',   cat:'认知/概念', code:'KB-0010', created:'2026-07-11', by:'Eden'},
+  {id:'N11', title:'韭菜',   cat:'认知/概念', code:'KB-0011', created:'2026-07-12', by:'牛哥'},
+  {id:'N12', title:'黑马',   cat:'认知/概念', code:'KB-0012', created:'2026-07-12', by:'牛哥'},
+  {id:'N13', title:'龙井',   cat:'地方知识', code:'KB-0013', created:'2026-07-13', by:'彭总'},
+  {id:'N14', title:'运河',   cat:'地方知识', code:'KB-0014', created:'2026-07-13', by:'彭总'},
+  {id:'N15', title:'闭环',   cat:'政务用语', code:'KB-0015', created:'2026-07-14', by:'吴老板'},
+  {id:'N16', title:'灰犀牛', cat:'认知/概念', code:'KB-0016', created:'2026-07-15', by:'吴老板'},
+];
+// 答案:内容 + 稀疏适用条件 + 生效时间。没写的条件 = 处处适用
+let ASSERTS = [
+  {id:'p0', subj:'S1', coord:{}, content:'一种常见的水果。', vf:'2026-07-01', by:'Eden', src:'人工填报', revoked:false},
+  {id:'p6', subj:'S1', coord:{}, content:'苹果:视语境而定的多义概念。', vf:'2026-08-04', by:'牛哥', src:'人工填报', revoked:true},
+  {id:'p1', subj:'S1', coord:{scene:'科技场景'}, content:'苹果公司(Apple Inc.),消费电子与软件科技公司。', vf:'2026-08-02', by:'Eden', src:'人工填报', revoked:false},
+  {id:'p2', subj:'S1', coord:{scene:'农业场景'}, content:'蔷薇科苹果属果实,可食用的水果。', vf:'2026-08-02', by:'Eden', src:'人工填报', revoked:false},
+  {id:'p3', subj:'S1', coord:{person:'Eden'}, content:'苹果是一种水果。', vf:'2026-07-20', by:'Eden', src:'人工填报', revoked:false},
+  {id:'p4', subj:'S1', coord:{person:'Eden'}, content:'苹果是一家公司。(Eden 于 8/6 改变认知)', vf:'2026-08-06', by:'Eden', src:'人工填报', revoked:false},
+  {id:'p5', subj:'S1', coord:{person:'吴老板'}, content:'苹果就是手机品牌。', vf:'2026-08-03', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'m1', subj:'N2', coord:{}, content:'一种谷物,常见杂粮。', vf:'2026-07-05', by:'Eden', src:'人工填报', revoked:false},
+  {id:'m2', subj:'N2', coord:{scene:'科技场景'}, content:'小米集团:手机与智能硬件公司。', vf:'2026-07-10', by:'Eden', src:'人工填报', revoked:false},
+  {id:'m3', subj:'N2', coord:{scene:'农业场景'}, content:'粟,五谷之一,耐旱作物。', vf:'2026-07-12', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'c1', subj:'N3', coord:{}, content:'天空中水汽凝结的可见聚合物。', vf:'2026-07-05', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'c2', subj:'N3', coord:{scene:'科技场景'}, content:'云计算:按需取用的算力与存储服务。', vf:'2026-07-15', by:'Eden', src:'人工填报', revoked:false},
+  {id:'c3', subj:'N3', coord:{person:'吴老板'}, content:'说白了就是租别人的服务器。', vf:'2026-08-01', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'w1', subj:'N4', coord:{}, content:'建筑上采光通风的开口。', vf:'2026-07-06', by:'彭总', src:'人工填报', revoked:false},
+  {id:'w2', subj:'N4', coord:{scene:'政务场景'}, content:'政务服务大厅的办事窗口。', vf:'2026-07-20', by:'彭总', src:'人工填报', revoked:false},
+  {id:'w3', subj:'N4', coord:{scene:'科技场景'}, content:'操作系统中的程序界面单元。', vf:'2026-07-18', by:'Eden', src:'人工填报', revoked:false},
+  {id:'g1', subj:'N5', coord:{}, content:'便于抓握、发力的部件。', vf:'2026-07-08', by:'彭总', src:'人工填报', revoked:false},
+  {id:'g2', subj:'N5', coord:{scene:'政务场景'}, content:'推动工作的切入点和着力点。', vf:'2026-08-04', by:'彭总', src:'人工填报', revoked:false},
+  {id:'h1', subj:'N6', coord:{}, content:'人物肖像画。', vf:'2026-07-08', by:'涛哥', src:'人工填报', revoked:false},
+  {id:'h2', subj:'N6', coord:{scene:'科技场景'}, content:'基于数据为对象构建的特征集合。', vf:'2026-07-25', by:'涛哥', src:'人工填报', revoked:false},
+  {id:'h3', subj:'N6', coord:{scene:'政务场景'}, content:'企业画像:支撑精准服务的企业特征全景。', vf:'2026-08-02', by:'彭总', src:'人工填报', revoked:false},
+  {id:'b1', subj:'N7', coord:{}, content:'标注商品信息的贴纸。', vf:'2026-07-09', by:'涛哥', src:'人工填报', revoked:false},
+  {id:'b2', subj:'N7', coord:{scene:'科技场景'}, content:'结构化的特征标记,支撑检索与分析。', vf:'2026-07-26', by:'涛哥', src:'人工填报', revoked:false},
+  {id:'b3', subj:'N7', coord:{person:'牛哥'}, content:'打标签本质上就是做分类。', vf:'2026-08-03', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'v1', subj:'N8', coord:{}, content:'依赖宿主细胞复制的微小病原体。', vf:'2026-07-10', by:'Eden', src:'人工填报', revoked:false},
+  {id:'v2', subj:'N8', coord:{scene:'科技场景'}, content:'具有自我复制能力的恶意程序。', vf:'2026-07-19', by:'Eden', src:'人工填报', revoked:false},
+  {id:'v3', subj:'N8', coord:{scene:'医疗场景'}, content:'需要监测与防控的传染性病原。', vf:'2026-07-28', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'u1', subj:'N9', coord:{}, content:'神话中额生一角的马形生物。', vf:'2026-07-10', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'u2', subj:'N9', coord:{scene:'金融场景'}, content:'估值超 10 亿美元的未上市公司。', vf:'2026-07-30', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'x1', subj:'N10', coord:{}, content:'供儿童玩沙的容器。', vf:'2026-07-11', by:'Eden', src:'人工填报', revoked:false},
+  {id:'x2', subj:'N10', coord:{scene:'科技场景'}, content:'与外界隔离的程序试验环境。', vf:'2026-07-21', by:'Eden', src:'人工填报', revoked:false},
+  {id:'x3', subj:'N10', coord:{scene:'金融场景'}, content:'监管沙盒:金融创新的受控试点机制。', vf:'2026-08-01', by:'涛哥', src:'人工填报', revoked:false},
+  {id:'j1', subj:'N11', coord:{}, content:'百合科多年生蔬菜。', vf:'2026-07-12', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'j2', subj:'N11', coord:{scene:'农业场景'}, content:'耐寒易种,可多茬收割。', vf:'2026-07-22', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'j3', subj:'N11', coord:{scene:'金融场景'}, content:'俚语:反复被收割的散户,正式场合慎用。', vf:'2026-08-04', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'k1', subj:'N12', coord:{}, content:'黑色毛皮的马。', vf:'2026-07-12', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'k2', subj:'N12', coord:{scene:'金融场景'}, content:'出人意料跑赢预期的标的或团队。', vf:'2026-07-29', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'l1', subj:'N13', coord:{}, content:'绿茶名品,产于杭州。', vf:'2026-07-13', by:'彭总', src:'人工填报', revoked:false},
+  {id:'l2', subj:'N13', coord:{region:'西湖区'}, content:'龙井村与茶产区,地名与茶同名。', vf:'2026-07-27', by:'彭总', src:'人工填报', revoked:false},
+  {id:'l3', subj:'N13', coord:{scene:'农业场景'}, content:'茶树栽培品种,春茶为佳。', vf:'2026-08-01', by:'牛哥', src:'人工填报', revoked:false},
+  {id:'y1', subj:'N14', coord:{}, content:'人工开凿的通航水道。', vf:'2026-07-13', by:'彭总', src:'人工填报', revoked:false},
+  {id:'y2', subj:'N14', coord:{region:'拱墅区'}, content:'京杭大运河拱墅段:城市文化地标与滨水带。', vf:'2026-07-29', by:'彭总', src:'人工填报', revoked:false},
+  {id:'o1', subj:'N15', coord:{}, content:'首尾相接的回路。', vf:'2026-07-14', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'o2', subj:'N15', coord:{scene:'政务场景'}, content:'事事有回音、件件有着落的工作机制。', vf:'2026-07-31', by:'彭总', src:'人工填报', revoked:false},
+  {id:'o3', subj:'N15', coord:{scene:'科技场景'}, content:'数据驱动、持续反馈的迭代循环。', vf:'2026-08-02', by:'涛哥', src:'人工填报', revoked:false},
+  {id:'r1', subj:'N16', coord:{}, content:'体型庞大的草食动物。', vf:'2026-07-15', by:'吴老板', src:'人工填报', revoked:false},
+  {id:'r2', subj:'N16', coord:{scene:'金融场景'}, content:'大概率发生、影响巨大却被长期忽视的风险。', vf:'2026-08-03', by:'吴老板', src:'人工填报', revoked:false},
+];
+// 变更留痕(含撤回的撤回)
+const LOGS = [
+  {t:'2026-08-06 09:40', subj:'S1', who:'Eden', act:'改答案', tgt:'条件 {人员 = Eden}', before:'苹果是一种水果。', after:'苹果是一家公司。', src:'人工编辑', state:'生效'},
+  {t:'2026-08-05 11:20', subj:'S1', who:'涛哥', act:'再次撤回默认答案', tgt:'条件 {默认}', before:'苹果:视语境而定的多义概念。', after:'(撤回,回退至 7/1 版本)', src:'人工编辑', state:'生效'},
+  {t:'2026-08-05 09:00', subj:'S1', who:'吴老板', act:'撤回了「8-04 15:30 的撤回」', tgt:'条件 {默认}', before:'(撤回状态)', after:'恢复 p6 生效', src:'人工编辑', state:'已被再次撤回'},
+  {t:'2026-08-04 16:20', subj:'N5', who:'彭总', act:'写答案', tgt:'条件 {场景 = 政务场景}', before:'—', after:'推动工作的切入点和着力点。', src:'人工编辑', state:'生效'},
+  {t:'2026-08-04 15:30', subj:'S1', who:'涛哥', act:'撤回默认答案', tgt:'条件 {默认}', before:'苹果:视语境而定的多义概念。', after:'(撤回)', src:'人工编辑', state:'已被撤回'},
+  {t:'2026-08-04 11:02', subj:'N11', who:'吴老板', act:'写答案', tgt:'条件 {场景 = 金融场景}', before:'—', after:'俚语:反复被收割的散户,正式场合慎用。', src:'人工编辑', state:'生效'},
+  {t:'2026-08-04 10:12', subj:'S1', who:'牛哥', act:'写了一条默认答案', tgt:'条件 {默认}', before:'—', after:'苹果:视语境而定的多义概念。', src:'人工编辑', state:'已撤回'},
+];
+const SRC_ALIAS = {'天眼查':'第三方数据源','企查查':'第三方数据源'};
+
+/* ================= 查询引擎 ================= */
+const TODAY='2026-08-07';
+const S = { page:'list', qTime:TODAY, qMode:'now', kw:'', filters:{}, subj:null, tab:'now', pg:1,
+            axisA:'', axisB:'__init', cubeExp:false, tlCoord:null, viewer:'admin', treeSel:null, ddOpen:false, ddDim:null, expanded:{S1:true} };
+
+function dimByKey(k){ return DIMS.find(d=>d.key===k); }
+function regionMatch(av, qv){ // 层级:答案的条件值 = 提问值 或 其祖先
+  if(av===qv) return 2;
+  const d=dimByKey('region'); let cur=qv;
+  while(d.parent && d.parent[cur]){ cur=d.parent[cur]; if(cur===av) return 1; }
+  return 0;
+}
+function compatible(a, Q){ // 规则1:答案写明的条件必须与提问相符;没问到的条件不过滤
+  let score=0;
+  for(const k in a.coord){
+    if(Q[k]===undefined || Q[k]==='') continue;
+    const m = (k==='region') ? regionMatch(a.coord[k], Q[k]) : (a.coord[k]===Q[k] ? 2 : 0);
+    if(m===0) return null;
+    score+=m;
+  }
+  return score;
+}
+function weightOf(c){ return Object.keys(c).reduce((t,k)=>t+((dimByKey(k)||{}).weight||50),0); }
+function coordKey(c){ return Object.keys(c).sort().map(k=>k+':'+c[k]).join('|') || '(默认)'; }
+function coordLabel(c){
+  const ks=Object.keys(c);
+  if(!ks.length) return '<span class="tag gray">默认答案 · 处处适用</span>';
+  return ks.map(k=>`<span class="tag blue">${dimByKey(k).name} = ${c[k]}</span>`).join('');
+}
+// 竞争:不符出局 → 同条件取最新(跳过撤回) → 具体的赢
+function resolve(subjId, Q, T){
+  const groups={};
+  ASSERTS.filter(a=>a.subj===subjId && a.vf<=T).forEach(a=>{
+    const sc=compatible(a,Q); if(sc===null) return;
+    const key=coordKey(a.coord);
+    (groups[key]=groups[key]||{key, coord:a.coord, score:sc, chain:[]}).chain.push(a);
+  });
+  const out=[];
+  for(const k in groups){
+    const g=groups[k];
+    g.chain.sort((x,y)=>y.vf.localeCompare(x.vf));
+    const live=g.chain.find(a=>!a.revoked);
+    if(!live) continue;
+    g.cur=live; g.spec=Object.keys(g.coord).length; g.w=weightOf(g.coord);
+    out.push(g);
+  }
+  out.sort((a,b)=> b.spec-a.spec || b.w-a.w || b.score-a.score || b.cur.vf.localeCompare(a.cur.vf));
+  return out;
+}
+
+/* ================= 基础 UI ================= */
+function toast(msg, type='ok'){
+  const el=document.createElement('div'); el.className='toast-item '+type; el.textContent=msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(()=>el.remove(), 2600);
+}
+function openModal(html){ document.getElementById('modal').innerHTML=html; document.getElementById('mask').classList.add('show'); }
+function closeModal(){ document.getElementById('mask').classList.remove('show'); }
+document.getElementById('mask').addEventListener('click', e=>{ if(e.target.id==='mask') closeModal(); });
+function tick(){
+  const n=new Date();
+  document.getElementById('clkT').textContent=n.toTimeString().slice(0,8);
+  document.getElementById('clkD').textContent=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')} 星期${'日一二三四五六'[n.getDay()]}`;
+}
+setInterval(tick,1000); tick();
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function srcName(s){ return (S.viewer==='user' && SRC_ALIAS[s]) ? SRC_ALIAS[s] : s; }
+
+/* ================= 导航 ================= */
+const MENUS=[
+  {group:'知识管理', items:[
+    {id:'list', ico:'◧', name:'知识主体列表'},
+  ]},
+  {group:'维度体系', items:[
+    {id:'dims', ico:'▦', name:'维度管理'},
+  ]},
+  {group:'系统', items:[
+    {id:'logs', ico:'⟲', name:'操作日志'},
+  ]},
+];
+const TITLES={list:['知识主体列表','知识管理 / 知识主体列表'],dims:['维度管理','维度体系 / 维度管理'],logs:['操作日志','系统 / 操作日志'],detail:['知识详情','知识管理 / 知识主体列表 / 详情']};
+function renderNav(){
+  document.getElementById('nav').innerHTML = MENUS.map(g=>
+    `<div class="nav-group">${g.group}</div>`+g.items.map(m=>
+      `<div class="nav-item ${S.page===m.id?'on':''}" onclick="go('${m.id}')"><span class="ico">${m.ico}</span>${m.name}</div>`).join('')
+  ).join('');
+}
+function go(p, subj){
+  S.page=p; if(subj) S.subj=subj;
+  const t=TITLES[p]||TITLES.list;
+  document.getElementById('pageTitle').textContent = p==='detail'? (SUBJECTS.find(x=>x.id===S.subj).title) : t[0];
+  document.getElementById('crumb').textContent=t[1];
+  renderNav(); render();
+  document.getElementById('content').scrollTop=0;
+}
+
+/* ================= 页面:知识主体列表 ================= */
+function condPicker(){
+  const chips=Object.keys(S.filters).filter(k=>S.filters[k]).map(k=>
+    `<span class="tag blue" style="cursor:pointer;padding:5px 12px;font-size:12.5px" title="点击移除该条件" onclick="delete S.filters['${k}'];render()">${dimByKey(k).name} = ${S.filters[k]} ✕</span>`).join('');
+  const dims=DIMS.filter(d=>d.enabled);
+  const ddMenu = !S.ddOpen ? '' : `<div class="dd-menu" style="display:block;right:auto;left:0">` + (
+    S.ddDim ? `<div class="dd-group">「${dimByKey(S.ddDim).name}」= ?</div>` +
+        dimByKey(S.ddDim).values.map(v=>`<div class="dd-item" onclick="event.stopPropagation();S.filters['${S.ddDim}']='${v}';S.ddOpen=false;S.ddDim=null;render()"><span class="t">${v}</span></div>`).join('') +
+        `<div class="dd-sep"></div><div class="dd-item" onclick="event.stopPropagation();S.ddDim=null;render()"><span class="t" style="color:var(--ink-5)">‹ 返回维度列表</span></div>`
+      : `<div class="dd-group">按哪个维度钉条件?(${dims.length} 个维度,可无限增加,界面不变)</div>` +
+        dims.map(d=>`<div class="dd-item" onclick="event.stopPropagation();S.ddDim='${d.key}';render()"><span class="t">${d.name}${S.filters[d.key]?' · 已钉住 '+S.filters[d.key]:''}</span><span class="d">${d.type} · ${d.values.slice(0,3).join(' / ')}${d.values.length>3?' …':''}</span></div>`).join('')
+  ) + `</div>`;
+  return `<span class="f-lbl">时间</span>
+      <span class="seg">
+        <button class="${S.qMode!=='day'?'on':''}" onclick="S.qMode='now';S.qTime=TODAY;render()">最新</button>
+        <button class="${S.qMode==='day'?'on':''}" onclick="S.qMode='day';render()">回看某天</button>
+      </span>
+      ${S.qMode==='day'?`<input type="date" value="${S.qTime}" max="${TODAY}" onchange="if(this.value){S.qTime=this.value;render()}">`:''}
+      ${chips}
+      <span class="dd ${S.ddOpen?'open':''}" style="position:relative">
+        <button class="btn" onclick="event.stopPropagation();S.ddOpen=!S.ddOpen;S.ddDim=null;render()">+ 加一个条件</button>
+        ${ddMenu}
+      </span>`;
+}
+function filterBar(){
+  return `<div class="card ov">
+    <div class="card-head"><div class="tick"></div><h3>带条件提问</h3><span class="sub">钉住你关心的条件;不钉的不参与过滤</span><div class="spacer"></div>
+      <button class="btn primary" onclick="openNewAssert()">+ 新增知识</button>
+    </div>
+    <div class="form-row">
+      <input type="text" id="kw" placeholder="搜索知识主体…" value="${esc(S.kw)}" onkeydown="if(event.key==='Enter')doQuery()">
+      ${condPicker()}
+      <button class="btn primary" onclick="doQuery()">查 询</button>
+      <button class="btn" onclick="resetQuery()">重 置</button>
+    </div>
+  </div>`;
+}
+function doQuery(){
+  const kwEl=document.getElementById('kw');
+  if(kwEl) S.kw=kwEl.value.trim();
+  S.pg=1;
+  render();
+  const n=Object.values(S.filters).filter(Boolean).length;
+  toast(`已按 ${n} 个条件 + ${S.qMode==='day'?('回看 '+S.qTime):'最新状态'} 提问`,'info');
+}
+function resetQuery(){ S.kw=''; S.filters={}; S.qMode='now'; S.qTime=TODAY; S.ddOpen=false; S.ddDim=null; S.pg=1; render(); }
+document.addEventListener('click',e=>{ if(S.ddOpen && !e.target.closest('.dd')){ S.ddOpen=false; S.ddDim=null; render(); } });
+
+function toggleExpand(id){ S.expanded[id]=!S.expanded[id]; render(); }
+function subjectTree(id, T){
+  const groups={};
+  ASSERTS.filter(a=>a.subj===id).forEach(a=>{
+    const k=coordKey(a.coord);
+    (groups[k]=groups[k]||{coord:a.coord, chain:[]}).chain.push(a);
+  });
+  const sec={def:[], dims:{}, multi:[]};
+  Object.values(groups).forEach(g=>{
+    g.chain.sort((x,y)=>y.vf.localeCompare(x.vf));
+    g.cur=g.chain.find(x=>!x.revoked && x.vf<=T)||null;
+    const ks=Object.keys(g.coord);
+    if(ks.length===0) sec.def.push(g);
+    else if(ks.length===1) (sec.dims[ks[0]]=sec.dims[ks[0]]||[]).push(g);
+    else sec.multi.push(g);
+  });
+  const leaf=(g,label)=>{
+    const arrow=label?label+' <span style="color:var(--ink-6)">→</span> ':'· ';
+    if(!g.cur){ const last=g.chain[0];
+      return `<div class="tnode" style="cursor:default;color:var(--ink-6);max-width:900px;white-space:normal">${arrow}<s>${esc(last.content)}</s> <span class="cnt">已撤回,留痕保存</span></div>`; }
+    return `<div class="tnode" style="cursor:default;max-width:900px;white-space:normal">${arrow}${esc(g.cur.content)} <span class="cnt"><span class="num" style="font-weight:400">${g.cur.vf}</span> 起 · 共 ${g.chain.length} 版</span></div>`;
+  };
+  let h='<div class="kids" style="margin-left:26px;margin-bottom:8px">';
+  if(sec.def.length) h+=`<div class="tnode" style="cursor:default">▾ <span class="tag gray">默认答案</span> <span class="cnt">没写条件,处处适用</span></div><div class="kids">${sec.def.map(g=>leaf(g)).join('')}</div>`;
+  for(const k in sec.dims){
+    const list=sec.dims[k];
+    h+=`<div class="tnode" style="cursor:default">▾ <span class="tag purple">${dimByKey(k).name}</span> <span class="cnt">${list.length} 个取值,各有说法</span></div>
+        <div class="kids">${list.map(g=>leaf(g, `<span class="tag blue">${g.coord[k]}</span>`)).join('')}</div>`;
+  }
+  if(sec.multi.length){
+    h+=`<div class="tnode" style="cursor:default">▾ <span class="tag purple">组合条件</span> <span class="cnt">${sec.multi.length} 条</span></div>
+        <div class="kids">${sec.multi.map(g=>leaf(g, Object.keys(g.coord).map(k=>`<span class="tag blue">${dimByKey(k).name} = ${g.coord[k]}</span>`).join(''))).join('')}</div>`;
+  }
+  return h+'</div>';
+}
+function pageList(){
+  const T=S.qTime, Q=S.filters;
+  const activeAsserts = ASSERTS.filter(a=>!a.revoked).length;
+  const qDims=Object.keys(Q).filter(k=>Q[k]);
+  const subjectHasCond=id=> qDims.every(k=> ASSERTS.some(a=>{
+    if(a.subj!==id||a.revoked||a.coord[k]===undefined) return false;
+    return k==='region' ? regionMatch(a.coord[k],Q[k])>0 : a.coord[k]===Q[k];
+  }));
+  const subs=SUBJECTS.filter(x=>(!S.kw || x.title.includes(S.kw) || x.code.includes(S.kw)) && (!qDims.length || subjectHasCond(x.id)));
+  const PAGE=8, totalPg=Math.max(1,Math.ceil(subs.length/PAGE));
+  if(S.pg>totalPg) S.pg=totalPg;
+  const pageSubs=subs.slice((S.pg-1)*PAGE, S.pg*PAGE);
+  const rows=pageSubs.map(x=>{
+    const dimsUsed=usedDims(x.id).map(d=>d.name);
+    const total=ASSERTS.filter(a=>a.subj===x.id).length;
+    const latest=ASSERTS.filter(a=>a.subj===x.id).map(a=>a.vf).sort().pop();
+    const hasCond=Object.keys(Q).some(k=>Q[k]);
+    let ansLine='';
+    if(!hasCond){
+      const defChain=ASSERTS.filter(a=>a.subj===x.id && Object.keys(a.coord).length===0 && a.vf<=T).sort((m,n)=>n.vf.localeCompare(m.vf));
+      const defCur=defChain.find(a=>!a.revoked);
+      const condCnt=ASSERTS.filter(a=>a.subj===x.id && Object.keys(a.coord).length>0).length;
+      ansLine = defCur
+        ? `<span class="tag gray">默认</span> ${esc(defCur.content)}${condCnt?` <span style="font-size:12px;color:var(--ink-6)">· 另有 ${condCnt} 条带条件的说法,展开看</span>`:''}`
+        : `<span style="color:var(--ink-7)">还没有默认答案</span>${condCnt?` <span style="font-size:12px;color:var(--ink-6)">· 有 ${condCnt} 条带条件的说法,展开看</span>`:''}`;
+    } else {
+      const gs=resolve(x.id, Q, T);
+      const explicitGs=gs.filter(g=> qDims.every(k=> g.coord[k]!==undefined));
+      const showGs=explicitGs.length?explicitGs:gs;
+      if(!showGs.length) ansLine=`<span style="color:var(--ink-7)">这个条件、这个时间点还没有答案</span>`;
+      else{
+        const top=showGs[0], peers=showGs.filter(g=>g.spec===top.spec);
+        const conflict=peers.length>1 && new Set(peers.map(g=>g.cur.content)).size>1;
+        ansLine = conflict
+          ? `这个条件下有 <b>${peers.length} 种说法</b>:${peers.map(g=>esc(g.cur.content.length>14?g.cur.content.slice(0,14)+'…':g.cur.content)).join(' / ')} <span class="tag orange">点详情分清</span>`
+          : `${esc(top.cur.content)} ${coordLabel(top.coord)}${gs.length>1?` <span style="font-size:12px;color:var(--ink-6)">· 另有 ${gs.length-1} 种条件下的说法</span>`:''}`;
+      }
+    }
+    const exp=!!S.expanded[x.id];
+    return `<div class="trow">
+      <div class="trow-main" onclick="toggleExpand('${x.id}')">
+        <span class="arrow">${exp?'▾':'▸'}</span>
+        <a onclick="event.stopPropagation();go('detail','${x.id}')" style="font-weight:600;font-size:14.5px">${x.title}</a>
+        <span class="tag blue">${x.cat}</span>
+        <span class="trm-meta">${total} 条答案 · 维度:${dimsUsed.join('、')||'仅时间'} · 最近更新 <span class="num" style="font-weight:400">${latest.slice(5)}</span></span>
+        <span style="flex:1"></span>
+        <span class="ops" onclick="event.stopPropagation()"><a onclick="go('detail','${x.id}')">查看详情</a><a class="danger" onclick="toast('演示环境不支持删除主体','info')">删除</a></span>
+      </div>
+      <div class="trow-ans">${S.qMode==='day'?('回看 <span class="num">'+T+'</span>'):'当前'}:${ansLine}</div>
+      ${exp?subjectTree(x.id,T):''}
+    </div>`;
+  }).join('');
+  return `
+  <div class="stat-grid">
+    <div class="stat"><div class="lbl">知识主体</div><div class="val num">${SUBJECTS.length}<small>个</small></div><div class="foot">认知/口径/规则三类样例</div></div>
+    <div class="stat c2"><div class="lbl">在用答案</div><div class="val num">${activeAsserts}<small>条</small></div><div class="foot">另有 ${ASSERTS.length-activeAsserts} 条已撤回(留痕保存)</div></div>
+    <div class="stat c3"><div class="lbl">启用维度</div><div class="val num">${DIMS.filter(d=>d.enabled).length}<small>个</small></div><div class="foot">时间为内置维度,不计入</div></div>
+    <div class="stat c4"><div class="lbl">今日变更</div><div class="val num">2<small>条</small></div><div class="foot">全部留痕,可供 AI 追问</div></div>
+  </div>
+  ${filterBar()}
+  <div class="card ov">
+    <div class="card-head"><div class="tick"></div><h3>知识主体</h3><span class="sub">共 ${subs.length} 个 · 点行展开多维状态</span><div class="spacer"></div></div>
+    ${rows || `<div class="tbl"><div class="empty" style="text-align:center;color:var(--ink-7);padding:30px 0">${qDims.length?'没有知识在这些条件下专门写过答案:减少条件,或换个条件试试':'暂无符合条件的知识主体'}</div></div>`}
+    <div class="pager"><span>共 ${subs.length} 条 · 第 ${S.pg}/${totalPg} 页</span>
+      <button ${S.pg<=1?'disabled':''} onclick="S.pg--;render()">上一页</button>
+      ${Array.from({length:totalPg},(_,i)=>`<button class="${S.pg===i+1?'cur':''}" onclick="S.pg=${i+1};render()">${i+1}</button>`).join('')}
+      <button ${S.pg>=totalPg?'disabled':''} onclick="S.pg++;render()">下一页</button></div>
+  </div>`;
+}
+
+/* ================= 页面:知识详情 ================= */
+function pageDetail(){
+  const s=SUBJECTS.find(x=>x.id===S.subj);
+  const T=S.qTime;
+  const tabs=[['now','当前答案 · 切条件'],['tree','立体全景'],['timeline','时间线 · 历史版本'],['logs','变更留痕']];
+  let body='';
+  if(S.tab==='now') body=tabNow(s,T);
+  else if(S.tab==='tree') body=tabTree(s,T);
+  else if(S.tab==='timeline') body=tabTimeline(s,T);
+  else body=tabLogs(s);
+  return `
+  <div class="back-link" onclick="go('list')">‹ 返回列表</div>
+  <div class="card">
+    <div class="detail-head">
+      <div>
+        <h2>${s.title}</h2>
+        <div class="meta"><span>编码 <span class="num" style="font-weight:400">${s.code}</span></span><span>分类 ${s.cat}</span><span>创建 ${s.created} · ${s.by}</span><span>查询时间点 <b class="num" style="font-weight:700;color:var(--brand-deep)">${T}</b></span></div>
+        <div style="margin-top:10px"><span class="tag blue">多维知识</span><span class="tag purple">${ASSERTS.filter(a=>a.subj===s.id).length} 条答案</span><span class="tag green">留痕完整</span></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="openNewAssert('${s.id}')">+ 写一条答案</button>
+        <button class="btn primary" onclick="toast('已复制 AI 提问:「${s.title} 在 ${T},各个条件下分别是什么?」','ok')">生成 AI 提问</button>
+      </div>
+    </div>
+  </div>
+  <div class="card ov">
+    <div class="tabs">${tabs.map(t=>`<div class="tab ${S.tab===t[0]?'active':''}" onclick="S.tab='${t[0]}';render()">${t[1]}</div>`).join('')}</div>
+    ${body}
+  </div>`;
+}
+function usedDims(subjId){
+  const set=new Set(); ASSERTS.filter(a=>a.subj===subjId).forEach(a=>Object.keys(a.coord).forEach(k=>set.add(k)));
+  return DIMS.filter(d=>d.enabled && set.has(d.key));
+}
+function tabNow(s,T){
+  const gs=resolve(s.id, S.filters, T);
+  const hasCond=Object.keys(S.filters).some(k=>S.filters[k]);
+  const uniqueTop = hasCond && gs.length>0 && (gs.length===1 || gs[0].spec>gs[1].spec);
+  const list = !gs.length ? `<div class="tbl"><div class="empty" style="padding:30px 0;text-align:center;color:var(--ink-7)">这个条件、这个时间点还没有答案:换个时间,或放宽条件</div></div>`
+    : gs.map((g,i)=>{
+      const condTxt = Object.keys(g.coord).length
+        ? '适用条件:'+Object.keys(g.coord).map(k=>dimByKey(k).name+' = '+g.coord[k]).join(' · ')
+        : '默认答案 · 处处适用';
+      return `<div class="ans-item">
+        <div style="display:flex;align-items:flex-start;gap:16px">
+          <div class="ai-content" style="flex:1">${esc(g.cur.content)}</div>
+          <span class="ops" style="font-size:12.5px;white-space:nowrap;padding-top:3px">
+            <a onclick="openEditAns('${g.cur.id}')">编辑</a>${Object.keys(g.coord).length?`<a onclick="openPromoteAns('${g.cur.id}')">设为默认</a>`:''}<a class="danger" onclick="openDeleteAns('${g.cur.id}')">删除</a>
+          </span>
+        </div>
+        <div class="ai-cond">${uniqueTop&&i===0?'<span class="live"><i></i>此条件下生效</span>':''}<span>${condTxt}</span><span><span class="num">${g.cur.vf}</span> 起 · 共 ${g.chain.length} 版</span><span>${g.cur.by} 录入 · 来源 ${srcName(g.cur.src)}</span></div>
+      </div>`;}).join('');
+  return `
+  <div class="form-row">${condPicker()}${hasCond?'<button class="btn sm" onclick="S.filters={};render()">清空条件</button>':''}</div>
+  <div style="font-size:12.5px;color:var(--ink-6);margin:12px 2px 2px">${hasCond?`满足条件的答案 ${gs.length} 条`:`全部答案 ${gs.length} 条 · 一条知识本来就有多种答案,各管各的条件`}</div>
+  ${list}`;
+}
+function tabTree(s,T){
+  const used=usedDims(s.id);
+  if(!used.length) return `<div class="mini-note">这条知识还没有带条件的答案,谈不上立体展开</div>`;
+  if(!used.find(d=>d.key===S.axisA)) S.axisA=used[0].key;
+  const bOpts=used.filter(d=>d.key!==S.axisA);
+  if(S.axisB==='__init') S.axisB=bOpts.length?bOpts[0].key:'';
+  if(S.axisB && !bOpts.find(d=>d.key===S.axisB)) S.axisB=bOpts.length?bOpts[0].key:'';
+  const dimA=dimByKey(S.axisA), dimB=S.axisB?dimByKey(S.axisB):null;
+  const uvals=k=>[...new Set(ASSERTS.filter(x=>x.subj===s.id&&x.coord[k]!==undefined).map(x=>x.coord[k]))];
+  const rows=['(默认)',...uvals(S.axisA)];
+  const lays=dimB?['(默认)',...uvals(S.axisB)]:['(全部)'];
+  let times=[...new Set(ASSERTS.filter(x=>x.subj===s.id).map(x=>x.vf))].sort();
+  if(times.length>5) times=times.slice(-5);
+  const offAxis=ASSERTS.filter(x=>x.subj===s.id&&Object.keys(x.coord).some(k=>k!==S.axisA&&k!==(S.axisB||'__none__'))).length;
+  const palette=[['#0f9d58','#e6f6ec'],['#1a56f0','#e8effe'],['#0fa8a2','#e5f5f4'],['#7a5af8','#f0ebfe'],['#e08600','#fdf3e0'],['#e5484d','#fdecec'],['#b0399f','#fbeaf8'],['#5b6b85','#eef1f6']];
+  const colorOf={}; let ci=0; const legend={};
+  function cellBest(rv,lv,t){
+    const gs={};
+    ASSERTS.forEach(x=>{
+      if(x.subj!==s.id||x.vf>t) return;
+      for(const k in x.coord){
+        if(k===S.axisA){ if(x.coord[k]!==rv) return; }
+        else if(dimB&&k===S.axisB){ if(x.coord[k]!==lv) return; }
+        else return;
+      }
+      const key=coordKey(x.coord); (gs[key]=gs[key]||[]).push(x);
+    });
+    let best=null,bs=-1,bw=-1,bv='';
+    for(const k in gs){ gs[k].sort((m,n)=>n.vf.localeCompare(m.vf)); const cur=gs[k].find(y=>!y.revoked); if(!cur)continue;
+      const sp=Object.keys(cur.coord).length, w=weightOf(cur.coord);
+      if(sp>bs||(sp===bs&&w>bw)||(sp===bs&&w===bw&&cur.vf>bv)){best=cur;bs=sp;bw=w;bv=cur.vf;} }
+    return best;
+  }
+  const CELL=72, GAP=6;
+  const W=times.length*CELL+(times.length-1)*GAP, H=rows.length*CELL+(rows.length-1)*GAP;
+  const zGap=Math.min(Math.max(80,H*0.3),115);
+  const layersHtml=lays.map((lv,li)=>{
+    const z=((lays.length-1)/2-li)*(S.cubeExp?zGap*1.55:zGap);
+    const cells=rows.map(rv=>times.map(t=>{
+      const bAns=cellBest(rv, dimB?lv:null, t);
+      if(!bAns) return `<div class="c3cell emptyc" data-tip="${dimA.name}=${rv}${dimB?' · '+dimB.name+'='+lv:''} · ${t.slice(5)}:这一天还没有适用答案">无</div>`;
+      const key=coordKey(bAns.coord);
+      if(!(key in colorOf)){ colorOf[key]=palette[ci++%palette.length]; legend[key]={c:colorOf[key],a:bAns}; }
+      const fg=colorOf[key][0], bg=colorOf[key][1];
+      const inherited=(rv!=='(默认)'&&bAns.coord[S.axisA]===undefined)||(dimB&&lv!=='(默认)'&&bAns.coord[S.axisB]===undefined);
+      const tip=(`${dimA.name}=${rv}${dimB?' · '+dimB.name+'='+lv:''} · ${t.slice(5)}<br>「${esc(bAns.content)}」<br>来自「${condName(bAns.coord)}」那条${inherited?' · <b>继承而来</b>':''}`).replace(/"/g,'&quot;');
+      return `<div class="c3cell" style="background:${bg};color:${fg}" data-tip="${tip}">${esc(bAns.content.slice(0,4))}</div>`;
+    }).join('')).join('');
+    return `<div class="layer3" style="transform:translateZ(${z}px);grid-template-columns:repeat(${times.length},${CELL}px);grid-auto-rows:${CELL}px">${dimB?`<div class="layer3-lbl">${dimB.name} = ${lv}</div>`:''}${cells}</div>`;
+  }).join('');
+  const legendHtml=Object.values(legend).map(v=>`<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${v.c[1]};border:1.5px solid ${v.c[0]};margin-right:6px;vertical-align:-1px"></i>${condName(v.a.coord)}:${esc(v.a.content.length>16?v.a.content.slice(0,16)+'…':v.a.content)}</span>`).join('');
+  return `
+  <div class="form-row" style="margin-bottom:2px">
+    <span class="f-lbl">行(斜向)</span><select onchange="S.axisA=this.value;render()">${used.map(d=>`<option value="${d.key}" ${S.axisA===d.key?'selected':''}>${d.name}</option>`).join('')}</select>
+    ${bOpts.length?`<span class="f-lbl">层(纵向)</span><select onchange="S.axisB=this.value;render()"><option value="" ${!S.axisB?'selected':''}>(不分层)</option>${bOpts.map(d=>`<option value="${d.key}" ${S.axisB===d.key?'selected':''}>${d.name}</option>`).join('')}</select>`:''}
+    ${dimB&&lays.length>1?`<button class="btn sm" onclick="S.cubeExp=!S.cubeExp;render()">${S.cubeExp?'合 上':'拆开看'}</button>`:''}
+    <span class="mini-note">列 = 时间(${times.map(t=>t.slice(5)).join(' → ')})· 颜色 = 同一条答案的领地 · 悬停格子看来源</span>
+  </div>
+  <div class="cube-stage" style="${S.cubeExp?`padding:120px 0 240px`:``}"><div class="cube3" style="width:${W}px;height:${H}px${S.cubeExp?';transform:rotateX(58deg) rotateZ(45deg) scale(.85)':''}">${layersHtml}</div></div>
+  <div class="cube-legend">${legendHtml}</div>
+  ${offAxis?`<div class="mini-note" style="text-align:center;margin-top:12px">另有 ${offAxis} 条答案挂在其他维度上,切换上方「行 / 层」可见。</div>`:''}`;
+}
+function tabTimeline(s,T){
+  const keys=[...new Set(ASSERTS.filter(a=>a.subj===s.id).map(a=>coordKey(a.coord)))];
+  if(!S.tlCoord || !keys.includes(S.tlCoord)) S.tlCoord=keys[0];
+  const chain=ASSERTS.filter(a=>a.subj===s.id && coordKey(a.coord)===S.tlCoord).sort((x,y)=>y.vf.localeCompare(x.vf));
+  const liveId=(chain.find(a=>!a.revoked&&a.vf<=T)||{}).id;
+  return `
+  <div class="form-row" style="margin-bottom:14px">
+    <span class="f-lbl">选择条件组合(每组条件一条独立时间线)</span>
+    <select onchange="S.tlCoord=this.value;render()">${keys.map(k=>`<option ${S.tlCoord===k?'selected':''}>${k}</option>`).join('')}</select>
+  </div>
+  <div class="tl">
+    ${chain.map(a=>`
+      <div class="tl-item ${a.revoked?'dead':''}">
+        <div class="tl-t"><span class="num" style="font-weight:400">${a.vf}</span> · ${a.by} · 来源 ${srcName(a.src)}
+          ${a.revoked?'<span class="tag red">已撤回(留痕保存)</span>': a.id===liveId?'<span class="tag green">当前生效</span>':(a.vf>T?'<span class="tag orange">晚于提问时点,暂不生效</span>':'<span class="tag gray">已被新版替代</span>')}
+        </div>
+        <div class="tl-c">${esc(a.content)}</div>
+      </div>`).join('')}
+  </div>
+  <div class="mini-note">旧版本与撤回版永不删除。${T} 这天的答案 = 生效时间不晚于这一天的最新一版,已撤回的跳过。</div>`;
+}
+function tabLogs(s){
+  const rows=LOGS.filter(l=>l.subj===s.id);
+  return logTable(rows, true);
+}
+function logTable(rows, inDetail){
+  return `
+  <div class="form-row" style="margin-bottom:12px">
+    <span class="f-lbl">查看视角</span>
+    <span class="seg">
+      <button class="${S.viewer==='admin'?'on':''}" onclick="S.viewer='admin';render();toast('已切到后台视角:显示真实数据来源','info')">后台视角</button>
+      <button class="${S.viewer==='user'?'on':''}" onclick="S.viewer='user';render();toast('已切到用户视角:「天眼查」等来源自动脱敏为「第三方数据源」','info')">用户视角(脱敏)</button>
+    </span>
+    <span class="mini-note">来源脱敏 = 维度值显示别名,后台见真名,用户侧见别名。</span>
+  </div>
+  <table class="tbl"><thead><tr><th>时间</th>${inDetail?'':'<th>知识主体</th>'}<th>操作人</th><th>动作</th><th>对象</th><th>变更前</th><th>变更后</th><th>来源</th><th>状态</th><th>操作</th></tr></thead><tbody>
+  ${rows.length===0?`<tr><td colspan="10" class="empty">暂无变更记录</td></tr>`:rows.map(l=>`
+    <tr>
+      <td class="tm num" style="font-weight:400">${l.t}</td>
+      ${inDetail?'':`<td>${SUBJECTS.find(x=>x.id===l.subj).title}</td>`}
+      <td>${l.who}</td><td>${l.act}</td><td class="coordkey">${l.tgt}</td>
+      <td style="max-width:200px;color:var(--ink-4)">${esc(l.before)}</td>
+      <td style="max-width:200px">${esc(l.after)}</td>
+      <td><span class="tag ${l.src==='人工编辑'?'purple':(l.src==='天眼查'||l.src==='企查查'?'blue':'gray')}">${srcName(l.src)}</span></td>
+      <td>${l.state==='生效'?'<span class="status-dot ok"><i></i>生效</span>':`<span class="status-dot off"><i></i>${l.state}</span>`}</td>
+      <td class="ops">${l.src==='人工编辑'&&l.state==='生效'?`<a onclick="openRevoke('${l.t}')">撤回</a>`:'<span class="na" title="仅人工编辑类可撤回">—</span>'}</td>
+    </tr>`).join('')}
+  </tbody></table>
+  ${rows.some(l=>l.act.includes('撤回'))?`<div class="mini-note" style="margin-top:10px">注意「撤回」相关行:新增 → 撤回 → 撤回了撤回 → 再次撤回,每一步都是独立留痕 —— "撤回的撤回"也必须可被 AI 问出来。</div>`:''}`;
+}
+function openRevoke(t){
+  const l=LOGS.find(x=>x.t===t);
+  openModal(`
+    <div class="mo-head">撤回确认<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将撤回 <b>${l.who}</b> 于 <span class="num" style="font-weight:400">${l.t}</span> 的「${l.act}」。<br>变更前:${esc(l.before)}<br>变更后:${esc(l.after)}</p>
+      <div class="risk">撤回后,该条件下的答案将回退到上一有效版本;本次撤回自身会生成一条新的留痕记录,不可物理删除。</div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn danger" onclick="closeModal();toast('已撤回,并追加 1 条撤回留痕','ok')">确认撤回</button></div>`);
+}
+
+/* ================= 页面:维度管理 ================= */
+function pageDims(){
+  return `
+  <div class="notice"><b>加维度 = 注册表加一行,不是数据表加一列。</b>新维度启用后,存量答案零改动:旧答案没写这个条件,天然处处适用。维度只可停用、不可物理删除。</div>
+  <div class="card">
+    <div class="card-head"><div class="tick"></div><h3>维度注册表</h3><span class="sub">时间为内置维度,不在此列</span><div class="spacer"></div>
+      <button class="btn primary" onclick="openNewDim()">+ 新增维度</button></div>
+    <table class="tbl"><thead><tr><th>维度名称</th><th>类型</th><th>值域</th><th>权重</th><th>匹配策略</th><th>被答案引用</th><th>状态</th><th>操作</th></tr></thead><tbody>
+      <tr><td>时间(内置)</td><td><span class="tag blue">内置</span></td><td style="color:var(--ink-5)">时点 / 区间(双时态)</td><td style="color:var(--ink-7)">—</td><td>时间线收敛:取不晚于提问时点的最新一版</td><td class="num" style="font-weight:400">${ASSERTS.length}</td><td><span class="status-dot ok"><i></i>启用</span></td><td class="ops"><span class="na" title="内置维度不可操作">—</span></td></tr>
+      ${DIMS.map(d=>{
+        const used=ASSERTS.filter(a=>a.coord[d.key]!==undefined).length;
+        return `<tr>
+          <td>${d.name}</td>
+          <td><span class="tag ${({'枚举':'blue','人员':'purple','层级':'green','组织':'orange','文本':'gray'})[d.type]||'gray'}">${d.type}</span></td>
+          <td style="max-width:260px;color:var(--ink-4)">${d.values.join(' / ')}</td>
+          <td class="num" style="font-weight:400">${d.weight||50}</td>
+          <td style="color:var(--ink-4)">${d.strategy}</td>
+          <td class="num" style="font-weight:400">${used}</td>
+          <td>${d.enabled?'<span class="status-dot ok"><i></i>启用</span>':'<span class="status-dot off"><i></i>已停用</span>'}</td>
+          <td class="ops"><a onclick="openEditDim('${d.key}')">编辑</a>${d.enabled?`<a class="danger" onclick="openDisableDim('${d.key}')">停用</a>`:`<a onclick="toggleDim('${d.key}',true)">启用</a>`}</td>
+        </tr>`;}).join('')}
+    </tbody></table>
+  </div>`;
+}
+function openNewDim(){
+  openModal(`
+    <div class="mo-head">新增维度<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <div class="mf"><label><span class="req">*</span>维度名称</label><input type="text" id="ndName" placeholder="如:优先级、领导批示、密级…"></div>
+      <div class="mf"><label><span class="req">*</span>维度类型</label>
+        <select id="ndType"><option>枚举</option><option>人员</option><option>组织</option><option>层级</option><option>文本</option></select>
+        <div class="hint">时间为内置维度,无需创建;自由文本维度仅管理员可开,防维度碎片化</div></div>
+      <div class="mf"><label><span class="req">*</span>值域(逗号分隔,可后续追加)</label><input type="text" id="ndVals" placeholder="如:P0,P1,P2"></div>
+      <div class="mf"><label>查询未提供该维度时</label>
+        <select id="ndStrat"><option>忽略(默认,不参与过滤)</option><option>必填(拒绝查询)</option><option>取默认值</option></select></div>
+      <div class="mf"><label>权重(1–100)</label><input type="number" id="ndWeight" value="50" min="1" max="100">
+        <div class="hint">两条答案同样具体时,权重高的维度赢;再平手才比谁新。例:场景 80 &gt; 人员 60,农业场景下不管谁的个人口径,苹果都是水果</div></div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn primary" onclick="saveDim()">确 定</button></div>`);
+}
+function saveDim(){
+  const name=document.getElementById('ndName').value.trim();
+  const vals=document.getElementById('ndVals').value.split(/[,,、]/).map(x=>x.trim()).filter(Boolean);
+  if(!name){ toast('请填写维度名称','err'); return; }
+  if(DIMS.find(d=>d.name===name)){ toast('维度「'+name+'」已存在,请勿重复创建','err'); return; }
+  if(!vals.length){ toast('请至少填写一个值域取值','err'); return; }
+  DIMS.push({key:'d'+Date.now(), name, type:document.getElementById('ndType').value, values:vals,
+             strategy:document.getElementById('ndStrat').value.split('(')[0], enabled:true,
+             weight:Math.min(100,Math.max(1,parseInt(document.getElementById('ndWeight').value)||50))});
+  closeModal(); render();
+  toast(`维度「${name}」已启用,存量 ${ASSERTS.length} 条答案不受影响:没写这个条件,处处适用`,'ok');
+}
+function openDisableDim(key){
+  const d=dimByKey(key);
+  const used=ASSERTS.filter(a=>a.coord[key]!==undefined).length;
+  openModal(`
+    <div class="mo-head">停用维度确认<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将停用维度「<b>${d.name}</b>」,当前有 <b class="num">${used}</b> 条答案的适用条件里用到它。</p>
+      <div class="risk">停用后该维度不再参与提问过滤与界面筛选;引用它的答案条件仍完整保留,可随时重新启用。维度不可物理删除。</div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn danger" onclick="toggleDim('${key}',false)">确认停用</button></div>`);
+}
+function toggleDim(key,on){
+  const d=dimByKey(key); d.enabled=on;
+  if(!on) delete S.filters[key];
+  closeModal(); render();
+  toast(`维度「${d.name}」已${on?'启用':'停用'}`,'ok');
+}
+
+function openEditDim(key){
+  const d=dimByKey(key);
+  openModal(`
+    <div class="mo-head">编辑维度<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <div class="mf"><label><span class="req">*</span>维度名称</label><input type="text" id="edName" value="${esc(d.name)}"></div>
+      <div class="mf"><label>类型</label><input type="text" value="${d.type}" disabled style="background:var(--pale);color:var(--ink-5)"><div class="hint">类型建库后不可改:会改变匹配规则,影响存量答案</div></div>
+      <div class="mf"><label><span class="req">*</span>值域(逗号分隔,可增删;已被答案引用的取值删不掉)</label><input type="text" id="edVals" value="${esc(d.values.join(','))}"></div>
+      <div class="mf"><label>查询未提供该维度时</label><select id="edStrat">
+        <option ${!d.strategy.includes('必填')&&!d.strategy.includes('默认')?'selected':''}>忽略(默认,不参与过滤)</option>
+        <option ${d.strategy.includes('必填')?'selected':''}>必填(拒绝查询)</option>
+        <option ${d.strategy.includes('默认值')?'selected':''}>取默认值</option></select></div>
+      <div class="mf"><label>权重(1–100)</label><input type="number" id="edWeight" value="${d.weight||50}" min="1" max="100">
+        <div class="hint">同样具体的答案打平时,权重高的维度赢;再平手才比谁新</div></div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn primary" onclick="saveEditDim('${key}')">确 定</button></div>`);
+}
+function saveEditDim(key){
+  const d=dimByKey(key);
+  const name=document.getElementById('edName').value.trim();
+  const vals=document.getElementById('edVals').value.split(/[,,、]/).map(x=>x.trim()).filter(Boolean);
+  if(!name){ toast('请填写维度名称','err'); return; }
+  if(!vals.length){ toast('值域至少保留一个取值','err'); return; }
+  const inUse=[...new Set(ASSERTS.filter(a=>a.coord[key]!==undefined).map(a=>a.coord[key]))];
+  const missing=inUse.filter(v=>!vals.includes(v));
+  if(missing.length){ toast(`取值「${missing.join('、')}」已被答案引用,不能删除`,'err'); return; }
+  d.name=name; d.values=vals; d.strategy=document.getElementById('edStrat').value.split('(')[0];
+  d.weight=Math.min(100,Math.max(1,parseInt(document.getElementById('edWeight').value)||d.weight||50));
+  closeModal(); render(); toast(`维度「${name}」已更新`,'ok');
+}
+
+/* ================= 页面:操作日志 ================= */
+function pageLogs(){
+  return `<div class="card">
+    <div class="card-head"><div class="tick"></div><h3>全量变更留痕</h3><span class="sub">每个字段、每个记录、每次撤回,都可供 AI 追问</span><div class="spacer"></div></div>
+    ${logTable(LOGS,false)}
+    <div class="pager"><span>共 ${LOGS.length} 条 · 第 1/1 页</span><button disabled>上一页</button><button class="cur">1</button><button disabled>下一页</button></div>
+  </div>`;
+}
+
+/* ================= 答案操作 + 新增知识(共用条件行编辑器) ================= */
+function findAns(id){ return ASSERTS.find(a=>a.id===id); }
+function nowStamp(){ return TODAY+' '+new Date().toTimeString().slice(0,5); }
+function condName(c){ const ks=Object.keys(c); if(!ks.length) return '默认'; return ks.sort().map(k=>(dimByKey(k)?dimByKey(k).name:k)+' = '+c[k]).join(' 且 '); }
+let NEW_COORD=[]; let COORD_BOX='naCoord';
+function coordRowsHtml(){
+  return NEW_COORD.map((c,i)=>{
+    const d=dimByKey(c.dim); const isNew=c.val==='__new';
+    return `<div class="form-row" style="margin-bottom:8px">
+      <select onchange="NEW_COORD[${i}].dim=this.value;NEW_COORD[${i}].val='';renderCoordRows()" style="min-width:130px">
+        <option value="">选择维度…</option>
+        ${DIMS.filter(x=>x.enabled).map(x=>`<option value="${x.key}" ${c.dim===x.key?'selected':''}>${x.name}</option>`).join('')}
+      </select>
+      <select onchange="NEW_COORD[${i}].val=this.value;renderCoordRows()" style="min-width:150px" ${!d?'disabled':''}>
+        <option value="">选择取值…</option>
+        ${d?d.values.map(v=>`<option ${c.val===v?'selected':''}>${v}</option>`).join(''):''}
+        ${d?`<option value="__new" ${isNew?'selected':''}>+ 新增取值…</option>`:''}
+      </select>
+      ${isNew?`<input type="text" placeholder="输入新取值,如:金融场景" value="${esc(c.newVal||'')}" oninput="NEW_COORD[${i}].newVal=this.value" style="min-width:140px">`:''}
+      <a class="danger" style="font-size:13px" onclick="NEW_COORD.splice(${i},1);renderCoordRows()">移除</a>
+    </div>`;}).join('');
+}
+function renderCoordRows(){ const box=document.getElementById(COORD_BOX); if(box) box.innerHTML=coordRowsHtml(); }
+function addCoordRow(){ NEW_COORD.push({dim:'',val:'',newVal:''}); renderCoordRows(); }
+function resolveCoord(){
+  const coord={};
+  for(const c of NEW_COORD){
+    if(!c.dim) continue;
+    let v=c.val;
+    if(v==='__new'){
+      v=(c.newVal||'').trim();
+      if(!v){ toast('请填写新增取值的内容','err'); return null; }
+      const d=dimByKey(c.dim);
+      if(!d.values.includes(v)){ d.values.push(v); toast(`维度「${d.name}」值域已加入「${v}」`,'info'); }
+    }
+    if(v) coord[c.dim]=v;
+  }
+  return coord;
+}
+function openEditAns(id){
+  const a=findAns(id);
+  NEW_COORD=Object.keys(a.coord).map(k=>({dim:k,val:a.coord[k],newVal:''})); COORD_BOX='eaCoord';
+  openModal(`
+    <div class="mo-head">编辑答案<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <div class="mf"><label><span class="req">*</span>答案内容</label><textarea id="eaContent">${esc(a.content)}</textarea></div>
+      <div class="mf"><label><span class="req">*</span>生效时间</label><input type="date" id="eaVf" value="${TODAY}" max="${TODAY}"></div>
+      <div class="mf"><label>适用条件(可改;全部移除 = 变成默认答案)</label>
+        <div id="eaCoord"></div>
+        <button class="btn sm" style="margin-top:8px" onclick="addCoordRow()">+ 加一个条件</button>
+        <div class="hint">条件不变:旧版本留档、生成新版本;条件改了:整条答案迁到新条件,留痕记录迁移</div></div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn primary" onclick="saveEditAns('${id}')">确 定</button></div>`);
+  renderCoordRows();
+}
+function saveEditAns(id){
+  const a=findAns(id);
+  const content=document.getElementById('eaContent').value.trim();
+  const vf=document.getElementById('eaVf').value;
+  if(!content){ toast('请填写答案内容','err'); return; }
+  if(!vf){ toast('请选择生效时间','err'); return; }
+  const coord=resolveCoord(); if(coord===null) return;
+  const oldK=coordKey(a.coord), newK=coordKey(coord);
+  if(oldK===newK){
+    ASSERTS.push({id:'n'+Date.now(), subj:a.subj, coord, content, vf, by:'彭总', src:'人工填报', revoked:false});
+    LOGS.unshift({t:nowStamp(), subj:a.subj, who:'彭总', act:'改答案', tgt:'条件 {'+condName(coord)+'}', before:a.content, after:content, src:'人工编辑', state:'生效'});
+    toast('已生成新版本,旧版本留档','ok');
+  }else{
+    ASSERTS.filter(x=>x.subj===a.subj && coordKey(x.coord)===oldK).forEach(x=>x.revoked=true);
+    ASSERTS.push({id:'n'+Date.now(), subj:a.subj, coord, content, vf, by:'彭总', src:'人工填报', revoked:false});
+    LOGS.unshift({t:nowStamp(), subj:a.subj, who:'彭总', act:'改答案(条件迁移)', tgt:'条件 {'+condName(a.coord)+'} → {'+condName(coord)+'}', before:a.content, after:content, src:'人工编辑', state:'生效'});
+    toast(`条件已从「${condName(a.coord)}」迁到「${condName(coord)}」,原链留档`,'ok');
+  }
+  closeModal(); render();
+}
+function openPromoteAns(id){
+  const a=findAns(id);
+  openModal(`
+    <div class="mo-head">设为默认答案<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将把这条答案的内容,作为「<b>默认答案</b>」的新版本,自 <span class="num">${TODAY}</span> 起处处适用:</p>
+      <div style="background:var(--pale);border-radius:10px;padding:12px 16px;font-size:13.5px;color:var(--ink-1);margin:10px 0;line-height:1.8">${esc(a.content)}</div>
+      <div class="hint">原默认答案自动留档;这条带条件的答案(${condName(a.coord)})保持不变。操作留痕,可撤回。</div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn primary" onclick="doPromoteAns('${id}')">确 定</button></div>`);
+}
+function doPromoteAns(id){
+  const a=findAns(id);
+  ASSERTS.push({id:'n'+Date.now(), subj:a.subj, coord:{}, content:a.content, vf:TODAY, by:'彭总', src:'人工填报', revoked:false});
+  LOGS.unshift({t:nowStamp(), subj:a.subj, who:'彭总', act:'设为默认答案', tgt:'条件 {默认}', before:'(原默认版本留档)', after:a.content, src:'人工编辑', state:'生效'});
+  closeModal(); render(); toast('已设为默认答案,原默认版本留档','ok');
+}
+function openDeleteAns(id){
+  const a=findAns(id);
+  openModal(`
+    <div class="mo-head">删除答案确认<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将删除「<b>${condName(a.coord)}</b>」条件下的答案:<br><b>${esc(a.content)}</b></p>
+      <div class="mf" style="margin-top:12px"><label><span class="req">*</span>删除原因</label><input type="text" id="delReason" placeholder="必填,写入留痕"></div>
+      <div class="risk">删除为逻辑删除:该条件下将不再返回此答案;全部历史版本与留痕保留,可在「时间线 · 历史版本」查看并恢复。</div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn danger" onclick="doDeleteAns('${id}')">确认删除</button></div>`);
+}
+function doDeleteAns(id){
+  const reason=document.getElementById('delReason').value.trim();
+  if(!reason){ toast('请填写删除原因','err'); return; }
+  const a=findAns(id);
+  const k=coordKey(a.coord);
+  ASSERTS.filter(x=>x.subj===a.subj && coordKey(x.coord)===k).forEach(x=>x.revoked=true);
+  LOGS.unshift({t:nowStamp(), subj:a.subj, who:'彭总', act:'删除答案(逻辑删除)', tgt:'条件 {'+condName(a.coord)+'}', before:a.content, after:'(删除原因:'+reason+')', src:'人工编辑', state:'生效'});
+  closeModal(); render(); toast('已删除,历史留档、可恢复','ok');
+}
+
+/* ================= 新增知识 ================= */
+function openNewAssert(subjId){
+  NEW_COORD=[]; COORD_BOX='naCoord';
+  openModal(`
+    <div class="mo-head">新增知识<button class="mo-close" onclick="closeModal()">✕</button></div>
+    <div class="mo-body">
+      <div class="mf"><label><span class="req">*</span>知识主体</label>
+        <select id="naSubj" onchange="document.getElementById('naNewSubj').style.display=this.value==='__new'?'block':'none'">
+          ${SUBJECTS.map(x=>`<option value="${x.id}" ${x.id===subjId?'selected':''}>${x.title}</option>`).join('')}
+          <option value="__new">+ 新建知识主体…</option>
+        </select>
+        <div id="naNewSubj" style="display:none;margin-top:8px">
+          <input type="text" id="naNewTitle" placeholder="新知识标题,如:政策申报口径" style="width:100%;margin-bottom:8px">
+          <input type="text" id="naNewCat" placeholder="分类,如:认知/概念(可不填)" style="width:100%">
+        </div></div>
+      <div class="mf"><label><span class="req">*</span>答案内容(这个条件组合下的说法)</label><textarea id="naContent" placeholder="例:苹果是一家公司"></textarea></div>
+      <div class="mf"><label><span class="req">*</span>生效时间</label><input type="date" id="naVf" value="${S.qTime}"></div>
+      <div class="mf"><label>适用条件(只写你关心的;不写 = 默认答案,处处适用)</label>
+        <div id="naCoord"></div>
+        <button class="btn sm" style="margin-top:8px" onclick="addCoordRow()">+ 加一个条件</button>
+        <div class="hint">取值下拉里选「+ 新增取值…」可直接扩充维度值域;同条件已有答案时,本条成为新版本</div></div>
+    </div>
+    <div class="mo-foot"><button class="btn" onclick="closeModal()">取 消</button><button class="btn primary" onclick="saveAssert()">确 定</button></div>`);
+  addCoordRow();
+}
+function saveAssert(){
+  const content=document.getElementById('naContent').value.trim();
+  const vf=document.getElementById('naVf').value;
+  let subj=document.getElementById('naSubj').value;
+  if(!content){ toast('请填写答案内容','err'); return; }
+  if(!vf){ toast('请选择生效时间','err'); return; }
+  if(subj==='__new'){
+    const title=document.getElementById('naNewTitle').value.trim();
+    if(!title){ toast('请填写新知识标题','err'); return; }
+    const cat=document.getElementById('naNewCat').value.trim()||'未分类';
+    subj='S'+Date.now();
+    SUBJECTS.push({id:subj, title, cat, code:'KB-'+String(SUBJECTS.length+1).padStart(4,'0'), created:vf, by:'彭总'});
+  }
+  const coord=resolveCoord(); if(coord===null) return;
+  const isNewVer=ASSERTS.some(a=>a.subj===subj && coordKey(a.coord)===coordKey(coord));
+  ASSERTS.push({id:'n'+Date.now(), subj, coord, content, vf, by:'彭总', src:'人工填报', revoked:false});
+  LOGS.unshift({t:vf+' '+new Date().toTimeString().slice(0,5), subj, who:'彭总', act:isNewVer?'写新版本':'写答案', tgt:'条件 {'+condName(coord)+'}', before:'—', after:content, src:'人工编辑', state:'生效'});
+  closeModal(); render();
+  toast(isNewVer?'同条件已有答案:这条成为新版本,旧版留档':`已写入,适用条件:${condName(coord)}`,'ok');
+}
+
+/* ================= 渲染入口 ================= */
+function render(){
+  const C=document.getElementById('content');
+  if(S.page==='list') C.innerHTML=pageList();
+  else if(S.page==='detail') C.innerHTML=pageDetail();
+  else if(S.page==='dims') C.innerHTML=pageDims();
+  else if(S.page==='logs') C.innerHTML=pageLogs();
+}
+const tipCube=document.createElement('div'); tipCube.id='tipCube'; document.body.appendChild(tipCube);
+document.addEventListener('mousemove',e=>{
+  const c=e.target.closest && e.target.closest('.c3cell');
+  if(c && c.dataset.tip){ tipCube.innerHTML=c.dataset.tip; tipCube.style.opacity=1;
+    tipCube.style.left=Math.min(e.clientX+14,innerWidth-310)+'px'; tipCube.style.top=(e.clientY+16)+'px'; }
+  else tipCube.style.opacity=0;
+});
+renderNav(); render();
+</script>
+</body>
+</html>

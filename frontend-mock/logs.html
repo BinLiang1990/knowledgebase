@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>操作日志 · 知识库管理</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1>操作日志</h1>
+      <span class="crumb">全局 / 操作日志</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+
+    <main class="content">
+      <div class="notice">
+        跨全部知识库的答案变更流水：写答案 / 改答案 / 撤回答案，每一步都留痕，不可物理删除。「操作」列可以直接对仍然生效的答案执行撤回。
+      </div>
+
+      <div class="card ov">
+        <div class="card-head">
+          <span class="tick"></span>
+          <h3>全量变更留痕</h3>
+          <span class="sub">每个知识库、每个知识点、每次撤回，都可在此追溯</span>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>知识库</th>
+                <th>知识点</th>
+                <th>操作人</th>
+                <th>动作</th>
+                <th>条件</th>
+                <th>变更前</th>
+                <th>变更后</th>
+                <th>来源</th>
+                <th>状态</th>
+                <th class="op-col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
+        <div class="pager" id="logPager"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- 撤回答案 -->
+<div class="mask" id="revokeMask">
+  <div class="modal">
+    <div class="mo-head"><h3>撤回答案</h3><button class="mo-close" onclick="closeModal('revokeMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="revokeKbId" /><input type="hidden" id="revokeKpId" /><input type="hidden" id="revokeCoord" />
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将撤回这个条件下的答案：<br><b id="revokeContent" style="color:var(--ink-1)"></b></p>
+      <div class="mf">
+        <label><span class="req">*</span>撤回原因</label>
+        <input type="text" id="revokeReason" placeholder="必填，写入留痕" />
+      </div>
+      <div class="risk">撤回为逻辑删除：该条件下将不再返回此答案；历史版本与留痕永久保留。</div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('revokeMask')">取 消</button>
+      <button class="btn danger" onclick="submitRevoke(renderLogPage)">确认撤回</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/app.js"></script>
+<script>
+  let page = 1;
+  const PAGE_SIZE = 10;
+
+  function stateTag(state) {
+    if (state === "生效") return `<span class="tag green">生效</span>`;
+    if (state === "已撤回") return `<span class="tag red">已撤回</span>`;
+    return `<span class="tag gray">已被新版替代</span>`;
+  }
+
+  function renderLogPage() {
+    const rows = buildGlobalChangeLog();
+    const tbody = document.getElementById("logBody");
+    const start = (page - 1) * PAGE_SIZE;
+    const pageItems = rows.slice(start, start + PAGE_SIZE);
+
+    if (!pageItems.length) {
+      tbody.innerHTML = `<tr><td colspan="11" class="empty">暂无变更记录</td></tr>`;
+    } else {
+      tbody.innerHTML = pageItems.map(l => {
+        const kb = getKnowledgeBase(l.kbId);
+        const kp = getKnowledgePoint(l.kbId, l.kpId);
+        return `<tr>
+          <td class="num" style="font-weight:400">${escapeHtml(l.t.replace("T", " ").slice(0, 19))}</td>
+          <td>${escapeHtml(kb ? kb.name : l.kbId)}</td>
+          <td>${kp ? `<a href="detail.html?kb=${l.kbId}&id=${l.kpId}">${escapeHtml(kp.title)}</a>` : escapeHtml(l.kpId)}</td>
+          <td>${escapeHtml(l.who)}</td>
+          <td>${escapeHtml(l.act)}</td>
+          <td style="color:var(--ink-4)">${escapeHtml(l.tgt)}</td>
+          <td style="max-width:180px;color:var(--ink-4)">${escapeHtml(l.before)}</td>
+          <td style="max-width:180px">${escapeHtml(l.after)}</td>
+          <td><span class="tag purple">${escapeHtml(l.src)}</span></td>
+          <td>${stateTag(l.state)}</td>
+          <td class="op-col ops">${l.revocable ? `<a class="danger" onclick='openRevokeAnswerModal("${l.kbId}", "${l.kpId}", ${JSON.stringify(l.coord).replace(/'/g, "&#39;")}, ${JSON.stringify(l.after).replace(/'/g, "&#39;")})'>撤回</a>` : `<span style="color:var(--ink-7)">—</span>`}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    renderPager(document.getElementById("logPager"), {
+      total: rows.length, page, pageSize: PAGE_SIZE,
+      onChange: (p) => { page = p; renderLogPage(); },
+    });
+  }
+
+  initShell("logs");
+  renderLogPage();
+</script>
+</body>
+</html>

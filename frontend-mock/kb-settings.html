@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>知识库设置 · 知识库管理</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1>知识库设置</h1>
+      <span class="crumb" id="pageCrumb">知识库设置</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+
+    <main class="content" id="pageContent">
+      <!-- 由 JS 渲染 -->
+    </main>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="assets/app.js"></script>
+<script>
+  function renderDimCheckList() {
+    const kb = getKnowledgeBase(kbId);
+    const enabled = new Set(kb.enabledDimKeys || []);
+    const dims = getActiveDimensions();
+    if (!dims.length) {
+      return `<div class="empty-block">还没有任何启用中的全局维度，先去「维度管理」新增一个。</div>`;
+    }
+    return dims.map(d => {
+      const usage = dimensionUsageCount(d.key);
+      return `<label class="chk" style="width:100%;justify-content:space-between;margin-bottom:8px">
+        <span style="display:flex;align-items:center;gap:10px">
+          <input type="checkbox" data-key="${escapeHtml(d.key)}" ${enabled.has(d.key) ? "checked" : ""} />
+          <span style="font-weight:600;color:var(--ink-1)">${escapeHtml(d.label)}</span>
+          <span class="tag blue ftype-tag">${FIELD_TYPE_LABEL[d.field_type]}</span>
+          <span class="field-hint">权重 ${d.weight ?? 50}</span>
+        </span>
+        <span class="field-hint">全局共 ${usage} 条答案在用</span>
+      </label>`;
+    }).join("");
+  }
+
+  function saveEnabledDims() {
+    const keys = [...document.querySelectorAll("#dimCheckList [data-key]:checked")].map(el => el.dataset.key);
+    setKbEnabledDims(kbId, keys);
+    toast("已保存本知识库启用的维度", "ok");
+    renderPage();
+  }
+
+  function renderPage() {
+    const kb = getKnowledgeBase(kbId);
+    document.getElementById("pageCrumb").textContent = `${kb.name} / 知识库设置`;
+    document.getElementById("pageContent").innerHTML = `
+      ${renderKbTabs("settings", kb.id)}
+
+      <div class="notice">
+        维度定义是<b>全局共享</b>的，但每个知识库需要单独勾选「启用」才能在写答案时用到该维度作为适用条件；停用/取消勾选不影响本知识库历史答案里已经写入的取值，只影响之后能否继续选用。
+      </div>
+
+      <div class="card ov">
+        <div class="card-head">
+          <span class="tick"></span>
+          <h3>启用维度</h3>
+          <span class="sub">从全局维度库中，选择本知识库「${escapeHtml(kb.name)}」要用到的维度</span>
+          <span class="spacer"></span>
+          <span class="ops"><a href="dimensions.html">前往维度管理 »</a></span>
+        </div>
+        <div id="dimCheckList">${renderDimCheckList()}</div>
+        <div class="form-row" style="margin-top:6px">
+          <button class="btn primary" onclick="saveEnabledDims()">保 存</button>
+        </div>
+      </div>`;
+  }
+
+  const kbId = getKbIdFromUrl();
+  const kb = kbId ? getKnowledgeBase(kbId) : null;
+
+  if (!kb || kb.status !== "active") {
+    initShell("settings");
+    document.getElementById("pageContent").innerHTML = `
+      <div class="card"><div class="empty-block">
+        没有指定有效的知识库（可能已被停用或不存在）<br />
+        <span style="display:inline-block;margin-top:12px"><a class="btn primary" href="kb-list.html">‹ 返回知识库列表</a></span>
+      </div></div>`;
+  } else {
+    initShell("settings");
+    renderPage();
+  }
+</script>
+</body>
+</html>

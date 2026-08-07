@@ -1,0 +1,2450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>知识库管理 · 单文件演示版</title>
+<style>
+/* ============================================================
+   企业信息管理平台 · CSS 基座 + 组件配方
+   来源：UI规范-企业信息管理平台(1).md §9 + §3
+   ============================================================ */
+
+:root{
+  /* 品牌 */
+  --brand:#2f6bff; --brand-deep:#1a56f0; --brand-light:#6aa9ff; --brand-light2:#5a8ffb; --brand-pale:#9dbdfb;
+  --grad-btn:linear-gradient(135deg,#2f6bff,#5a8ffb);
+  --grad-bar:linear-gradient(90deg,#2f6bff,#6aa9ff);
+  --grad-mark:linear-gradient(180deg,#2f6bff,#6aa9ff);
+  /* 语义 */
+  --blue:#2f6bff;   --blue-bd:#c9dcfc;   --blue-bg:#eef4ff;
+  --green:#0f9d58;  --green-bd:#bfe9d2;  --green-bg:#f2fbf6;
+  --orange:#e08600; --orange-bd:#f5ddb0; --orange-bg:#fdf7ea;
+  --red:#e5484d;    --red-bd:#f7c6c8;    --red-bg:#fff2f2;
+  --purple:#7a5af8; --purple-bd:#e0d7fb; --purple-bg:#f7f4ff;
+  --gray:#7f8ca3;   --gray-bd:#dde5f1;   --gray-bg:#f5f8fd;
+  /* 文字 */
+  --ink-1:#1f2b43; --ink-2:#33415c; --ink-3:#5b6b85; --ink-4:#7f8ca3;
+  --ink-5:#8a97ad; --ink-6:#9aa7bd; --ink-7:#b6c0d2;
+  /* 背景与线 */
+  --page-bg:radial-gradient(circle at 50% 40%, #eef2f9 0%, #e3e9f4 70%, #d8e0ee 100%);
+  --surface:#fff; --pale:#f5f8fd; --row-hover:#fafcff;
+  --line:#edf1f8; --line-weak:#f0f4fa; --bd-input:#dde5f1; --bd-card:#e8eef8; --bd-float:#e2e9f4;
+  --rule:linear-gradient(90deg,#e4ebf7,transparent);
+  /* 圆角 */
+  --r-sm:8px; --r-md:9px; --r-lg:12px; --r-card:14px; --r-modal:18px; --r-pill:999px;
+  /* 阴影 */
+  --sh-card:0 4px 18px rgba(31,66,135,.05);
+  --sh-btn:0 5px 12px rgba(47,107,255,.3);
+  --sh-float:0 14px 38px rgba(18,35,68,.16);
+  --sh-toast:0 10px 26px rgba(10,25,60,.3);
+  --sh-modal:0 30px 80px rgba(10,25,60,.35);
+  --sh-side:2px 0 12px rgba(31,66,135,.04);
+  --sh-top:0 2px 10px rgba(31,66,135,.06);
+  /* 动效 */
+  --t:.15s;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--page-bg)}
+body{font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;color:var(--ink-1);font-size:14px}
+a{color:var(--brand);text-decoration:none;cursor:pointer}
+a.danger{color:var(--red)}
+.num{font-family:"Bahnschrift","DIN Alternate","Arial Narrow",sans-serif;font-weight:700;letter-spacing:.5px}
+.h-bar{width:5px;border-radius:3px;background:var(--grad-mark);flex:none}
+::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-thumb{background:#cfd9ea;border-radius:3px}
+
+.app{ display:flex; min-height:100vh; }
+
+.side{
+  width:228px; flex:none; background:var(--surface); border-right:1px solid #e9eef7;
+  box-shadow:var(--sh-side); position:sticky; top:0; height:100vh; overflow-y:auto; z-index:6;
+  display:flex; flex-direction:column;
+}
+.side-logo{ height:64px; display:flex; align-items:center; gap:10px; padding:0 20px; flex:none; }
+.side-logo .h-bar{ height:36px; }
+.side-logo .name{ font-size:15px; font-weight:700; color:var(--ink-1); line-height:1.3; }
+.side-logo .name small{ display:block; font-size:10px; font-weight:400; letter-spacing:2.5px; color:var(--ink-6); }
+
+.side-group{ font-size:12px; color:var(--ink-6); letter-spacing:2px; padding:16px 20px 6px; }
+.side-menu{ display:flex; flex-direction:column; }
+.side-item{
+  display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--ink-3);
+  font-size:13.5px; position:relative; transition:background var(--t), color var(--t);
+}
+.side-item .ic{ width:16px; text-align:center; flex:none; font-size:14px; }
+.side-item:hover{ background:var(--pale); color:var(--brand); }
+.side-item.sel{ background:var(--blue-bg); color:var(--brand-deep); font-weight:600; }
+.side-item.sel::before{ content:""; position:absolute; left:0; top:8px; bottom:8px; width:3px; background:var(--brand); border-radius:0 3px 3px 0; }
+.side-foot{ margin-top:auto; padding:16px 20px; font-size:11px; color:var(--ink-7); line-height:1.7; }
+
+.main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+
+.top{
+  height:64px; flex:none; background:var(--surface); box-shadow:var(--sh-top); z-index:5;
+  display:flex; align-items:center; padding:0 28px; gap:12px; position:sticky; top:0;
+}
+.top .h-bar{ height:30px; }
+.top h1{ font-size:18px; color:var(--ink-1); white-space:nowrap; }
+.top .crumb{ font-size:12.5px; color:var(--ink-6); margin-left:2px; }
+.top .spacer{ flex:1; }
+.top-badge{
+  font-size:12px; padding:4px 12px; border-radius:var(--r-pill); border:1px solid var(--blue-bd);
+  background:var(--blue-bg); color:var(--blue); white-space:nowrap;
+}
+.top-clock{ text-align:right; line-height:1.25; }
+.top-clock .t{ font-size:20px; color:var(--ink-1); }
+.top-clock .d{ font-size:12px; color:var(--ink-5); }
+.top-avatar{
+  width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  color:#fff; font-size:13px; font-weight:700; background:linear-gradient(135deg,#4d8bff,#2f6bff); flex:none;
+}
+
+.content{ padding:18px 28px 32px; flex:1; min-width:0; }
+
+.card{ background:var(--surface); border-radius:var(--r-card); box-shadow:var(--sh-card);
+       padding:18px 22px; margin-bottom:16px; overflow-x:auto; }
+.card.ov{ overflow:visible; }
+.card-head{ display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.card-head .tick{ width:4px; height:16px; border-radius:2px; background:var(--brand); flex:none; }
+.card-head h3{ font-size:17px; color:var(--ink-1); white-space:nowrap; }
+.card-head .sub{ font-size:12px; color:var(--ink-5); margin-left:4px; }
+.card-head .spacer{ flex:1; height:1px; background:var(--rule); margin:0 10px; min-width:24px; }
+.card-head .ops{ display:flex; gap:10px; flex:none; }
+
+.btn{ height:34px; padding:0 16px; border-radius:var(--r-md); border:1px solid var(--bd-input);
+      background:var(--surface); color:var(--ink-3); font-size:13px; transition:all var(--t);
+      cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-family:inherit; }
+.btn:hover{ border-color:var(--brand-pale); color:var(--brand); }
+.btn.primary{ background:var(--grad-btn); border:none; color:#fff; font-weight:600; box-shadow:var(--sh-btn); }
+.btn.primary:hover{ filter:brightness(1.06); color:#fff; }
+.btn.danger{ color:var(--red); border-color:#f3c1c3; }
+.btn.danger:hover{ background:var(--red-bg); border-color:#f3c1c3; }
+.btn.sm{ height:28px; padding:0 12px; font-size:12px; border-radius:var(--r-sm); }
+.btn:disabled{ opacity:.5; cursor:not-allowed; }
+
+.table-wrap{ overflow-x:auto; }
+.tbl{ width:100%; border-collapse:collapse; }
+.tbl td.dim-col, .tbl th.dim-col{ white-space:nowrap; }
+.tbl th{ background:var(--pale); color:var(--ink-4); font-size:13px; font-weight:600; text-align:left;
+         padding:11px 12px; white-space:nowrap; }
+.tbl th:first-child{ border-radius:var(--r-md) 0 0 var(--r-md); }
+.tbl th:last-child{ border-radius:0 var(--r-md) var(--r-md) 0; }
+.tbl td{ padding:11px 12px; font-size:13.5px; border-bottom:1px solid var(--line-weak); color:var(--ink-2); }
+.tbl tr:hover td{ background:var(--row-hover); }
+.tbl .empty{ text-align:center; color:var(--ink-7); font-size:13.5px; padding:30px 0; }
+.ops a{ margin-right:12px; font-size:13px; }
+.ops a:last-child{ margin-right:0; }
+.tbl td.op-col, .tbl th.op-col{ width:140px; white-space:nowrap; }
+
+input[type=text],input[type=number],input[type=date],input[type=password],select,textarea{
+  border:1px solid var(--bd-input); border-radius:var(--r-md); padding:8px 12px; font-size:13.5px;
+  color:var(--ink-2); background:var(--surface); outline:none; min-width:150px; font-family:inherit;
+}
+textarea{ min-width:0; width:100%; resize:vertical; line-height:1.6; }
+input:focus,select:focus,textarea:focus{ border-color:var(--brand); box-shadow:0 0 0 3px rgba(47,107,255,.12); }
+input::placeholder,textarea::placeholder{ color:var(--ink-7); }
+input:disabled,select:disabled,textarea:disabled{ background:var(--pale); color:var(--ink-5); cursor:not-allowed; }
+.form-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.mf{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+.mf label{ font-size:13px; color:var(--ink-4); }
+.mf label .req{ color:var(--red); margin-right:2px; }
+.mf .hint{ font-size:12px; color:var(--ink-6); margin-top:4px; }
+.mf-grid{ display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
+.chk{ display:flex; align-items:center; gap:7px; font-size:13px; color:var(--ink-2);
+      border:1px solid var(--bd-input); border-radius:var(--r-md); padding:9px 11px; cursor:pointer; }
+.chk:hover{ border-color:var(--brand-pale); }
+.chk input{ accent-color:var(--brand); }
+
+.tag{ display:inline-block; font-size:12px; padding:2.5px 10px; border-radius:var(--r-pill);
+      border:1px solid; margin:1px 4px 1px 0; white-space:nowrap; }
+.tag.blue{ color:var(--blue); border-color:var(--blue-bd); background:var(--blue-bg); }
+.tag.green{ color:var(--green); border-color:var(--green-bd); background:var(--green-bg); }
+.tag.orange{ color:var(--orange); border-color:var(--orange-bd); background:var(--orange-bg); }
+.tag.red{ color:var(--red); border-color:var(--red-bd); background:var(--red-bg); }
+.tag.purple{ color:var(--purple); border-color:var(--purple-bd); background:var(--purple-bg); }
+.tag.gray{ color:var(--gray); border-color:var(--gray-bd); background:var(--gray-bg); }
+.status-dot{ display:inline-flex; align-items:center; gap:6px; font-size:13px; }
+.status-dot i{ width:7px; height:7px; border-radius:50%; }
+.status-dot.ok{ color:var(--green); } .status-dot.ok i{ background:var(--green); }
+.status-dot.off{ color:var(--ink-5); } .status-dot.off i{ background:var(--ink-6); }
+.status-dot.warn{ color:var(--orange); } .status-dot.warn i{ background:var(--orange); }
+
+.tabs{ display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:16px; flex-wrap:wrap; }
+.tabs .tab{ padding:12px 17px; font-size:14.5px; color:var(--ink-3); cursor:pointer; position:relative; }
+.tabs .tab:hover{ color:var(--brand); }
+.tabs .tab.active{ color:var(--brand); font-weight:700; }
+.tabs .tab.active::after{ content:""; position:absolute; left:14px; right:14px; bottom:-1px;
+                          height:3px; border-radius:2px; background:var(--brand); }
+
+.desc{ display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; }
+.desc.c2{ grid-template-columns:repeat(2,1fr); }
+.desc .di{ display:flex; border-bottom:1px solid var(--line-weak); border-right:1px solid var(--line-weak); min-height:44px; }
+.desc .di .k{ width:120px; flex-shrink:0; background:var(--pale); color:var(--ink-4); font-size:12.5px; padding:12px 14px; }
+.desc .di .v{ flex:1; padding:12px 14px; font-size:13.5px; color:var(--ink-1); font-weight:600; word-break:break-all; }
+.desc .di.span3{ grid-column:span 3; }
+.desc.c2 .di.span3{ grid-column:span 2; }
+
+.mask{ position:fixed; inset:0; background:rgba(43,58,94,.55); backdrop-filter:blur(3px);
+       display:none; align-items:flex-start; justify-content:center; z-index:100;
+       overflow-y:auto; padding:60px 20px; }
+.mask.show{ display:flex; }
+.modal{ background:var(--surface); border-radius:var(--r-modal); width:560px; max-width:96vw;
+        box-shadow:var(--sh-modal); overflow:hidden; }
+.modal.wide{ width:1000px; }
+.mo-head{ padding:18px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+.mo-head::before{ content:""; width:4px; height:18px; border-radius:2px; background:var(--brand); flex:none; }
+.mo-head h3{ font-size:16px; color:var(--ink-1); }
+.mo-close{ margin-left:auto; width:34px; height:34px; border-radius:var(--r-md); background:var(--pale);
+           color:var(--ink-3); border:none; cursor:pointer; font-size:15px; }
+.mo-body{ padding:20px 24px; max-height:62vh; overflow-y:auto; }
+.mo-foot{ padding:14px 24px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; }
+.mo-foot .back{ margin-right:auto; }
+.risk{ background:var(--red-bg); border:1px solid var(--red-bd); border-radius:var(--r-lg);
+       padding:12px 16px; font-size:13px; color:#c0353a; line-height:1.8; margin-top:4px; }
+
+.dd{ position:relative; display:inline-block; }
+.dd-menu{ position:absolute; right:0; top:calc(100% + 6px); min-width:250px; background:var(--surface);
+          border:1px solid var(--bd-float); border-radius:var(--r-lg); box-shadow:var(--sh-float);
+          padding:6px; display:none; z-index:40; text-align:left; }
+.dd.open .dd-menu{ display:block; }
+.dd-item{ padding:9px 12px; border-radius:var(--r-md); cursor:pointer; display:block; }
+.dd-item:hover{ background:var(--pale); }
+.dd-item .t{ font-size:13.5px; color:var(--ink-2); font-weight:600; }
+.dd-item .d{ font-size:12px; color:var(--ink-6); margin-top:3px; line-height:1.6; }
+.dd-item.danger .t{ color:var(--red); }
+.dd-item.danger:hover{ background:var(--red-bg); }
+.dd-sep{ height:1px; background:var(--line-weak); margin:5px 8px; }
+
+.pager{ display:flex; align-items:center; justify-content:flex-end; gap:8px;
+        margin-top:14px; font-size:13px; color:var(--ink-4); }
+.pager button{ min-width:32px; height:32px; padding:0 10px; border-radius:var(--r-md);
+                border:1px solid var(--bd-input); background:var(--surface); color:var(--ink-3);
+                font-size:13px; cursor:pointer; font-family:inherit; }
+.pager button:hover:not(:disabled):not(.cur){ border-color:var(--brand-pale); color:var(--brand); }
+.pager button.cur{ background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
+.pager button:disabled{ opacity:.45; cursor:not-allowed; }
+
+#toast{ position:fixed; left:50%; bottom:40px; transform:translateX(-50%); z-index:200;
+        display:flex; flex-direction:column; gap:8px; align-items:center; }
+.toast-item{ background:rgba(31,43,67,.92); color:#fff; border-radius:var(--r-md); padding:11px 22px;
+             font-size:13.5px; box-shadow:var(--sh-toast); animation:tin .25s; }
+.toast-item.ok::before{ content:"✓ "; color:#4cd48f; font-weight:700; }
+.toast-item.err::before{ content:"✕ "; color:#ff9a9e; font-weight:700; }
+.toast-item.info::before{ content:"ℹ "; color:#8fb5ff; font-weight:700; }
+@keyframes tin{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:translateY(0); } }
+
+.spin{ display:inline-block; width:11px; height:11px; border:2px solid var(--orange-bd);
+       border-top-color:var(--orange); border-radius:50%; animation:sp 1s linear infinite; }
+@keyframes sp{ to{ transform:rotate(360deg); } }
+
+.notice{ background:linear-gradient(135deg,#eef4ff,#f7faff); border:1px solid #d9e6fd;
+         border-radius:var(--r-lg); padding:13px 18px; font-size:13px; color:var(--ink-2); line-height:1.8; }
+.notice b{ color:var(--brand-deep); }
+.detail-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.detail-head h2{ font-size:21px; color:var(--ink-1); }
+.detail-head .meta{ font-size:13px; color:var(--ink-5); margin-top:8px; display:flex; gap:18px; flex-wrap:wrap; }
+.back-link{ display:inline-flex; align-items:center; gap:6px; border:1px solid var(--blue-bd);
+            background:var(--blue-bg); color:var(--brand); font-size:13px; padding:7px 14px; border-radius:var(--r-md);
+            margin-bottom:16px; }
+
+.chip-row{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.ftype-tag{ font-size:11px; padding:1.5px 8px; }
+.field-hint{ font-size:11.5px; color:var(--ink-6); }
+.empty-block{ text-align:center; color:var(--ink-7); font-size:13.5px; padding:40px 0; }
+.empty-block .g{ display:inline-flex; margin-top:10px; }
+.trace-row{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; font-size:13px;
+            padding:9px 12px; border-radius:var(--r-md); background:var(--pale); margin-bottom:6px; }
+.trace-row .id{ font-weight:700; color:var(--ink-2); flex:none; }
+.trace-row .verdict{ margin-left:auto; font-weight:700; font-size:12.5px; letter-spacing:.02em; }
+.trace-row.hit .verdict{ color:var(--green); }
+.trace-row.miss .verdict{ color:var(--red); }
+.trace-row.miss{ opacity:.72; }
+.timeline{ display:flex; flex-direction:column; gap:0; }
+.tl-item{ display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--line-weak); }
+.tl-item:last-child{ border-bottom:none; }
+.tl-dot-col{ display:flex; flex-direction:column; align-items:center; flex:none; width:14px; }
+.tl-dot{ width:11px; height:11px; border-radius:50%; background:var(--brand-pale); margin-top:4px; flex:none; }
+.tl-dot.cur{ background:var(--brand); box-shadow:0 0 0 3px var(--blue-bg); }
+.tl-line{ width:2px; flex:1; background:var(--line); margin-top:4px; }
+.tl-body{ flex:1; }
+.tl-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+.tl-head .v{ font-weight:700; color:var(--ink-1); font-size:13.5px; }
+.tl-head .time{ font-size:12px; color:var(--ink-5); }
+.tl-title{ font-size:13.5px; color:var(--ink-2); font-weight:600; margin-bottom:2px; }
+.tl-content{ font-size:13px; color:var(--ink-4); margin-bottom:6px; }
+.tl-dims{ display:flex; gap:6px; flex-wrap:wrap; }
+
+.stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:16px; }
+.stat{ background:var(--surface); border:1px solid var(--bd-card); border-radius:var(--r-card); box-shadow:var(--sh-card); padding:16px 20px; }
+.stat .lbl{ font-size:13.5px; color:var(--ink-3); display:flex; align-items:center; gap:7px; }
+.stat .lbl::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--brand-deep); }
+.stat .val{ font-size:32px; margin-top:8px; color:var(--brand-deep); line-height:1.1; }
+.stat .val small{ font-size:13px; color:var(--ink-5); font-weight:600; margin-left:4px; }
+.stat .foot{ font-size:12px; color:var(--ink-5); margin-top:8px; }
+.stat.c2 .lbl::before{ background:var(--green); } .stat.c2 .val{ color:var(--green); }
+.stat.c3 .lbl::before{ background:var(--purple); } .stat.c3 .val{ color:var(--purple); }
+.stat.c4 .lbl::before{ background:var(--orange); } .stat.c4 .val{ color:var(--orange); }
+
+.seg{ display:inline-flex; border:1px solid var(--bd-input); border-radius:var(--r-md); overflow:hidden; }
+.seg button{ border:none; background:var(--surface); color:var(--ink-3); font-size:12.5px; padding:6px 14px; cursor:pointer; font-family:inherit; }
+.seg button.on{ background:var(--blue-bg); color:var(--brand-deep); font-weight:600; }
+.seg button+button{ border-left:1px solid var(--line); }
+
+.dd-group{ font-size:11px; color:var(--ink-7); letter-spacing:1px; padding:7px 12px 3px; }
+.mini-note{ font-size:12px; color:var(--ink-6); line-height:1.8; }
+
+.trow{ border-bottom:1px solid var(--line-weak); padding:6px 2px; }
+.trow:last-of-type{ border-bottom:none; }
+.trow-main{ display:flex; align-items:center; gap:10px; cursor:pointer; border-radius:var(--r-md); padding:8px 10px; transition:background var(--t); }
+.trow-main:hover{ background:var(--pale); }
+.trow-main .arrow{ color:var(--ink-6); width:14px; flex:none; font-size:12px; }
+.trm-meta{ font-size:12.5px; color:var(--ink-5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.trow-ans{ margin:0 0 6px 34px; font-size:13px; color:var(--ink-2); line-height:1.9; }
+.tnode{ display:flex; align-items:center; gap:6px; padding:8px 10px; border-radius:var(--r-md); color:var(--ink-2); }
+.tnode .cnt{ font-size:12px; color:var(--ink-6); font-weight:400; }
+.kids{ margin-left:18px; border-left:1px dashed #dbe3f0; padding-left:8px; }
+
+.ans-item{ padding:16px 6px; border-bottom:1px solid var(--line-weak); }
+.ans-item:last-child{ border-bottom:none; }
+.ans-item .ai-content{ font-size:15px; font-weight:600; color:var(--ink-1); line-height:1.8; }
+.ans-item .ai-cond{ font-size:12.5px; color:var(--ink-5); margin-top:7px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+.ans-item .ai-cond .live{ display:inline-flex; align-items:center; gap:5px; color:var(--green); font-weight:600; }
+.ans-item .ai-cond .live i{ width:6px; height:6px; border-radius:50%; background:var(--green); }
+
+.cube-stage{ perspective:1500px; display:flex; justify-content:center; padding:70px 0 210px; }
+.cube3{ transform-style:preserve-3d; transform:rotateX(58deg) rotateZ(45deg); position:relative;
+        transition:transform .8s cubic-bezier(.16,1,.3,1); }
+.layer3{ position:absolute; inset:0; transform-style:preserve-3d; display:grid; gap:6px;
+         transition:transform .8s cubic-bezier(.16,1,.3,1); }
+.c3cell{ border-radius:8px; border:1.5px solid rgba(255,255,255,.85); box-shadow:0 2px 0 rgba(31,66,135,.12);
+         display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:600;
+         cursor:default; user-select:none; white-space:nowrap; overflow:hidden; }
+.c3cell.emptyc{ background:#f0f3f9; color:var(--ink-7); border-style:dashed; font-weight:400; }
+.layer3-lbl{ position:absolute; left:-12px; top:50%; transform:rotateZ(-45deg) rotateX(-58deg) translate(-100%,-50%);
+             font-size:12.5px; font-weight:600; color:var(--ink-2); white-space:nowrap; }
+.cube-legend{ display:flex; gap:12px 20px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-2);
+              justify-content:center; margin-top:-70px; position:relative; }
+#tipCube{ position:fixed; z-index:300; pointer-events:none; background:rgba(31,43,67,.94); color:#fff;
+          font-size:12.5px; line-height:1.7; padding:8px 13px; border-radius:9px; opacity:0;
+          transition:opacity .15s; max-width:300px; box-shadow:var(--sh-toast); }
+#tipCube b{ color:#8fb5ff; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="side" id="sideNav"></aside>
+  <div class="main">
+    <header class="top">
+      <span class="h-bar"></span>
+      <h1 id="pageTitle">知识库列表</h1>
+      <span class="crumb" id="pageCrumb">知识库列表</span>
+      <span class="spacer"></span>
+      <span class="top-badge">演示环境 · 单文件版 · 数据本地存储</span>
+      <div class="top-clock"><div class="t num" id="topClockTime">--:--:--</div><div class="d" id="topClockDate">----/--/--</div></div>
+      <div class="top-avatar">AD</div>
+    </header>
+    <main class="content" id="pageContent"></main>
+  </div>
+</div>
+
+<!-- 新增知识点 -->
+<div class="mask" id="kpMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="kpModalTitle">新增知识点</h3><button class="mo-close" onclick="closeModal('kpMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="kpId" />
+      <div class="mf">
+        <label><span class="req">*</span>标题</label>
+        <input type="text" id="kpTitle" placeholder="知识点标题，例如：退款政策" />
+      </div>
+      <div class="mf">
+        <label>默认答案内容(可选)</label>
+        <textarea id="kpContent" rows="3" placeholder="不填条件、处处适用的默认说法；也可以先留空，之后再到详情页写答案"></textarea>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>生效时间</label>
+        <input type="date" id="kpTime" />
+      </div>
+      <p class="hint" id="kpFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('kpMask')">取 消</button>
+      <button class="btn primary" onclick="submitKp(idxRenderListPage)">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 删除知识点(知识点列表页 / 详情页共用) -->
+<div class="mask" id="delMask">
+  <div class="modal">
+    <div class="mo-head"><h3>删除知识点</h3><button class="mo-close" onclick="closeModal('delMask')">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;">即将删除知识点 <b id="delTitle" style="color:var(--ink-1)"></b>，及其全部答案。</p>
+      <div class="mf">
+        <label><span class="req">*</span>删除原因</label>
+        <textarea id="delReason" rows="2" placeholder="请说明删除原因，将记录在留痕中"></textarea>
+      </div>
+      <div class="risk">采用软删除：删除后不再出现在知识点列表与查询结果中；可在「回收站」中恢复。</div>
+      <input type="hidden" id="delId" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('delMask')">取 消</button>
+      <button class="btn danger" onclick="submitDelete(afterDeleteRefresh)">确 定 删 除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 写答案 / 编辑答案 -->
+<div class="mask" id="ansMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="ansModalTitle">写一条答案</h3><button class="mo-close" onclick="closeModal('ansMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="ansKpId" /><input type="hidden" id="ansOldCoord" />
+      <div class="mf">
+        <label><span class="req">*</span>答案内容</label>
+        <textarea id="ansContent" rows="3" placeholder="这个条件组合下的说法"></textarea>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>生效时间</label>
+        <input type="date" id="ansTime" />
+      </div>
+      <div class="mf">
+        <label>适用条件(只写你关心的；全部移除 = 默认答案，处处适用)</label>
+        <div id="ansCondRows"></div>
+        <button class="btn sm" style="margin-top:8px" onclick="addCondRow()">+ 加一个条件</button>
+        <div class="hint">维度只能从本知识库「知识库设置」里已启用的维度中选择；条件不变 = 同组追加新版本，条件改了 = 迁移到新条件组</div>
+      </div>
+      <div class="mf">
+        <label>变更说明(可选)</label>
+        <input type="text" id="ansNote" placeholder="例如：流程调整" />
+      </div>
+      <p class="hint" id="ansFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('ansMask')">取 消</button>
+      <button class="btn primary" onclick="submitAnswer(detRenderDetail)">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 设为默认 -->
+<div class="mask" id="promoteMask">
+  <div class="modal">
+    <div class="mo-head"><h3>设为默认答案</h3><button class="mo-close" onclick="closeModal('promoteMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="promoteKpId" />
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将把这条答案的内容，作为「<b>默认答案</b>」的新版本，自生效时间起处处适用：</p>
+      <div style="background:var(--pale);border-radius:10px;padding:12px 16px;font-size:13.5px;color:var(--ink-1);margin:10px 0;line-height:1.8" id="promoteContent"></div>
+      <div class="mf">
+        <label><span class="req">*</span>生效时间</label>
+        <input type="date" id="promoteTime" />
+      </div>
+      <div class="hint">原默认答案自动留档；这条带条件的答案本身保持不变，操作留痕。</div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('promoteMask')">取 消</button>
+      <button class="btn primary" onclick="submitPromote(detRenderDetail)">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 撤回答案(知识点详情页 / 全局操作日志页共用) -->
+<div class="mask" id="revokeMask">
+  <div class="modal">
+    <div class="mo-head"><h3>撤回答案</h3><button class="mo-close" onclick="closeModal('revokeMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="revokeKbId" /><input type="hidden" id="revokeKpId" /><input type="hidden" id="revokeCoord" />
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">将撤回这个条件下的答案：<br><b id="revokeContent" style="color:var(--ink-1)"></b></p>
+      <div class="mf">
+        <label><span class="req">*</span>撤回原因</label>
+        <input type="text" id="revokeReason" placeholder="必填，写入留痕" />
+      </div>
+      <div class="risk">撤回为逻辑删除：该条件下将不再返回此答案；历史版本与留痕永久保留。</div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('revokeMask')">取 消</button>
+      <button class="btn danger" onclick="submitRevoke(afterRevokeRefresh)">确认撤回</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑标题 -->
+<div class="mask" id="titleMask">
+  <div class="modal">
+    <div class="mo-head"><h3>编辑标题</h3><button class="mo-close" onclick="closeModal('titleMask')">✕</button></div>
+    <div class="mo-body">
+      <div class="mf">
+        <label><span class="req">*</span>标题</label>
+        <input type="text" id="titleInput" />
+      </div>
+      <p class="hint" id="titleFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('titleMask')">取 消</button>
+      <button class="btn primary" onclick="detSubmitTitle()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/编辑维度 -->
+<div class="mask" id="dimMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="dimModalTitle">新增维度</h3><button class="mo-close" onclick="closeModal('dimMask')">✕</button></div>
+    <div class="mo-body">
+      <div class="mf">
+        <label><span class="req">*</span>维度名称</label>
+        <input type="text" id="dimLabel" placeholder="例如：部门 / 标签 / 复核周期" />
+        <div class="hint" id="dimKeyHint">新增时会同时作为内部标识(key)；创建后 key 不可更改，显示名称之后仍可修改。</div>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>字段类型</label>
+        <select id="dimType" onchange="onDimTypeChange()">
+          <option value="text">文本</option>
+          <option value="number">数值</option>
+          <option value="date">时间</option>
+          <option value="boolean">布尔</option>
+        </select>
+        <div class="hint">创建后不可修改，用于答案条件的取值输入校验。</div>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>权重(1–100)</label>
+        <input type="number" id="dimWeight" value="50" min="1" max="100" />
+        <div class="hint">两条答案条件同样具体、又都没有精确命中查询时，涉及维度的权重总和更高的答案优先返回。</div>
+      </div>
+      <div class="mf" id="dimDefaultWrap">
+        <label>默认取值提示(可选)</label>
+        <input type="text" id="dimDefault" />
+        <div class="hint">仅作为「写答案」时该维度输入框的预填提示，不做强制校验。</div>
+      </div>
+      <p class="hint" id="dimFormHint" style="color:var(--red)"></p>
+      <input type="hidden" id="dimKeyField" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('dimMask')">取 消</button>
+      <button class="btn primary" onclick="submitDim()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 停用/启用维度确认 -->
+<div class="mask" id="toggleDimMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="toggleDimTitle">停用维度</h3><button class="mo-close" onclick="closeModal('toggleDimMask')">✕</button></div>
+    <div class="mo-body">
+      <p id="toggleDimBody" style="font-size:13.5px;color:var(--ink-2);line-height:1.8;"></p>
+      <div class="risk" id="toggleDimRisk"></div>
+      <input type="hidden" id="toggleDimKey" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('toggleDimMask')">取 消</button>
+      <button class="btn danger" id="toggleDimConfirmBtn" onclick="confirmToggleDim()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/编辑知识库 -->
+<div class="mask" id="kbMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="kbModalTitle">新增知识库</h3><button class="mo-close" onclick="closeModal('kbMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="kbId" />
+      <div class="mf">
+        <label><span class="req">*</span>名称</label>
+        <input type="text" id="kbName" placeholder="例如：产品知识库" />
+      </div>
+      <div class="mf">
+        <label>描述(可选)</label>
+        <textarea id="kbDesc" rows="2" placeholder="这个知识库用来存放什么类型的知识点"></textarea>
+      </div>
+      <p class="hint" id="kbFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('kbMask')">取 消</button>
+      <button class="btn primary" onclick="submitKb()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 停用/启用知识库确认 -->
+<div class="mask" id="toggleKbMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="toggleKbTitle">停用知识库</h3><button class="mo-close" onclick="closeModal('toggleKbMask')">✕</button></div>
+    <div class="mo-body">
+      <p id="toggleKbBody" style="font-size:13.5px;color:var(--ink-2);line-height:1.8;"></p>
+      <div class="risk" id="toggleKbRisk"></div>
+      <input type="hidden" id="toggleKbId" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('toggleKbMask')">取 消</button>
+      <button class="btn danger" id="toggleKbConfirmBtn" onclick="confirmToggleKb()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 恢复知识点 -->
+<div class="mask" id="restoreMask">
+  <div class="modal">
+    <div class="mo-head"><h3>恢复知识点</h3><button class="mo-close" onclick="closeModal('restoreMask')">✕</button></div>
+    <div class="mo-body">
+      <p style="font-size:13.5px;color:var(--ink-2);line-height:1.9">
+        即将恢复知识点 <b id="restoreTitle" style="color:var(--ink-1)"></b>，恢复后全部历史答案与版本照常可用。
+      </p>
+      <input type="hidden" id="restoreId" />
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('restoreMask')">取 消</button>
+      <button class="btn primary" onclick="trsSubmitRestore()">确 定 恢 复</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   知识库管理 · 共享数据层 + 业务逻辑
+   与 frontend-mock/assets/app.js 同源；本文件把 7 个页面 + 数据层
+   合并成一个单文件 SPA，用 go(view, params) 做客户端路由，
+   替代原来"多个 html 文件 + location.href 跳转"的方式。
+   ============================================================ */
+
+const MOCK_NOW = "2026-08-06";
+
+const LS_KBS = "kb_mock_bases";
+const LS_DIMENSIONS = "kb_mock_dimensions";
+const LS_KPS = "kb_mock_kps";
+const LS_ANSWERS = "kb_mock_answers";
+const LS_SEEDED = "kb_mock_seeded_v6";
+
+const FIELD_TYPE_LABEL = { text: "文本", number: "数值", date: "时间", boolean: "布尔" };
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function seedIfEmpty() {
+  if (localStorage.getItem(LS_SEEDED)) return;
+
+  const bases = [
+    { id: "1", name: "产品知识库", description: "产品功能说明、变更记录等知识点", status: "active", created_at: "2026-08-01T09:00:00", enabledDimKeys: ["tenant"] },
+    { id: "2", name: "运维知识库", description: "运维排障手册、值班交接事项", status: "active", created_at: "2026-08-04T09:00:00", enabledDimKeys: ["tenant"] },
+  ];
+
+  const dimensions = [
+    { key: "tenant", label: "租户", field_type: "text", weight: 90, default_value: "默认租户", status: "active" },
+  ];
+
+  const kps = [
+    { kbId: "1", id: "1", title: "退款政策", status: "active", operator: "admin", created_at: "2026-08-01T09:00:00" },
+    { kbId: "1", id: "2", title: "会员等级说明", status: "active", operator: "admin", created_at: "2026-08-03T09:00:00" },
+    { kbId: "1", id: "3", title: "发票开具流程", status: "active", operator: "admin", created_at: "2026-08-05T09:00:00" },
+    { kbId: "2", id: "1", title: "值班交接规范", status: "active", operator: "admin", created_at: "2026-08-04T09:00:00" },
+  ];
+
+  let seq = 0;
+  const nid = () => "a" + (++seq);
+  const answers = [
+    { id: nid(), kbId: "1", kpId: "1", coord: {}, content: "订单支付完成后 7 天内，未使用/未核销的订单支持无理由退款。", time: "2026-08-01", operator: "admin", note: "初始创建", revoked: false, created_at: "2026-08-01T09:00:00" },
+    { id: nid(), kbId: "1", kpId: "1", coord: {}, content: "退款政策已更新：无理由退款期限从 7 天延长至 15 天，超期需人工审核。", time: "2026-08-06", operator: "admin", note: "延长无理由退款期限", revoked: false, created_at: "2026-08-06T10:00:00" },
+    { id: nid(), kbId: "1", kpId: "1", coord: { tenant: "示例租户B" }, content: "「示例租户B」按合同约定执行 30 天无理由退款，与默认政策不同。", time: "2026-08-05", operator: "admin", note: "补充租户定制说法", revoked: false, created_at: "2026-08-05T09:00:00" },
+
+    { id: nid(), kbId: "1", kpId: "2", coord: {}, content: "会员分为普通/银卡/金卡三级，按累计消费金额自动升级，权益详见会员中心。", time: "2026-08-03", operator: "admin", note: "初始创建", revoked: false, created_at: "2026-08-03T09:00:00" },
+
+    { id: nid(), kbId: "1", kpId: "3", coord: {}, content: "订单完成后可在「我的订单」里申请开票，1-3 个工作日内开出。", time: "2026-08-05", operator: "admin", note: "初始创建", revoked: false, created_at: "2026-08-05T09:00:00" },
+    { id: nid(), kbId: "1", kpId: "3", coord: { tenant: "示例租户B" }, content: "「示例租户B」需要先在后台提交对公发票信息，审核通过后才能申请开票。", time: "2026-08-05", operator: "admin", note: "补充租户定制说法", revoked: false, created_at: "2026-08-05T09:30:00" },
+
+    { id: nid(), kbId: "2", kpId: "1", coord: {}, content: "值班交接需在群里同步当前故障与待办事项，交接人确认后方可下班。", time: "2026-08-04", operator: "admin", note: "初始创建", revoked: false, created_at: "2026-08-04T09:00:00" },
+    { id: nid(), kbId: "2", kpId: "1", coord: { tenant: "示例租户B" }, content: "「示例租户B」的值班交接补充说明：额外检查监控大盘并同步给对方值班群。", time: "2026-08-04", operator: "admin", note: "补充租户定制说法", revoked: false, created_at: "2026-08-04T09:30:00" },
+  ];
+
+  localStorage.setItem(LS_KBS, JSON.stringify(bases));
+  localStorage.setItem(LS_DIMENSIONS, JSON.stringify(dimensions));
+  localStorage.setItem(LS_KPS, JSON.stringify(kps));
+  localStorage.setItem(LS_ANSWERS, JSON.stringify(answers));
+  localStorage.setItem(LS_SEEDED, "1");
+}
+
+function resetDemoData() {
+  localStorage.removeItem(LS_KBS);
+  localStorage.removeItem(LS_DIMENSIONS);
+  localStorage.removeItem(LS_KPS);
+  localStorage.removeItem(LS_ANSWERS);
+  localStorage.removeItem(LS_SEEDED);
+  seedIfEmpty();
+}
+
+function getKnowledgeBases() { return JSON.parse(localStorage.getItem(LS_KBS) || "[]"); }
+function saveKnowledgeBases(list) { localStorage.setItem(LS_KBS, JSON.stringify(list)); }
+function getActiveKnowledgeBases() { return getKnowledgeBases().filter(b => b.status === "active"); }
+function getKnowledgeBase(id) { return getKnowledgeBases().find(b => b.id === id); }
+
+function nextKbId() {
+  const bases = getKnowledgeBases();
+  const max = bases.reduce((m, b) => Math.max(m, parseInt(b.id, 10) || 0), 0);
+  return String(max + 1);
+}
+
+function knowledgeBaseKpCount(kbId) {
+  return getKnowledgePoints(kbId).filter(k => k.status === "active").length;
+}
+
+function getKbEnabledDims(kbId) {
+  const kb = getKnowledgeBase(kbId);
+  const enabled = new Set((kb && kb.enabledDimKeys) || []);
+  return getActiveDimensions().filter(d => enabled.has(d.key));
+}
+function setKbEnabledDims(kbId, keys) {
+  const bases = getKnowledgeBases();
+  const b = bases.find(x => x.id === kbId);
+  if (!b) return;
+  b.enabledDimKeys = keys;
+  saveKnowledgeBases(bases);
+}
+
+function addKnowledgeBase({ name, description }) {
+  const bases = getKnowledgeBases();
+  const id = nextKbId();
+  bases.push({ id, name, description: description || "", status: "active", created_at: new Date().toISOString(), enabledDimKeys: [] });
+  saveKnowledgeBases(bases);
+  return id;
+}
+
+function updateKnowledgeBase(id, patch) {
+  const bases = getKnowledgeBases();
+  const b = bases.find(x => x.id === id);
+  if (!b) return { ok: false, error: "知识库不存在。" };
+  Object.assign(b, patch);
+  saveKnowledgeBases(bases);
+  return { ok: true };
+}
+
+function toggleKnowledgeBaseStatus(id) {
+  const bases = getKnowledgeBases();
+  const b = bases.find(x => x.id === id);
+  if (!b) return;
+  b.status = b.status === "active" ? "deprecated" : "active";
+  saveKnowledgeBases(bases);
+}
+
+function getDimensions() { return JSON.parse(localStorage.getItem(LS_DIMENSIONS) || "[]"); }
+function saveDimensions(list) { localStorage.setItem(LS_DIMENSIONS, JSON.stringify(list)); }
+function getActiveDimensions() { return getDimensions().filter(d => d.status === "active"); }
+function dimByKey(key) { return getDimensions().find(d => d.key === key); }
+
+function getAllKnowledgePoints() { return JSON.parse(localStorage.getItem(LS_KPS) || "[]"); }
+function saveKnowledgePoints(list) { localStorage.setItem(LS_KPS, JSON.stringify(list)); }
+function getKnowledgePoints(kbId) { return getAllKnowledgePoints().filter(k => k.kbId === kbId); }
+function getKnowledgePoint(kbId, id) { return getAllKnowledgePoints().find(k => k.kbId === kbId && k.id === id); }
+
+function getAllAnswers() { return JSON.parse(localStorage.getItem(LS_ANSWERS) || "[]"); }
+function saveAnswers(list) { localStorage.setItem(LS_ANSWERS, JSON.stringify(list)); }
+function getAnswersByKp(kbId, kpId) { return getAllAnswers().filter(a => a.kbId === kbId && a.kpId === kpId); }
+
+function nextKpId(kbId) {
+  const kps = getKnowledgePoints(kbId);
+  const max = kps.reduce((m, k) => Math.max(m, parseInt(k.id, 10) || 0), 0);
+  return String(max + 1);
+}
+
+function coordKeyOf(coord) {
+  const ks = Object.keys(coord).filter(k => coord[k] !== undefined && coord[k] !== "");
+  return ks.length ? ks.sort().map(k => k + ":" + coord[k]).join("|") : "(默认)";
+}
+function coordSpec(coord) { return Object.keys(coord).filter(k => coord[k] !== undefined && coord[k] !== "").length; }
+function coordWeight(coord) {
+  return Object.keys(coord).filter(k => coord[k] !== undefined && coord[k] !== "")
+    .reduce((sum, k) => sum + ((dimByKey(k) || {}).weight || 0), 0);
+}
+function coordLabel(coord) {
+  const ks = Object.keys(coord).filter(k => coord[k] !== undefined && coord[k] !== "");
+  if (!ks.length) return `<span class="tag gray">默认答案 · 处处适用</span>`;
+  return ks.map(k => {
+    const d = dimByKey(k);
+    return `<span class="tag blue">${escapeHtml(d ? d.label : k)} = ${escapeHtml(dimValueDisplay(d, coord[k]))}</span>`;
+  }).join("");
+}
+function coordText(coord) {
+  const ks = Object.keys(coord).filter(k => coord[k] !== undefined && coord[k] !== "");
+  if (!ks.length) return "默认";
+  return ks.sort().map(k => (dimByKey(k) ? dimByKey(k).label : k) + " = " + coord[k]).join(" 且 ");
+}
+function coordCompatible(coord, Q) {
+  for (const k in coord) {
+    if (coord[k] === undefined || coord[k] === "") continue;
+    if (Q[k] === undefined || Q[k] === "") continue;
+    if (String(coord[k]) !== String(Q[k])) return false;
+  }
+  return true;
+}
+
+function liveGroups(kbId, kpId, atTime) {
+  const groups = new Map();
+  getAnswersByKp(kbId, kpId).forEach(a => {
+    const k = coordKeyOf(a.coord);
+    if (!groups.has(k)) groups.set(k, { coordKey: k, coord: a.coord, chain: [] });
+    groups.get(k).chain.push(a);
+  });
+  const out = [];
+  for (const g of groups.values()) {
+    g.chain.sort((x, y) => y.time.localeCompare(x.time));
+    const live = g.chain.find(a => a.time <= atTime && !a.revoked);
+    if (!live) continue;
+    out.push({
+      coordKey: g.coordKey, coord: g.coord, chain: g.chain, live,
+      spec: coordSpec(g.coord), weight: coordWeight(g.coord),
+      versionCount: g.chain.filter(a => !a.revoked).length,
+    });
+  }
+  return out;
+}
+
+function resolveAnswer(kbId, kpId, Q, atTime) {
+  const groups = liveGroups(kbId, kpId, atTime);
+  if (!groups.length) return { status: "none" };
+  const qKeys = Object.keys(Q).filter(k => Q[k] !== undefined && Q[k] !== "");
+
+  if (!qKeys.length) {
+    const def = groups.find(g => g.spec === 0);
+    if (def) return { status: "default", ...def, groups };
+    const latest = [...groups].sort((a, b) => b.live.time.localeCompare(a.live.time))[0];
+    return { status: "fallback-latest", ...latest, groups };
+  }
+
+  const candidates = groups.filter(g => coordCompatible(g.coord, Q));
+  if (!candidates.length) return { status: "none", groups };
+  candidates.sort((a, b) => b.spec - a.spec || b.weight - a.weight || b.live.time.localeCompare(a.live.time));
+  const top = candidates[0];
+  const exact = top.spec === qKeys.length && Object.keys(top.coord).every(k => String(top.coord[k]) === String(Q[k]));
+  return { status: exact ? "exact" : "weighted", ...top, groups, candidates };
+}
+
+function createKnowledgePoint(kbId, { title, content, effective_time, note }) {
+  const kps = getAllKnowledgePoints();
+  const id = nextKpId(kbId);
+  kps.push({ kbId, id, title, status: "active", operator: "admin", created_at: new Date().toISOString() });
+  saveKnowledgePoints(kps);
+  if (content && content.trim()) {
+    addAnswer(kbId, id, { coord: {}, content: content.trim(), effective_time, note: note || "初始创建" });
+  }
+  return id;
+}
+
+function updateKnowledgePointTitle(kbId, id, title) {
+  const kps = getAllKnowledgePoints();
+  const kp = kps.find(k => k.kbId === kbId && k.id === id);
+  if (!kp) return { ok: false, error: "知识点不存在。" };
+  kp.title = title;
+  saveKnowledgePoints(kps);
+  return { ok: true };
+}
+
+function softDeleteKnowledgePoint(kbId, id, { reason }) {
+  const kps = getAllKnowledgePoints();
+  const kp = kps.find(k => k.kbId === kbId && k.id === id);
+  if (!kp) return { ok: false, error: "知识点不存在。" };
+  kp.status = "deleted";
+  kp.deleted_at = new Date().toISOString();
+  kp.delete_reason = reason || "";
+  kp.operator = "admin";
+  saveKnowledgePoints(kps);
+  return { ok: true };
+}
+
+function restoreKnowledgePoint(kbId, id) {
+  const kps = getAllKnowledgePoints();
+  const kp = kps.find(k => k.kbId === kbId && k.id === id);
+  if (!kp) return { ok: false, error: "知识点不存在。" };
+  kp.status = "active";
+  kp.deleted_at = null;
+  kp.delete_reason = "";
+  saveKnowledgePoints(kps);
+  return { ok: true };
+}
+
+function listActiveKPs(kbId) { return getKnowledgePoints(kbId).filter(k => k.status === "active"); }
+function listTrash(kbId) { return getKnowledgePoints(kbId).filter(k => k.status === "deleted"); }
+
+function addAnswer(kbId, kpId, { coord, content, effective_time, note }) {
+  const answers = getAllAnswers();
+  answers.push({
+    id: "a" + Date.now() + Math.floor(Math.random() * 1000),
+    kbId, kpId, coord: coord || {}, content, time: effective_time,
+    operator: "admin", note: note || "", src: "人工填报", revoked: false, created_at: new Date().toISOString(),
+  });
+  saveAnswers(answers);
+}
+
+function editAnswer(kbId, kpId, oldCoord, { coord, content, effective_time, note }) {
+  const oldKey = coordKeyOf(oldCoord), newKey = coordKeyOf(coord);
+  if (oldKey !== newKey) {
+    revokeAnswerGroup(kbId, kpId, oldCoord, "条件已迁移至「" + coordText(coord) + "」");
+  }
+  addAnswer(kbId, kpId, { coord, content, effective_time, note: note || (oldKey !== newKey ? "条件迁移" : "内容更新") });
+}
+
+function revokeAnswerGroup(kbId, kpId, coord, reason) {
+  const answers = getAllAnswers();
+  const key = coordKeyOf(coord);
+  const now = new Date().toISOString();
+  answers.filter(a => a.kbId === kbId && a.kpId === kpId && coordKeyOf(a.coord) === key).forEach(a => {
+    a.revoked = true; a.revoked_at = now; a.revoked_by = "admin"; a.revoke_reason = reason || "";
+  });
+  saveAnswers(answers);
+}
+
+function promoteToDefault(kbId, kpId, content, effective_time) {
+  addAnswer(kbId, kpId, { coord: {}, content, effective_time, note: "设为默认答案" });
+}
+
+function changeLogRows(answers) {
+  const groups = new Map();
+  answers.forEach(a => {
+    const k = a.kbId + "::" + a.kpId + "::" + coordKeyOf(a.coord);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(a);
+  });
+  const log = [];
+  for (const chain of groups.values()) {
+    chain.sort((x, y) => x.created_at.localeCompare(y.created_at));
+    chain.forEach((a, i) => {
+      const isLast = i === chain.length - 1;
+      const state = !isLast ? "已被新版替代" : (a.revoked ? "已撤回" : "生效");
+      log.push({
+        t: a.created_at, who: a.operator, act: i === 0 ? "写答案" : "改答案",
+        tgt: coordText(a.coord), before: i === 0 ? "—" : chain[i - 1].content, after: a.content,
+        src: a.src || "人工填报", state, coord: a.coord, kbId: a.kbId, kpId: a.kpId,
+        revocable: isLast && !a.revoked,
+      });
+    });
+    const last = chain[chain.length - 1];
+    if (last.revoked) {
+      log.push({
+        t: last.revoked_at || last.created_at, who: last.revoked_by || "admin", act: "撤回答案",
+        tgt: coordText(last.coord), before: last.content, after: "(已撤回：" + (last.revoke_reason || "无说明") + ")",
+        src: "人工编辑", state: "生效", coord: last.coord, kbId: last.kbId, kpId: last.kpId,
+        revocable: false,
+      });
+    }
+  }
+  log.sort((a, b) => b.t.localeCompare(a.t));
+  return log;
+}
+function buildChangeLog(kbId, kpId) { return changeLogRows(getAnswersByKp(kbId, kpId)); }
+function buildGlobalChangeLog() { return changeLogRows(getAllAnswers()); }
+
+function computeKbStats(kbId) {
+  const kps = listActiveKPs(kbId);
+  let activeAnswers = 0, todayChanges = 0;
+  kps.forEach(kp => {
+    const answers = getAnswersByKp(kbId, kp.id);
+    activeAnswers += answers.filter(a => !a.revoked).length;
+    todayChanges += answers.filter(a => a.created_at.slice(0, 10) === MOCK_NOW || (a.revoked_at || "").slice(0, 10) === MOCK_NOW).length;
+  });
+  return {
+    subjectCount: kps.length,
+    activeAnswers,
+    enabledDimCount: getKbEnabledDims(kbId).length,
+    todayChanges,
+  };
+}
+
+let CURRENT_KB_ID = null;
+function setCurrentKb(kbId) { CURRENT_KB_ID = kbId; }
+
+function valueInputHtmlFor(def, value) {
+  value = value ?? "";
+  if (def.field_type === "number") return `<input type="number" data-dim="${escapeHtml(def.key)}" value="${escapeHtml(value)}" />`;
+  if (def.field_type === "date") return `<input type="date" data-dim="${escapeHtml(def.key)}" value="${escapeHtml(value)}" />`;
+  if (def.field_type === "boolean") {
+    return `<select data-dim="${escapeHtml(def.key)}">
+      <option value="true" ${value === "true" ? "selected" : ""}>是</option>
+      <option value="false" ${value === "false" ? "selected" : ""}>否</option>
+    </select>`;
+  }
+  const uniq = [...new Set(getAllAnswers().map(a => a.coord[def.key]).filter(Boolean))];
+  return `<input type="text" data-dim="${escapeHtml(def.key)}" value="${escapeHtml(value)}" list="dl-${escapeHtml(def.key)}" placeholder="输入或选择取值" />
+    <datalist id="dl-${escapeHtml(def.key)}">${uniq.map(v => `<option value="${escapeHtml(v)}"></option>`).join("")}</datalist>`;
+}
+
+function validateDimValue(fieldType, raw) {
+  if (raw === undefined || raw === null || raw === "") return { ok: true, value: undefined };
+  if (fieldType === "number") {
+    const n = Number(raw);
+    if (Number.isNaN(n)) return { ok: false, error: "必须是数值" };
+    return { ok: true, value: String(n) };
+  }
+  if (fieldType === "date") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(new Date(raw + "T00:00:00Z").getTime())) {
+      return { ok: false, error: "必须是合法日期(YYYY-MM-DD)" };
+    }
+    return { ok: true, value: raw };
+  }
+  if (fieldType === "boolean") return { ok: true, value: raw === "true" ? "true" : "false" };
+  return { ok: true, value: String(raw) };
+}
+
+let COND_ROWS = [];
+function condRowsHtml() {
+  const dims = getKbEnabledDims(CURRENT_KB_ID);
+  return COND_ROWS.map((row, i) => {
+    const def = dimByKey(row.key);
+    return `<div class="form-row" style="margin-bottom:8px">
+      <select onchange="COND_ROWS[${i}].key=this.value;COND_ROWS[${i}].value='';renderCondRows()" style="min-width:120px">
+        <option value="">选择维度…</option>
+        ${dims.map(d => `<option value="${escapeHtml(d.key)}" ${row.key === d.key ? "selected" : ""}>${escapeHtml(d.label)}</option>`).join("")}
+      </select>
+      <span class="f-val-wrap">${def ? valueInputHtmlFor(def, row.value) : `<input type="text" disabled placeholder="先选维度" />`}</span>
+      <a class="danger" style="font-size:13px" onclick="COND_ROWS.splice(${i},1);renderCondRows()">移除</a>
+    </div>`;
+  }).join("");
+}
+function renderCondRows() {
+  const box = document.getElementById("ansCondRows");
+  if (box) box.innerHTML = condRowsHtml();
+}
+function addCondRow() { COND_ROWS.push({ key: "", value: "" }); renderCondRows(); }
+function readCondRows(hintEl) {
+  const coord = {};
+  let error = "";
+  document.querySelectorAll("#ansCondRows [data-dim]").forEach(inp => {
+    const def = dimByKey(inp.dataset.dim);
+    const v = validateDimValue(def.field_type, inp.value);
+    if (!v.ok) { error = `「${def.label}」${v.error}`; return; }
+    if (v.value !== undefined) coord[inp.dataset.dim] = v.value;
+  });
+  if (error) { if (hintEl) hintEl.textContent = error; return null; }
+  return coord;
+}
+
+function openAddModal() {
+  document.getElementById("kpModalTitle").textContent = "新增知识点";
+  document.getElementById("kpId").value = "";
+  document.getElementById("kpTitle").value = "";
+  document.getElementById("kpContent").value = "";
+  document.getElementById("kpTime").value = MOCK_NOW;
+  document.getElementById("kpFormHint").textContent = "";
+  openModal("kpMask");
+}
+
+function submitKp(afterSave) {
+  const title = document.getElementById("kpTitle").value.trim();
+  const content = document.getElementById("kpContent").value.trim();
+  const time = document.getElementById("kpTime").value;
+  const hint = document.getElementById("kpFormHint");
+  if (!title || !time) { hint.textContent = "标题、生效时间为必填项。"; return; }
+  const newId = createKnowledgePoint(CURRENT_KB_ID, { title, content, effective_time: time });
+  toast(`已创建知识点 ID ${newId}`, "ok");
+  closeModal("kpMask");
+  if (afterSave) afterSave();
+}
+
+function openDeleteModal(id, title) {
+  document.getElementById("delId").value = id;
+  document.getElementById("delTitle").textContent = title;
+  document.getElementById("delReason").value = "";
+  openModal("delMask");
+}
+
+function submitDelete(afterSave) {
+  const id = document.getElementById("delId").value;
+  const reason = document.getElementById("delReason").value.trim();
+  if (!reason) { toast("请填写删除原因", "err"); return; }
+  const res = softDeleteKnowledgePoint(CURRENT_KB_ID, id, { reason });
+  if (!res.ok) { toast(res.error, "err"); return; }
+  toast(`已删除 ID ${id}，可在回收站恢复`, "ok");
+  closeModal("delMask");
+  if (afterSave) afterSave();
+}
+function afterDeleteRefresh() {
+  if (ROUTE.view === "detail") detRenderDetail();
+  else idxRenderListPage();
+}
+
+function openWriteAnswerModal(kpId, existing) {
+  document.getElementById("ansKpId").value = kpId;
+  document.getElementById("ansOldCoord").value = existing ? JSON.stringify(existing.coord) : "{}";
+  document.getElementById("ansModalTitle").textContent = existing ? "编辑答案" : "写一条答案";
+  document.getElementById("ansContent").value = existing ? existing.content : "";
+  document.getElementById("ansTime").value = MOCK_NOW;
+  document.getElementById("ansNote").value = "";
+  document.getElementById("ansFormHint").textContent = "";
+  COND_ROWS = existing ? Object.keys(existing.coord).map(k => ({ key: k, value: existing.coord[k] })) : [];
+  renderCondRows();
+  openModal("ansMask");
+}
+
+function submitAnswer(afterSave) {
+  const kpId = document.getElementById("ansKpId").value;
+  const oldCoord = JSON.parse(document.getElementById("ansOldCoord").value || "{}");
+  const content = document.getElementById("ansContent").value.trim();
+  const time = document.getElementById("ansTime").value;
+  const note = document.getElementById("ansNote").value.trim();
+  const hint = document.getElementById("ansFormHint");
+  if (!content || !time) { hint.textContent = "答案内容、生效时间为必填项。"; return; }
+  const coord = readCondRows(hint);
+  if (coord === null) return;
+
+  const isEdit = document.getElementById("ansModalTitle").textContent === "编辑答案";
+  if (isEdit) editAnswer(CURRENT_KB_ID, kpId, oldCoord, { coord, content, effective_time: time, note });
+  else addAnswer(CURRENT_KB_ID, kpId, { coord, content, effective_time: time, note });
+
+  toast("已保存答案", "ok");
+  closeModal("ansMask");
+  if (afterSave) afterSave();
+}
+
+function openPromoteModal(kpId, content) {
+  document.getElementById("promoteKpId").value = kpId;
+  document.getElementById("promoteContent").textContent = content;
+  document.getElementById("promoteTime").value = MOCK_NOW;
+  openModal("promoteMask");
+}
+function submitPromote(afterSave) {
+  const kpId = document.getElementById("promoteKpId").value;
+  const content = document.getElementById("promoteContent").textContent;
+  const time = document.getElementById("promoteTime").value;
+  promoteToDefault(CURRENT_KB_ID, kpId, content, time);
+  toast("已设为默认答案", "ok");
+  closeModal("promoteMask");
+  if (afterSave) afterSave();
+}
+
+function openRevokeAnswerModal(kbId, kpId, coord, contentPreview) {
+  document.getElementById("revokeKbId").value = kbId;
+  document.getElementById("revokeKpId").value = kpId;
+  document.getElementById("revokeCoord").value = JSON.stringify(coord);
+  document.getElementById("revokeContent").textContent = contentPreview;
+  document.getElementById("revokeReason").value = "";
+  openModal("revokeMask");
+}
+function submitRevoke(afterSave) {
+  const kbId = document.getElementById("revokeKbId").value;
+  const kpId = document.getElementById("revokeKpId").value;
+  const coord = JSON.parse(document.getElementById("revokeCoord").value || "{}");
+  const reason = document.getElementById("revokeReason").value.trim();
+  if (!reason) { toast("请填写撤回原因", "err"); return; }
+  revokeAnswerGroup(kbId, kpId, coord, reason);
+  toast("已撤回该条件下的答案", "ok");
+  closeModal("revokeMask");
+  if (afterSave) afterSave();
+}
+function afterRevokeRefresh() {
+  if (ROUTE.view === "detail") detRenderDetail();
+  else renderLogPage();
+}
+
+function addDimension(def) {
+  const dims = getDimensions();
+  if (dims.some(d => d.key === def.key)) return { ok: false, error: `维度 key「${def.key}」已存在。` };
+  dims.push({ ...def, status: "active" });
+  saveDimensions(dims);
+  return { ok: true };
+}
+
+function updateDimension(key, patch) {
+  const dims = getDimensions();
+  const d = dims.find(x => x.key === key);
+  if (!d) return { ok: false, error: "维度不存在。" };
+  Object.assign(d, patch);
+  saveDimensions(dims);
+  return { ok: true };
+}
+
+function toggleDimensionStatus(key) {
+  const dims = getDimensions();
+  const d = dims.find(x => x.key === key);
+  if (!d) return;
+  d.status = d.status === "active" ? "deprecated" : "active";
+  saveDimensions(dims);
+}
+
+function dimensionUsageCount(key) {
+  return getAllAnswers().filter(a => !a.revoked && a.coord[key] !== undefined && a.coord[key] !== "").length;
+}
+
+function toast(msg, type) {
+  const box = document.getElementById("toast");
+  if (!box) return;
+  const el = document.createElement("div");
+  el.className = "toast-item " + (type || "info");
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
+function openModal(id) { document.getElementById(id).classList.add("show"); }
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+
+document.addEventListener("click", (e) => {
+  if (e.target.classList && e.target.classList.contains("mask")) {
+    e.target.classList.remove("show");
+  }
+});
+
+function closeAllDropdowns() { document.querySelectorAll(".dd.open").forEach(d => d.classList.remove("open")); }
+function toggleDropdown(el) {
+  const isOpen = el.classList.contains("open");
+  closeAllDropdowns();
+  if (!isOpen) el.classList.add("open");
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".dd")) closeAllDropdowns();
+});
+
+/* 侧栏 / 知识库内页签：改用 go() 做客户端路由，不再是真实的多页面跳转 */
+function renderSidebar(activeKey) {
+  const host = document.getElementById("sideNav");
+  if (!host) return;
+  host.innerHTML = `
+    <div class="side-logo">
+      <span class="h-bar"></span>
+      <span class="name">知识库管理<small>KNOWLEDGE BASE ADMIN</small></span>
+    </div>
+    <div class="side-group">全局</div>
+    <nav class="side-menu">
+      <a class="side-item" data-key="kb-list" onclick="go('kb-list')"><span class="ic">▦</span>知识库列表</a>
+      <a class="side-item" data-key="dimensions" onclick="go('dimensions')"><span class="ic">▤</span>维度管理</a>
+      <a class="side-item" data-key="op-logs" onclick="go('op-logs')"><span class="ic">⟲</span>操作日志</a>
+    </nav>
+    <div class="side-foot">单文件演示版 · 数据存于浏览器本地<br />后端 / 数据库尚未接入<br /><a onclick="resetDemoData();go('kb-list');">重置演示数据</a></div>
+  `;
+  host.querySelectorAll(".side-item[data-key]").forEach(el => {
+    el.classList.toggle("sel", el.dataset.key === activeKey);
+  });
+}
+
+function renderKbTabs(activeKey, kbId) {
+  const items = [
+    { key: "kp-list", label: "知识点列表" },
+    { key: "trash", label: "回收站" },
+    { key: "settings", label: "知识库设置" },
+  ];
+  return `<div class="tabs kb-tabs">
+    ${items.map(it => `<a class="tab ${it.key === activeKey ? "active" : ""}" onclick="go('${it.key}',{kb:'${kbId}'})">${it.label}</a>`).join("")}
+  </div>`;
+}
+
+function initShell(activeKey) {
+  renderSidebar(activeKey);
+  tickClock();
+}
+
+function tickClock() {
+  const t = document.getElementById("topClockTime");
+  const d = document.getElementById("topClockDate");
+  if (!t || !d) return;
+  const now = new Date();
+  t.textContent = now.toLocaleTimeString("zh-CN", { hour12: false });
+  d.textContent = now.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+setInterval(tickClock, 1000);
+
+function renderPager(container, opts) {
+  const { total, page, pageSize, onChange } = opts;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  container.innerHTML = "";
+  const info = document.createElement("span");
+  info.innerHTML = `共 <b class="num">${total}</b> 条 · 第 <b class="num">${page}</b>/<b class="num">${pages}</b> 页`;
+  container.appendChild(info);
+
+  const prev = document.createElement("button");
+  prev.textContent = "‹";
+  prev.disabled = page <= 1;
+  prev.onclick = () => onChange(page - 1);
+  container.appendChild(prev);
+
+  for (let p = 1; p <= pages; p++) {
+    const b = document.createElement("button");
+    b.textContent = p;
+    b.className = p === page ? "cur" : "";
+    b.onclick = () => onChange(p);
+    container.appendChild(b);
+  }
+
+  const next = document.createElement("button");
+  next.textContent = "›";
+  next.disabled = page >= pages;
+  next.onclick = () => onChange(page + 1);
+  container.appendChild(next);
+}
+
+function dimValueDisplay(def, raw) {
+  if (raw === undefined || raw === null || raw === "") return "—";
+  if (def && def.field_type === "boolean") return raw === "true" ? "是" : "否";
+  return raw;
+}
+
+/* ============================================================
+   共享的小工具：JSON 转 onclick 属性安全字符串 / 变更状态标签 / 无有效知识库时的兜底卡片
+   ============================================================ */
+function attrJson(obj) { return JSON.stringify(obj).replace(/'/g, "&#39;"); }
+function stateTag(state) {
+  if (state === "生效") return `<span class="tag green">生效</span>`;
+  if (state === "已撤回") return `<span class="tag red">已撤回</span>`;
+  return `<span class="tag gray">已被新版替代</span>`;
+}
+function noKbCard() {
+  return `<div class="card"><div class="empty-block">
+    没有指定有效的知识库（可能已被停用或不存在）<br />
+    <span style="display:inline-block;margin-top:12px"><a class="btn primary" onclick="go('kb-list')">‹ 返回知识库列表</a></span>
+  </div></div>`;
+}
+
+/* ============================================================
+   单文件路由：go(view, params) 替代原来的多页面跳转
+   ============================================================ */
+let ROUTE = { view: "kb-list", kb: null, id: null };
+function go(view, params) {
+  ROUTE = { view, kb: (params && params.kb) || null, id: (params && params.id) || null };
+  renderRoute();
+  window.scrollTo(0, 0);
+}
+
+/* ============================================================
+   视图：知识库列表(kb-list)
+   ============================================================ */
+let kblPage = 1;
+const KBL_PAGE_SIZE = 8;
+let kblFilters = { keyword: "" };
+
+function kblApplyFilters() {
+  kblFilters.keyword = document.getElementById("fKeyword").value.trim().toLowerCase();
+  kblPage = 1;
+  kblRenderList();
+}
+function kblResetFilters() {
+  document.getElementById("fKeyword").value = "";
+  kblFilters = { keyword: "" };
+  kblPage = 1;
+  kblRenderList();
+}
+
+function kblRenderList() {
+  const all = getKnowledgeBases();
+  const filtered = all.filter(b => {
+    if (!kblFilters.keyword) return true;
+    const hay = (b.name + " " + b.description).toLowerCase();
+    return hay.includes(kblFilters.keyword);
+  });
+
+  const tbody = document.getElementById("kbBody");
+  const start = (kblPage - 1) * KBL_PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + KBL_PAGE_SIZE);
+
+  if (!pageItems.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">暂无符合条件的知识库${kblFilters.keyword ? "，试试调整搜索关键词" : "，点击右上角「+ 新增知识库」创建"}</td></tr>`;
+  } else {
+    tbody.innerHTML = pageItems.map(b => {
+      const count = knowledgeBaseKpCount(b.id);
+      const statusHtml = b.status === "active"
+        ? `<span class="status-dot ok"><i></i>启用中</span>`
+        : `<span class="status-dot off"><i></i>已停用</span>`;
+      const toggleLabel = b.status === "active" ? "停用" : "启用";
+      const enterLink = b.status === "active" ? `<a onclick="go('kp-list',{kb:'${b.id}'})">${escapeHtml(b.name)}</a>` : escapeHtml(b.name);
+      return `<tr>
+        <td>${enterLink}</td>
+        <td>${escapeHtml(b.description || "—")}</td>
+        <td class="num" style="font-weight:400">${count}</td>
+        <td>${statusHtml}</td>
+        <td class="num" style="font-weight:400">${escapeHtml(b.created_at.slice(0, 10))}</td>
+        <td class="op-col ops">
+          ${b.status === "active" ? `<a onclick="go('kp-list',{kb:'${b.id}'})">进入</a>` : ""}
+          <a onclick="kblOpenEditModal('${b.id}')">编辑</a>
+          <a class="${b.status === "active" ? "danger" : ""}" onclick="kblOpenToggleModal('${b.id}')">${toggleLabel}</a>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  renderPager(document.getElementById("kbPager"), {
+    total: filtered.length, page: kblPage, pageSize: KBL_PAGE_SIZE,
+    onChange: (p) => { kblPage = p; kblRenderList(); },
+  });
+}
+
+function kblOpenAddModal() {
+  document.getElementById("kbModalTitle").textContent = "新增知识库";
+  document.getElementById("kbId").value = "";
+  document.getElementById("kbName").value = "";
+  document.getElementById("kbDesc").value = "";
+  document.getElementById("kbFormHint").textContent = "";
+  openModal("kbMask");
+}
+
+function kblOpenEditModal(id) {
+  const b = getKnowledgeBase(id);
+  document.getElementById("kbModalTitle").textContent = `编辑知识库 · ${b.name}`;
+  document.getElementById("kbId").value = id;
+  document.getElementById("kbName").value = b.name;
+  document.getElementById("kbDesc").value = b.description || "";
+  document.getElementById("kbFormHint").textContent = "";
+  openModal("kbMask");
+}
+
+function submitKb() {
+  const id = document.getElementById("kbId").value;
+  const name = document.getElementById("kbName").value.trim();
+  const description = document.getElementById("kbDesc").value.trim();
+  const hint = document.getElementById("kbFormHint");
+  if (!name) { hint.textContent = "请填写知识库名称。"; return; }
+
+  if (id) {
+    updateKnowledgeBase(id, { name, description });
+    toast(`已更新知识库「${name}」`, "ok");
+  } else {
+    addKnowledgeBase({ name, description });
+    toast(`已创建知识库「${name}」`, "ok");
+  }
+  closeModal("kbMask");
+  kblRenderList();
+}
+
+function kblOpenToggleModal(id) {
+  const b = getKnowledgeBase(id);
+  const willDeactivate = b.status === "active";
+  const count = knowledgeBaseKpCount(id);
+  document.getElementById("toggleKbId").value = id;
+  document.getElementById("toggleKbTitle").textContent = willDeactivate ? "停用知识库" : "启用知识库";
+  document.getElementById("toggleKbBody").innerHTML = `即将${willDeactivate ? "停用" : "启用"}知识库 <b style="color:var(--ink-1)">${escapeHtml(b.name)}</b>。`;
+  document.getElementById("toggleKbConfirmBtn").className = willDeactivate ? "btn danger" : "btn primary";
+  if (willDeactivate) {
+    document.getElementById("toggleKbRisk").style.display = "";
+    document.getElementById("toggleKbRisk").textContent = `该知识库下有 ${count} 个知识点，停用后知识库列表不再显示、无法进入；知识点数据不会被删除，重新启用后可继续访问。`;
+  } else {
+    document.getElementById("toggleKbRisk").style.display = "none";
+  }
+  openModal("toggleKbMask");
+}
+
+function confirmToggleKb() {
+  const id = document.getElementById("toggleKbId").value;
+  toggleKnowledgeBaseStatus(id);
+  toast("已更新知识库状态", "ok");
+  closeModal("toggleKbMask");
+  kblRenderList();
+}
+
+function initKbList() {
+  document.getElementById("pageTitle").textContent = "知识库列表";
+  document.getElementById("pageCrumb").textContent = "知识库管理 / 知识库列表";
+  document.getElementById("pageContent").innerHTML = `
+    <div class="notice">
+      <b>知识库</b>是知识点的容器，不同知识库之间的知识点互不影响；<b>维度定义</b>是全局的，所有知识库共享同一套维度（在「维度管理」里统一维护）。点击知识库名称进入其知识点列表。
+    </div>
+
+    <div class="card ov">
+      <div class="card-head">
+        <span class="tick"></span>
+        <h3>知识库列表</h3>
+        <span class="sub">全部知识库</span>
+        <span class="spacer"></span>
+        <span class="ops"><button class="btn primary" onclick="kblOpenAddModal()">+ 新增知识库</button></span>
+      </div>
+
+      <div class="form-row">
+        <input type="text" id="fKeyword" placeholder="搜索知识库名称或描述" onkeydown="if(event.key==='Enter'){kblApplyFilters()}" />
+        <button class="btn primary sm" onclick="kblApplyFilters()">查 询</button>
+        <button class="btn sm" onclick="kblResetFilters()">重 置</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>描述</th>
+              <th>知识点数</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th class="op-col">操作</th>
+            </tr>
+          </thead>
+          <tbody id="kbBody"></tbody>
+        </table>
+      </div>
+      <div class="pager" id="kbPager"></div>
+    </div>`;
+  kblPage = 1; kblFilters = { keyword: "" };
+  initShell("kb-list");
+  kblRenderList();
+}
+
+/* ============================================================
+   视图：维度管理(dimensions)
+   ============================================================ */
+function renderDimBody() {
+  const dims = getDimensions();
+  const tbody = document.getElementById("dimBody");
+  if (!dims.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">暂无维度定义，点击右上角「+ 新增维度」创建</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = dims.map(d => {
+    const usage = dimensionUsageCount(d.key);
+    const statusHtml = d.status === "active"
+      ? `<span class="status-dot ok"><i></i>启用中</span>`
+      : `<span class="status-dot off"><i></i>已停用</span>`;
+    const toggleLabel = d.status === "active" ? "停用" : "启用";
+    return `<tr>
+      <td class="num" style="font-weight:400">${escapeHtml(d.key)}</td>
+      <td>${escapeHtml(d.label)}</td>
+      <td><span class="tag blue ftype-tag">${FIELD_TYPE_LABEL[d.field_type]}</span></td>
+      <td class="num" style="font-weight:400">${d.weight ?? 50}</td>
+      <td>${statusHtml}</td>
+      <td class="num" style="font-weight:400">${usage}</td>
+      <td class="op-col ops">
+        <a onclick="openEditDimModal('${d.key}')">编辑</a>
+        <a class="${d.status === "active" ? "danger" : ""}" onclick="openToggleDimModal('${d.key}')">${toggleLabel}</a>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function onDimTypeChange() {
+  const type = document.getElementById("dimType").value;
+  const wrap = document.getElementById("dimDefaultWrap");
+  if (type === "number") {
+    wrap.innerHTML = `<label>默认取值提示(可选)</label><input type="number" id="dimDefault" />`;
+  } else if (type === "date") {
+    wrap.innerHTML = `<label>默认取值提示(可选)</label><input type="date" id="dimDefault" />`;
+  } else if (type === "boolean") {
+    wrap.innerHTML = `<label>默认取值提示(可选)</label><select id="dimDefault"><option value="">未设置</option><option value="true">是</option><option value="false">否</option></select>`;
+  } else {
+    wrap.innerHTML = `<label>默认取值提示(可选)</label><input type="text" id="dimDefault" />`;
+  }
+}
+
+function openAddDimModal() {
+  document.getElementById("dimModalTitle").textContent = "新增维度";
+  document.getElementById("dimLabel").value = "";
+  document.getElementById("dimLabel").disabled = false;
+  document.getElementById("dimType").value = "text";
+  document.getElementById("dimType").disabled = false;
+  document.getElementById("dimWeight").value = 50;
+  document.getElementById("dimKeyHint").textContent = "新增时会同时作为内部标识(key)；创建后 key 不可更改，显示名称之后仍可修改。";
+  document.getElementById("dimKeyField").value = "";
+  document.getElementById("dimFormHint").textContent = "";
+  onDimTypeChange();
+  openModal("dimMask");
+}
+
+function openEditDimModal(key) {
+  const d = getDimensions().find(x => x.key === key);
+  document.getElementById("dimModalTitle").textContent = `编辑维度 · ${d.label}`;
+  document.getElementById("dimLabel").value = d.label;
+  document.getElementById("dimLabel").disabled = false;
+  document.getElementById("dimType").value = d.field_type;
+  document.getElementById("dimType").disabled = true;
+  document.getElementById("dimWeight").value = d.weight ?? 50;
+  document.getElementById("dimKeyHint").textContent = `key「${d.key}」创建后不可修改；字段类型「${FIELD_TYPE_LABEL[d.field_type]}」创建后不可修改。`;
+  document.getElementById("dimKeyField").value = d.key;
+  document.getElementById("dimFormHint").textContent = "";
+  onDimTypeChange();
+  document.getElementById("dimDefault").value = d.default_value || "";
+  openModal("dimMask");
+}
+
+function submitDim() {
+  const label = document.getElementById("dimLabel").value.trim();
+  const type = document.getElementById("dimType").value;
+  const weight = Math.min(100, Math.max(1, parseInt(document.getElementById("dimWeight").value, 10) || 50));
+  const defaultRaw = document.getElementById("dimDefault").value;
+  const existingKey = document.getElementById("dimKeyField").value;
+  const hint = document.getElementById("dimFormHint");
+
+  if (!label) { hint.textContent = "请填写维度名称。"; return; }
+
+  const v = validateDimValue(type, defaultRaw);
+  if (!v.ok) { hint.textContent = "默认取值提示" + v.error; return; }
+
+  if (existingKey) {
+    updateDimension(existingKey, { label, weight, default_value: v.value || "" });
+    toast(`已更新维度「${label}」`, "ok");
+  } else {
+    const res = addDimension({ key: label, label, field_type: type, weight, default_value: v.value || "" });
+    if (!res.ok) { hint.textContent = res.error; return; }
+    toast(`已新增维度「${label}」，需要到「知识库设置」里为具体知识库启用后才能使用`, "ok");
+  }
+  closeModal("dimMask");
+  renderDimBody();
+}
+
+function openToggleDimModal(key) {
+  const d = getDimensions().find(x => x.key === key);
+  const willDeactivate = d.status === "active";
+  const usage = dimensionUsageCount(key);
+  document.getElementById("toggleDimKey").value = key;
+  document.getElementById("toggleDimTitle").textContent = willDeactivate ? "停用维度" : "启用维度";
+  document.getElementById("toggleDimBody").innerHTML = `即将${willDeactivate ? "停用" : "启用"}维度 <b style="color:var(--ink-1)">${escapeHtml(d.label)}</b>。`;
+  document.getElementById("toggleDimConfirmBtn").className = willDeactivate ? "btn danger" : "btn primary";
+  if (willDeactivate) {
+    document.getElementById("toggleDimRisk").style.display = "";
+    document.getElementById("toggleDimRisk").textContent = `已有 ${usage} 条答案写入过该维度的取值，停用不会影响这些历史数据，仅新增/编辑答案时不再出现该字段。`;
+  } else {
+    document.getElementById("toggleDimRisk").style.display = "none";
+  }
+  openModal("toggleDimMask");
+}
+
+function confirmToggleDim() {
+  const key = document.getElementById("toggleDimKey").value;
+  toggleDimensionStatus(key);
+  toast("已更新维度状态", "ok");
+  closeModal("toggleDimMask");
+  renderDimBody();
+}
+
+function initDimensions() {
+  document.getElementById("pageTitle").textContent = "维度管理";
+  document.getElementById("pageCrumb").textContent = "全局 / 维度管理";
+  document.getElementById("pageContent").innerHTML = `
+    <div class="notice">
+      维度的<b>字段类型</b>创建后不可修改（避免破坏已有数据的类型一致性）；如需变更类型，请停用旧维度并新建一个新维度。停用维度不影响历史答案已经写入的取值，只影响之后新增/编辑答案时是否还能选用它。每个知识库需要在「知识库设置」里单独<b>启用</b>想用的维度，才能在该知识库的答案里使用。<b>权重</b>用于查询条件没有精确命中时的回退排序：条件更具体的答案优先；同样具体时，涉及维度的权重总和更高的答案优先。
+    </div>
+
+    <div class="card ov">
+      <div class="card-head">
+        <span class="tick"></span>
+        <h3>维度定义</h3>
+        <span class="sub">知识点答案可携带的可扩展条件</span>
+        <span class="spacer"></span>
+        <span class="ops"><button class="btn primary" onclick="openAddDimModal()">+ 新增维度</button></span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>key</th>
+              <th>显示名称</th>
+              <th>字段类型</th>
+              <th>权重</th>
+              <th>状态</th>
+              <th>使用中的答案</th>
+              <th class="op-col">操作</th>
+            </tr>
+          </thead>
+          <tbody id="dimBody"></tbody>
+        </table>
+      </div>
+    </div>`;
+  initShell("dimensions");
+  renderDimBody();
+}
+
+/* ============================================================
+   视图：知识库设置(kb-settings) —— 启用维度
+   ============================================================ */
+let stgKb = null;
+
+function stgRenderDimCheckList() {
+  const enabled = new Set(stgKb.enabledDimKeys || []);
+  const dims = getActiveDimensions();
+  if (!dims.length) {
+    return `<div class="empty-block">还没有任何启用中的全局维度，先去「维度管理」新增一个。</div>`;
+  }
+  return dims.map(d => {
+    const usage = dimensionUsageCount(d.key);
+    return `<label class="chk" style="width:100%;justify-content:space-between;margin-bottom:8px">
+      <span style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" data-key="${escapeHtml(d.key)}" ${enabled.has(d.key) ? "checked" : ""} />
+        <span style="font-weight:600;color:var(--ink-1)">${escapeHtml(d.label)}</span>
+        <span class="tag blue ftype-tag">${FIELD_TYPE_LABEL[d.field_type]}</span>
+        <span class="field-hint">权重 ${d.weight ?? 50}</span>
+      </span>
+      <span class="field-hint">全局共 ${usage} 条答案在用</span>
+    </label>`;
+  }).join("");
+}
+
+function stgSaveEnabledDims() {
+  const keys = [...document.querySelectorAll("#dimCheckList [data-key]:checked")].map(el => el.dataset.key);
+  setKbEnabledDims(stgKb.id, keys);
+  toast("已保存本知识库启用的维度", "ok");
+  stgRenderPage();
+}
+
+function stgRenderPage() {
+  stgKb = getKnowledgeBase(stgKb.id);
+  document.getElementById("pageTitle").textContent = "知识库设置";
+  document.getElementById("pageCrumb").textContent = `${stgKb.name} / 知识库设置`;
+  document.getElementById("pageContent").innerHTML = `
+    ${renderKbTabs("settings", stgKb.id)}
+
+    <div class="notice">
+      维度定义是<b>全局共享</b>的，但每个知识库需要单独勾选「启用」才能在写答案时用到该维度作为适用条件；停用/取消勾选不影响本知识库历史答案里已经写入的取值，只影响之后能否继续选用。
+    </div>
+
+    <div class="card ov">
+      <div class="card-head">
+        <span class="tick"></span>
+        <h3>启用维度</h3>
+        <span class="sub">从全局维度库中，选择本知识库「${escapeHtml(stgKb.name)}」要用到的维度</span>
+        <span class="spacer"></span>
+        <span class="ops"><a onclick="go('dimensions')">前往维度管理 »</a></span>
+      </div>
+      <div id="dimCheckList">${stgRenderDimCheckList()}</div>
+      <div class="form-row" style="margin-top:6px">
+        <button class="btn primary" onclick="stgSaveEnabledDims()">保 存</button>
+      </div>
+    </div>`;
+}
+
+function initKbSettings() {
+  stgKb = ROUTE.kb ? getKnowledgeBase(ROUTE.kb) : null;
+  if (!stgKb || stgKb.status !== "active") {
+    initShell("settings");
+    document.getElementById("pageTitle").textContent = "知识库设置";
+    document.getElementById("pageCrumb").textContent = "知识库设置";
+    document.getElementById("pageContent").innerHTML = noKbCard();
+    return;
+  }
+  initShell("settings");
+  stgRenderPage();
+}
+
+/* ============================================================
+   视图：知识点列表(kp-list，即原 index.html)
+   ============================================================ */
+let idxKb = null;
+let idxS = { kw: "", filters: {}, qMode: "now", qTime: MOCK_NOW, page: 1, ddOpen: false, ddDim: null, expanded: {} };
+const IDX_PAGE_SIZE = 6;
+
+function idxCondPicker() {
+  const dims = getKbEnabledDims(idxKb.id);
+  const chips = Object.keys(idxS.filters).filter(k => idxS.filters[k] !== undefined && idxS.filters[k] !== "").map(k => {
+    const d = dimByKey(k);
+    return `<span class="tag blue" style="cursor:pointer" title="点击移除该条件" onclick="idxRemoveFilter('${k}')">${escapeHtml(d ? d.label : k)} = ${escapeHtml(dimValueDisplay(d, idxS.filters[k]))} ✕</span>`;
+  }).join("");
+
+  let ddMenu = "";
+  if (idxS.ddOpen) {
+    if (idxS.ddDim) {
+      const d = dimByKey(idxS.ddDim);
+      ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+        <div class="dd-group">「${escapeHtml(d.label)}」= ?</div>
+        <div style="padding:2px 12px 10px">
+          <div id="ddValWrap">${valueInputHtmlFor(d, idxS.filters[d.key] ?? "")}</div>
+          <button class="btn primary sm" style="margin-top:8px" onclick="idxCommitDdFilter()">确 定</button>
+        </div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="idxS.ddDim=null;idxRenderListPage()"><span class="t" style="color:var(--ink-5)">‹ 返回维度列表</span></div>
+      </div>`;
+    } else {
+      ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+        <div class="dd-group">按哪个维度加条件？(本知识库已启用 ${dims.length} 个维度)</div>
+        ${dims.length ? dims.map(d => `<div class="dd-item" onclick="idxS.ddDim='${d.key}';idxRenderListPage()"><span class="t">${escapeHtml(d.label)}${idxS.filters[d.key] !== undefined && idxS.filters[d.key] !== "" ? " · 已选 " + escapeHtml(dimValueDisplay(d, idxS.filters[d.key])) : ""}</span><span class="d">${FIELD_TYPE_LABEL[d.field_type]} · 权重 ${d.weight ?? 50}</span></div>`).join("")
+          : `<div class="dd-item" style="color:var(--ink-6);cursor:default">本知识库还没有启用任何维度，去「知识库设置」启用</div>`}
+      </div>`;
+    }
+  }
+
+  return `<span class="f-lbl">时间</span>
+    <span class="seg">
+      <button class="${idxS.qMode !== "day" ? "on" : ""}" onclick="idxS.qMode='now';idxS.qTime=MOCK_NOW;idxRenderListPage()">最新</button>
+      <button class="${idxS.qMode === "day" ? "on" : ""}" onclick="idxS.qMode='day';idxRenderListPage()">回看某天</button>
+    </span>
+    ${idxS.qMode === "day" ? `<input type="date" value="${idxS.qTime}" max="${MOCK_NOW}" onchange="if(this.value){idxS.qTime=this.value;idxRenderListPage()}" />` : ""}
+    ${chips}
+    <span class="dd ${idxS.ddOpen ? "open" : ""}">
+      <button class="btn sm" onclick="event.stopPropagation();idxS.ddOpen=!idxS.ddOpen;idxS.ddDim=null;idxRenderListPage()">+ 加一个条件</button>
+      ${ddMenu}
+    </span>`;
+}
+
+function idxCommitDdFilter() {
+  const d = dimByKey(idxS.ddDim);
+  const inp = document.getElementById("ddValWrap").querySelector("[data-dim]");
+  const v = validateDimValue(d.field_type, inp.value);
+  if (!v.ok) { toast(d.label + v.error, "err"); return; }
+  if (v.value === undefined) { toast("请输入取值", "err"); return; }
+  idxS.filters[d.key] = v.value;
+  idxS.ddOpen = false; idxS.ddDim = null; idxS.page = 1;
+  idxRenderListPage();
+}
+function idxRemoveFilter(k) { delete idxS.filters[k]; idxS.page = 1; idxRenderListPage(); }
+document.addEventListener("click", e => {
+  if (idxS.ddOpen && !e.target.closest(".dd") && ROUTE.view === "kp-list") { idxS.ddOpen = false; idxS.ddDim = null; idxRenderListPage(); }
+});
+
+function idxDoQuery() {
+  const kwEl = document.getElementById("fKeyword");
+  if (kwEl) idxS.kw = kwEl.value.trim().toLowerCase();
+  idxS.page = 1;
+  idxRenderListPage();
+}
+function idxResetQuery() {
+  idxS = { kw: "", filters: {}, qMode: "now", qTime: MOCK_NOW, page: 1, ddOpen: false, ddDim: null, expanded: idxS.expanded };
+  idxRenderListPage();
+}
+function idxToggleExpand(id) { idxS.expanded[id] = !idxS.expanded[id]; idxRenderListPage(); }
+
+function idxAnsPreview(kp) {
+  const hasQ = Object.keys(idxS.filters).some(k => idxS.filters[k] !== undefined && idxS.filters[k] !== "");
+  const r = resolveAnswer(idxKb.id, kp.id, idxS.filters, idxS.qTime);
+  if (r.status === "none") {
+    return `<span style="color:var(--ink-7)">${hasQ ? "这个条件、这个时间点还没有匹配的答案" : "还没有写过任何答案"}</span>`;
+  }
+  const otherCount = (r.groups ? r.groups.length : 1) - 1;
+  if (r.status === "default" || r.status === "fallback-latest") {
+    const tag = r.status === "default" ? '<span class="tag gray">默认</span>' : '<span class="tag orange">无默认 · 取最新</span>';
+    return `${tag} ${escapeHtml(r.live.content)}${otherCount > 0 ? ` <span style="font-size:12px;color:var(--ink-6)">· 另有 ${otherCount} 条带条件的说法，展开看</span>` : ""}`;
+  }
+  if (r.status === "exact") {
+    return `${escapeHtml(r.live.content)} ${coordLabel(r.coord)}<span class="tag green" style="margin-left:4px">精确命中</span>`;
+  }
+  return `${escapeHtml(r.live.content)} ${coordLabel(r.coord)}<span class="tag orange" style="margin-left:4px">未精确命中 · 按权重回退</span>`;
+}
+
+function idxKpAnswerTree(kpId, atTime) {
+  const groupsMap = new Map();
+  getAnswersByKp(idxKb.id, kpId).forEach(a => {
+    const k = coordKeyOf(a.coord);
+    if (!groupsMap.has(k)) groupsMap.set(k, { coord: a.coord, chain: [] });
+    groupsMap.get(k).chain.push(a);
+  });
+  if (!groupsMap.size) return `<div class="kids"><div class="mini-note" style="padding:8px 0">还没有任何答案</div></div>`;
+  const sections = { def: [], single: {}, multi: [] };
+  for (const g of groupsMap.values()) {
+    g.chain.sort((x, y) => y.time.localeCompare(x.time));
+    g.live = g.chain.find(a => a.time <= atTime && !a.revoked) || null;
+    const ks = Object.keys(g.coord).filter(k => g.coord[k] !== undefined && g.coord[k] !== "");
+    if (!ks.length) sections.def.push(g);
+    else if (ks.length === 1) (sections.single[ks[0]] = sections.single[ks[0]] || []).push(g);
+    else sections.multi.push(g);
+  }
+  const leaf = (g, labelHtml) => {
+    const arrow = labelHtml ? labelHtml + ' <span style="color:var(--ink-6)">→</span> ' : "· ";
+    if (!g.live) {
+      const last = g.chain[0];
+      return `<div class="tnode" style="cursor:default;color:var(--ink-6)">${arrow}<s>${escapeHtml(last.content)}</s> <span class="cnt">已撤回，留痕保存</span></div>`;
+    }
+    const verCount = g.chain.filter(a => !a.revoked).length;
+    return `<div class="tnode" style="cursor:default">${arrow}${escapeHtml(g.live.content)} <span class="cnt"><span class="num" style="font-weight:400">${g.live.time}</span> 起 · 共 ${verCount} 版</span></div>`;
+  };
+  let h = '<div class="kids">';
+  if (sections.def.length) h += `<div class="tnode" style="cursor:default">▾ <span class="tag gray">默认答案</span></div><div class="kids">${sections.def.map(g => leaf(g)).join("")}</div>`;
+  for (const k in sections.single) {
+    const d = dimByKey(k);
+    h += `<div class="tnode" style="cursor:default">▾ <span class="tag purple">${escapeHtml(d ? d.label : k)}</span> <span class="cnt">${sections.single[k].length} 个取值</span></div>
+      <div class="kids">${sections.single[k].map(g => leaf(g, `<span class="tag blue">${escapeHtml(g.coord[k])}</span>`)).join("")}</div>`;
+  }
+  if (sections.multi.length) {
+    h += `<div class="tnode" style="cursor:default">▾ <span class="tag purple">组合条件</span> <span class="cnt">${sections.multi.length} 条</span></div>
+      <div class="kids">${sections.multi.map(g => leaf(g, coordLabel(g.coord))).join("")}</div>`;
+  }
+  return h + "</div>";
+}
+
+function idxVisibleKps() {
+  const hasQ = Object.keys(idxS.filters).some(k => idxS.filters[k] !== undefined && idxS.filters[k] !== "");
+  return listActiveKPs(idxKb.id).filter(kp => {
+    if (idxS.kw && !kp.title.toLowerCase().includes(idxS.kw)) return false;
+    if (hasQ) {
+      const r = resolveAnswer(idxKb.id, kp.id, idxS.filters, idxS.qTime);
+      if (r.status === "none") return false;
+    }
+    return true;
+  });
+}
+
+function idxRenderList() {
+  const all = idxVisibleKps();
+  const start = (idxS.page - 1) * IDX_PAGE_SIZE;
+  const pageItems = all.slice(start, start + IDX_PAGE_SIZE);
+  const hasFilter = idxS.kw || Object.keys(idxS.filters).some(k => idxS.filters[k] !== undefined && idxS.filters[k] !== "");
+
+  const rowsHtml = !pageItems.length
+    ? `<div class="empty-block">${hasFilter ? "没有知识点在这些条件下有匹配的答案：减少条件，或换个条件试试" : "暂无知识点，点击右上角「+ 新增知识点」创建"}</div>`
+    : pageItems.map(kp => {
+        const answers = getAnswersByKp(idxKb.id, kp.id);
+        const total = answers.filter(a => !a.revoked).length;
+        const dimsUsed = [...new Set(answers.flatMap(a => Object.keys(a.coord)))].map(k => { const d = dimByKey(k); return d ? d.label : k; });
+        const exp = !!idxS.expanded[kp.id];
+        return `<div class="trow">
+          <div class="trow-main" onclick="idxToggleExpand('${kp.id}')">
+            <span class="arrow">${exp ? "▾" : "▸"}</span>
+            <a onclick="event.stopPropagation();go('detail',{kb:'${idxKb.id}',id:'${kp.id}'})" style="font-weight:600;font-size:14.5px">${escapeHtml(kp.title)}</a>
+            <span class="trm-meta">${total} 条答案 · 维度：${dimsUsed.join("、") || "仅默认"}</span>
+            <span style="flex:1"></span>
+            <span class="ops" onclick="event.stopPropagation()">
+              <a onclick="go('detail',{kb:'${idxKb.id}',id:'${kp.id}'})">查看详情</a>
+              <a class="danger" onclick="openDeleteModal('${kp.id}','${escapeHtml(kp.title)}')">删除</a>
+            </span>
+          </div>
+          <div class="trow-ans">${idxS.qMode === "day" ? ("回看 <span class=\"num\">" + idxS.qTime + "</span>") : "当前"}：${idxAnsPreview(kp)}</div>
+          ${exp ? idxKpAnswerTree(kp.id, idxS.qTime) : ""}
+        </div>`;
+      }).join("");
+
+  document.getElementById("kpRows").innerHTML = rowsHtml;
+  renderPager(document.getElementById("kpPager"), {
+    total: all.length, page: idxS.page, pageSize: IDX_PAGE_SIZE,
+    onChange: (p) => { idxS.page = p; idxRenderListPage(); },
+  });
+}
+
+function idxRenderListPage() {
+  const stats = computeKbStats(idxKb.id);
+  document.getElementById("pageTitle").textContent = "知识点列表";
+  document.getElementById("pageCrumb").textContent = `${idxKb.name} / 知识点列表`;
+  document.getElementById("pageContent").innerHTML = `
+    ${renderKbTabs("kp-list", idxKb.id)}
+
+    <div class="stat-grid">
+      <div class="stat"><div class="lbl">知识主题</div><div class="val num">${stats.subjectCount}<small>个</small></div><div class="foot">当前生效的知识点</div></div>
+      <div class="stat c2"><div class="lbl">在用答案</div><div class="val num">${stats.activeAnswers}<small>条</small></div><div class="foot">未撤回的答案总数</div></div>
+      <div class="stat c3"><div class="lbl">启用维度</div><div class="val num">${stats.enabledDimCount}<small>个</small></div><div class="foot">本知识库已启用</div></div>
+      <div class="stat c4"><div class="lbl">今日变更</div><div class="val num">${stats.todayChanges}<small>条</small></div><div class="foot">写入 / 撤回的答案变更</div></div>
+    </div>
+
+    <div class="card ov">
+      <div class="card-head">
+        <span class="tick"></span>
+        <h3>带条件提问</h3>
+        <span class="sub">钉住你关心的维度条件；不钉的不参与过滤</span>
+        <span class="spacer"></span>
+        <span class="ops"><button class="btn primary" onclick="openAddModal()">+ 新增知识点</button></span>
+      </div>
+      <div class="form-row">
+        <input type="text" id="fKeyword" placeholder="搜索知识点标题" value="${escapeHtml(idxS.kw)}" onkeydown="if(event.key==='Enter')idxDoQuery()" />
+        ${idxCondPicker()}
+        <button class="btn primary sm" onclick="idxDoQuery()">查 询</button>
+        <button class="btn sm" onclick="idxResetQuery()">重 置</button>
+      </div>
+    </div>
+
+    <div class="card ov">
+      <div class="card-head">
+        <span class="tick"></span>
+        <h3>知识点</h3>
+        <span class="sub">「${escapeHtml(idxKb.name)}」· 点行展开查看全部答案</span>
+      </div>
+      <div id="kpRows"></div>
+      <div class="pager" id="kpPager"></div>
+    </div>`;
+  idxRenderList();
+}
+
+function initKpList() {
+  idxKb = ROUTE.kb ? getKnowledgeBase(ROUTE.kb) : null;
+  if (!idxKb || idxKb.status !== "active") {
+    initShell("kp-list");
+    document.getElementById("pageTitle").textContent = "知识点列表";
+    document.getElementById("pageCrumb").textContent = "知识库列表 / 知识点列表";
+    document.getElementById("pageContent").innerHTML = noKbCard();
+    return;
+  }
+  setCurrentKb(idxKb.id);
+  idxS = { kw: "", filters: {}, qMode: "now", qTime: MOCK_NOW, page: 1, ddOpen: false, ddDim: null, expanded: {} };
+  initShell("kp-list");
+  idxRenderListPage();
+}
+
+/* ============================================================
+   视图：知识点详情(detail)
+   ============================================================ */
+let detKb = null;
+let detS = { filters: {}, qMode: "now", qTime: MOCK_NOW, ddOpen: false, ddDim: null, tab: "now" };
+let DET_TL_COORD = null;
+let DET_TREE_AXIS_A = null, DET_TREE_AXIS_B = "__init", DET_TREE_EXP = false;
+const CUBE_PALETTE = [["#0f9d58", "#e6f6ec"], ["#1a56f0", "#e8effe"], ["#0fa8a2", "#e5f5f4"], ["#7a5af8", "#f0ebfe"], ["#e08600", "#fdf3e0"], ["#e5484d", "#fdecec"], ["#b0399f", "#fbeaf8"], ["#5b6b85", "#eef1f6"]];
+
+function detCurrentId() { return ROUTE.id || ""; }
+
+function detCondPicker() {
+  const dims = getKbEnabledDims(detKb.id);
+  const chips = Object.keys(detS.filters).filter(k => detS.filters[k] !== undefined && detS.filters[k] !== "").map(k => {
+    const d = dimByKey(k);
+    return `<span class="tag blue" style="cursor:pointer" title="点击移除该条件" onclick="detRemoveFilter('${k}')">${escapeHtml(d ? d.label : k)} = ${escapeHtml(dimValueDisplay(d, detS.filters[k]))} ✕</span>`;
+  }).join("");
+  let ddMenu = "";
+  if (detS.ddOpen) {
+    if (detS.ddDim) {
+      const d = dimByKey(detS.ddDim);
+      ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+        <div class="dd-group">「${escapeHtml(d.label)}」= ?</div>
+        <div style="padding:2px 12px 10px">
+          <div id="ddValWrap">${valueInputHtmlFor(d, detS.filters[d.key] ?? "")}</div>
+          <button class="btn primary sm" style="margin-top:8px" onclick="detCommitDdFilter()">确 定</button>
+        </div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="detS.ddDim=null;detRenderDetail()"><span class="t" style="color:var(--ink-5)">‹ 返回维度列表</span></div>
+      </div>`;
+    } else {
+      ddMenu = `<div class="dd-menu" style="display:block" onclick="event.stopPropagation()">
+        <div class="dd-group">按哪个维度加条件？</div>
+        ${dims.length ? dims.map(d => `<div class="dd-item" onclick="detS.ddDim='${d.key}';detRenderDetail()"><span class="t">${escapeHtml(d.label)}</span><span class="d">${FIELD_TYPE_LABEL[d.field_type]} · 权重 ${d.weight ?? 50}</span></div>`).join("")
+          : `<div class="dd-item" style="color:var(--ink-6);cursor:default">本知识库还没有启用任何维度</div>`}
+      </div>`;
+    }
+  }
+  return `<span class="f-lbl">时间</span>
+    <span class="seg">
+      <button class="${detS.qMode !== "day" ? "on" : ""}" onclick="detS.qMode='now';detS.qTime=MOCK_NOW;detRenderDetail()">最新</button>
+      <button class="${detS.qMode === "day" ? "on" : ""}" onclick="detS.qMode='day';detRenderDetail()">回看某天</button>
+    </span>
+    ${detS.qMode === "day" ? `<input type="date" value="${detS.qTime}" max="${MOCK_NOW}" onchange="if(this.value){detS.qTime=this.value;detRenderDetail()}" />` : ""}
+    ${chips}
+    <span class="dd ${detS.ddOpen ? "open" : ""}">
+      <button class="btn sm" onclick="event.stopPropagation();detS.ddOpen=!detS.ddOpen;detS.ddDim=null;detRenderDetail()">+ 加一个条件</button>
+      ${ddMenu}
+    </span>`;
+}
+function detCommitDdFilter() {
+  const d = dimByKey(detS.ddDim);
+  const inp = document.getElementById("ddValWrap").querySelector("[data-dim]");
+  const v = validateDimValue(d.field_type, inp.value);
+  if (!v.ok) { toast(d.label + v.error, "err"); return; }
+  if (v.value === undefined) { toast("请输入取值", "err"); return; }
+  detS.filters[d.key] = v.value;
+  detS.ddOpen = false; detS.ddDim = null;
+  detRenderDetail();
+}
+function detRemoveFilter(k) { delete detS.filters[k]; detRenderDetail(); }
+document.addEventListener("click", e => {
+  if (detS.ddOpen && !e.target.closest(".dd") && ROUTE.view === "detail") { detS.ddOpen = false; detS.ddDim = null; detRenderDetail(); }
+});
+
+function detTabNow(kpId) {
+  const hasQ = Object.keys(detS.filters).some(k => detS.filters[k] !== undefined && detS.filters[k] !== "");
+  const groups = liveGroups(detKb.id, kpId, detS.qTime).filter(g => coordCompatible(g.coord, detS.filters));
+  groups.sort((a, b) => b.spec - a.spec || b.weight - a.weight || b.live.time.localeCompare(a.live.time));
+  const uniqueTop = hasQ && groups.length > 0 && (groups.length === 1 || groups[0].spec > groups[1].spec);
+
+  const list = !groups.length
+    ? `<div class="empty-block">这个条件、这个时间点还没有答案：换个时间，或放宽条件</div>`
+    : groups.map((g, i) => {
+        const condTxt = coordSpec(g.coord) ? "适用条件：" + coordText(g.coord) : "默认答案 · 处处适用";
+        const canPromote = coordSpec(g.coord) > 0;
+        return `<div class="ans-item">
+          <div style="display:flex;align-items:flex-start;gap:16px">
+            <div class="ai-content" style="flex:1">${escapeHtml(g.live.content)}</div>
+            <span class="ops" style="font-size:12.5px;white-space:nowrap;padding-top:3px">
+              <a onclick='openWriteAnswerModal("${kpId}", ${attrJson({ coord: g.coord, content: g.live.content })})'>编辑</a>
+              ${canPromote ? `<a onclick='openPromoteModal("${kpId}", ${attrJson(g.live.content)})'>设为默认</a>` : ""}
+              <a class="danger" onclick='openRevokeAnswerModal("${detKb.id}", "${kpId}", ${attrJson(g.coord)}, ${attrJson(g.live.content)})'>撤回</a>
+            </span>
+          </div>
+          <div class="ai-cond">${uniqueTop && i === 0 ? '<span class="live"><i></i>此条件下生效</span>' : ""}<span>${escapeHtml(condTxt)}</span><span><span class="num">${escapeHtml(g.live.time)}</span> 起 · 共 ${g.versionCount} 版</span><span>${escapeHtml(g.live.operator)} 录入</span></div>
+        </div>`;
+      }).join("");
+
+  return `
+  <div class="form-row">${detCondPicker()}${hasQ ? '<button class="btn sm" onclick="detS.filters={};detRenderDetail()">清空条件</button>' : ""}</div>
+  <div style="font-size:12.5px;color:var(--ink-6);margin:12px 2px 2px">${hasQ ? `满足条件的答案 ${groups.length} 条` : `全部答案 ${groups.length} 条 · 一个知识点本来就可以有多种答案，各管各的条件`}</div>
+  ${list}`;
+}
+
+function detTabTree(kpId) {
+  const enabledDims = getKbEnabledDims(detKb.id);
+  const answers = getAnswersByKp(detKb.id, kpId);
+  const usedKeys = [...new Set(answers.flatMap(a => Object.keys(a.coord).filter(k => a.coord[k] !== undefined && a.coord[k] !== "")))];
+  const used = enabledDims.filter(d => usedKeys.includes(d.key));
+  if (!used.length) return `<div class="mini-note">这个知识点还没有带条件的答案，谈不上立体展开；先去「当前答案」写一条带维度条件的答案。</div>`;
+
+  if (!DET_TREE_AXIS_A || !used.find(d => d.key === DET_TREE_AXIS_A)) DET_TREE_AXIS_A = used[0].key;
+  const bOpts = used.filter(d => d.key !== DET_TREE_AXIS_A);
+  if (DET_TREE_AXIS_B === "__init") DET_TREE_AXIS_B = bOpts.length ? bOpts[0].key : "";
+  if (DET_TREE_AXIS_B && !bOpts.find(d => d.key === DET_TREE_AXIS_B)) DET_TREE_AXIS_B = bOpts.length ? bOpts[0].key : "";
+  const dimA = dimByKey(DET_TREE_AXIS_A), dimB = DET_TREE_AXIS_B ? dimByKey(DET_TREE_AXIS_B) : null;
+
+  const uvals = k => [...new Set(answers.filter(a => a.coord[k] !== undefined && a.coord[k] !== "").map(a => a.coord[k]))];
+  const rows = ["(默认)", ...uvals(DET_TREE_AXIS_A)];
+  const lays = dimB ? ["(默认)", ...uvals(DET_TREE_AXIS_B)] : ["(全部)"];
+  let times = [...new Set(answers.map(a => a.time))].sort();
+  if (times.length > 5) times = times.slice(-5);
+  const offAxis = answers.filter(a => Object.keys(a.coord).some(k => a.coord[k] !== undefined && a.coord[k] !== "" && k !== DET_TREE_AXIS_A && k !== (DET_TREE_AXIS_B || "__none__"))).length;
+
+  const colorOf = {}; let ci = 0; const legend = {};
+  function cellBest(rv, lv, t) {
+    const groups = {};
+    answers.forEach(a => {
+      if (a.time > t) return;
+      for (const k in a.coord) {
+        if (a.coord[k] === undefined || a.coord[k] === "") continue;
+        if (k === DET_TREE_AXIS_A) { if (a.coord[k] !== rv) return; }
+        else if (dimB && k === DET_TREE_AXIS_B) { if (a.coord[k] !== lv) return; }
+        else return;
+      }
+      const key = coordKeyOf(a.coord);
+      (groups[key] = groups[key] || []).push(a);
+    });
+    let best = null, bs = -1, bw = -1, bv = "";
+    for (const k in groups) {
+      groups[k].sort((m, n) => n.time.localeCompare(m.time));
+      const cur = groups[k].find(y => !y.revoked);
+      if (!cur) continue;
+      const sp = coordSpec(cur.coord), w = coordWeight(cur.coord);
+      if (sp > bs || (sp === bs && w > bw) || (sp === bs && w === bw && cur.time > bv)) { best = cur; bs = sp; bw = w; bv = cur.time; }
+    }
+    return best;
+  }
+
+  const CELL = 72, GAP = 6;
+  const W = times.length * CELL + (times.length - 1) * GAP, H = rows.length * CELL + (rows.length - 1) * GAP;
+  const zGap = Math.min(Math.max(80, H * 0.3), 115);
+  const layersHtml = lays.map((lv, li) => {
+    const z = ((lays.length - 1) / 2 - li) * (DET_TREE_EXP ? zGap * 1.55 : zGap);
+    const cells = rows.map(rv => times.map(t => {
+      const bAns = cellBest(rv, dimB ? lv : null, t);
+      if (!bAns) return `<div class="c3cell emptyc" data-tip="${escapeHtml(dimA.label)}=${escapeHtml(rv)}${dimB ? " · " + escapeHtml(dimB.label) + "=" + escapeHtml(lv) : ""} · ${escapeHtml(t.slice(5))}：这一天还没有适用答案">无</div>`;
+      const key = coordKeyOf(bAns.coord);
+      if (!(key in colorOf)) { colorOf[key] = CUBE_PALETTE[ci++ % CUBE_PALETTE.length]; legend[key] = { c: colorOf[key], a: bAns }; }
+      const fg = colorOf[key][0], bg = colorOf[key][1];
+      const inherited = (rv !== "(默认)" && bAns.coord[DET_TREE_AXIS_A] === undefined) || (dimB && lv !== "(默认)" && bAns.coord[DET_TREE_AXIS_B] === undefined);
+      const tip = (`${escapeHtml(dimA.label)}=${escapeHtml(rv)}${dimB ? " · " + escapeHtml(dimB.label) + "=" + escapeHtml(lv) : ""} · ${escapeHtml(t.slice(5))}<br>「${escapeHtml(bAns.content)}」<br>来自「${escapeHtml(coordText(bAns.coord))}」那条${inherited ? " · <b>继承而来</b>" : ""}`);
+      return `<div class="c3cell" style="background:${bg};color:${fg}" data-tip="${tip}">${escapeHtml(bAns.content.slice(0, 4))}</div>`;
+    }).join("")).join("");
+    return `<div class="layer3" style="transform:translateZ(${z}px);grid-template-columns:repeat(${times.length},${CELL}px);grid-auto-rows:${CELL}px">${dimB ? `<div class="layer3-lbl">${escapeHtml(dimB.label)} = ${escapeHtml(lv)}</div>` : ""}${cells}</div>`;
+  }).join("");
+
+  const legendHtml = Object.values(legend).map(v => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${v.c[1]};border:1.5px solid ${v.c[0]};margin-right:6px;vertical-align:-1px"></i>${escapeHtml(coordText(v.a.coord))}：${escapeHtml(v.a.content.length > 16 ? v.a.content.slice(0, 16) + "…" : v.a.content)}</span>`).join("");
+
+  return `
+  <div class="form-row" style="margin-bottom:2px">
+    <span class="f-lbl">行(斜向)</span><select onchange="DET_TREE_AXIS_A=this.value;detRenderDetail()">${used.map(d => `<option value="${escapeHtml(d.key)}" ${DET_TREE_AXIS_A === d.key ? "selected" : ""}>${escapeHtml(d.label)}</option>`).join("")}</select>
+    ${bOpts.length ? `<span class="f-lbl">层(纵向)</span><select onchange="DET_TREE_AXIS_B=this.value;detRenderDetail()"><option value="" ${!DET_TREE_AXIS_B ? "selected" : ""}>(不分层)</option>${bOpts.map(d => `<option value="${escapeHtml(d.key)}" ${DET_TREE_AXIS_B === d.key ? "selected" : ""}>${escapeHtml(d.label)}</option>`).join("")}</select>` : ""}
+    ${dimB && lays.length > 1 ? `<button class="btn sm" onclick="DET_TREE_EXP=!DET_TREE_EXP;detRenderDetail()">${DET_TREE_EXP ? "合 上" : "拆开看"}</button>` : ""}
+    <span class="mini-note">列 = 时间(${times.map(t => t.slice(5)).join(" → ")}) · 颜色 = 同一条答案的领地 · 悬停格子看来源</span>
+  </div>
+  <div class="cube-stage" style="${DET_TREE_EXP ? `padding:120px 0 240px` : ``}"><div class="cube3" style="width:${W}px;height:${H}px${DET_TREE_EXP ? ";transform:rotateX(58deg) rotateZ(45deg) scale(.85)" : ""}">${layersHtml}</div></div>
+  <div class="cube-legend">${legendHtml}</div>
+  ${offAxis ? `<div class="mini-note" style="text-align:center;margin-top:12px">另有 ${offAxis} 条答案挂在其他维度上，切换上方「行 / 层」可见。</div>` : ""}`;
+}
+
+function detTabTimeline(kpId, atTime) {
+  const groupsMap = new Map();
+  getAnswersByKp(detKb.id, kpId).forEach(a => {
+    const k = coordKeyOf(a.coord);
+    if (!groupsMap.has(k)) groupsMap.set(k, { coord: a.coord, chain: [] });
+    groupsMap.get(k).chain.push(a);
+  });
+  const keys = [...groupsMap.keys()];
+  if (!keys.length) return `<div class="mini-note">还没有任何答案</div>`;
+  if (!DET_TL_COORD || !keys.includes(DET_TL_COORD)) DET_TL_COORD = keys[0];
+  const g = groupsMap.get(DET_TL_COORD);
+  const chain = [...g.chain].sort((x, y) => y.time.localeCompare(x.time));
+  const liveId = (chain.find(a => a.time <= atTime && !a.revoked) || {}).id;
+  return `
+  <div class="form-row" style="margin-bottom:14px">
+    <span class="f-lbl">选择条件组合(每组条件一条独立版本链)</span>
+    <select onchange="DET_TL_COORD=this.value;detRenderDetail()">${keys.map(k => `<option value="${escapeHtml(k)}" ${DET_TL_COORD === k ? "selected" : ""}>${escapeHtml(coordText(groupsMap.get(k).coord))}</option>`).join("")}</select>
+  </div>
+  <div class="timeline">
+    ${chain.map((a, i) => `
+      <div class="tl-item">
+        <div class="tl-dot-col"><div class="tl-dot ${a.id === liveId ? "cur" : ""}"></div>${i < chain.length - 1 ? '<div class="tl-line"></div>' : ""}</div>
+        <div class="tl-body">
+          <div class="tl-head">
+            <span class="time num" style="font-weight:400">${escapeHtml(a.time)}</span>
+            ${a.revoked ? '<span class="tag gray">已撤回</span>' : (a.id === liveId ? '<span class="tag blue">当前</span>' : (a.time > atTime ? '<span class="tag orange">晚于查询时间，暂不生效</span>' : '<span class="tag gray">已被新版替代</span>'))}
+            <span class="field-hint">操作人：${escapeHtml(a.operator)}</span>
+          </div>
+          <div class="tl-content">${escapeHtml(a.content)}</div>
+          ${a.note ? `<div class="field-hint" style="margin-top:4px">说明：${escapeHtml(a.note)}</div>` : ""}
+        </div>
+      </div>`).join("")}
+  </div>
+  <div class="mini-note" style="margin-top:8px">旧版本与撤回版永不删除。当前查询时间为 <span class="num">${escapeHtml(atTime)}</span>。</div>`;
+}
+
+function detTabLogs(kpId) {
+  const rows = buildChangeLog(detKb.id, kpId);
+  if (!rows.length) return `<div class="empty-block">暂无变更记录</div>`;
+  return `<div class="table-wrap"><table class="tbl"><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>条件</th><th>变更前</th><th>变更后</th><th>来源</th><th>状态</th><th class="op-col">操作</th></tr></thead><tbody>
+    ${rows.map(l => `<tr>
+      <td class="num" style="font-weight:400">${escapeHtml(l.t.replace("T", " ").slice(0, 19))}</td>
+      <td>${escapeHtml(l.who)}</td>
+      <td>${escapeHtml(l.act)}</td>
+      <td style="color:var(--ink-4)">${escapeHtml(l.tgt)}</td>
+      <td style="max-width:200px;color:var(--ink-4)">${escapeHtml(l.before)}</td>
+      <td style="max-width:200px">${escapeHtml(l.after)}</td>
+      <td><span class="tag purple">${escapeHtml(l.src)}</span></td>
+      <td>${stateTag(l.state)}</td>
+      <td class="op-col ops">${l.revocable ? `<a class="danger" onclick='openRevokeAnswerModal("${l.kbId}", "${l.kpId}", ${attrJson(l.coord)}, ${attrJson(l.after)})'>撤回</a>` : `<span style="color:var(--ink-7)">—</span>`}</td>
+    </tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+function detOpenRenameModal() {
+  document.getElementById("titleInput").value = detCurrentKpTitle();
+  document.getElementById("titleFormHint").textContent = "";
+  openModal("titleMask");
+}
+function detCurrentKpTitle() { const kp = getKnowledgePoint(detKb.id, detCurrentId()); return kp ? kp.title : ""; }
+function detSubmitTitle() {
+  const title = document.getElementById("titleInput").value.trim();
+  if (!title) { document.getElementById("titleFormHint").textContent = "请填写标题。"; return; }
+  updateKnowledgePointTitle(detKb.id, detCurrentId(), title);
+  toast("已更新标题", "ok");
+  closeModal("titleMask");
+  detRenderDetail();
+}
+
+function detRenderDetail() {
+  const id = detCurrentId();
+  const kp = getKnowledgePoint(detKb.id, id);
+  const content = document.getElementById("pageContent");
+  document.getElementById("pageCrumb").textContent = `${detKb.name} / 知识点列表 / 详情`;
+
+  if (!kp) {
+    content.innerHTML = `
+      <a class="back-link" onclick="go('kp-list',{kb:'${detKb.id}'})">‹ 返回列表</a>
+      <div class="card"><div class="empty-block">找不到 ID「${escapeHtml(id)}」对应的知识点</div></div>`;
+    return;
+  }
+
+  const isDeleted = kp.status === "deleted";
+  const answers = getAnswersByKp(detKb.id, id);
+  const totalAnswers = answers.filter(a => !a.revoked).length;
+  const statusTag2 = isDeleted ? `<span class="tag gray">已删除</span>` : `<span class="tag green">正常</span>`;
+
+  const opsHtml = isDeleted
+    ? `<a class="btn" onclick="go('trash',{kb:'${detKb.id}'})">前往回收站恢复</a>`
+    : `<button class="btn primary" onclick='openWriteAnswerModal("${id}", null)'>+ 写一条答案</button>
+       <button class="btn" onclick="detOpenRenameModal()">编辑标题</button>
+       <button class="btn danger" onclick="openDeleteModal('${id}','${escapeHtml(kp.title)}')">删 除</button>`;
+
+  const tabs = [["now", "当前答案"], ["tree", "立体全景"], ["timeline", "版本历史"], ["logs", "变更留痕"]];
+  let body = "";
+  if (detS.tab === "now") body = detTabNow(id);
+  else if (detS.tab === "tree") body = detTabTree(id);
+  else if (detS.tab === "timeline") body = detTabTimeline(id, detS.qTime);
+  else body = detTabLogs(id);
+
+  document.getElementById("pageTitle").textContent = kp.title;
+  content.innerHTML = `
+    <a class="back-link" onclick="go('kp-list',{kb:'${detKb.id}'})">‹ 返回列表</a>
+    <div class="card">
+      <div class="detail-head">
+        <div>
+          <h2>${escapeHtml(kp.title)}</h2>
+          <div class="meta">
+            <span>ID <b class="num">${escapeHtml(id)}</b></span>
+            <span>${totalAnswers} 条在用答案</span>
+            <span>创建 <b class="num">${escapeHtml((kp.created_at || "").slice(0, 10))}</b> · ${escapeHtml(kp.operator)}</span>
+            ${statusTag2}
+          </div>
+        </div>
+        <div class="ops">${opsHtml}</div>
+      </div>
+    </div>
+
+    ${isDeleted ? `<div class="notice">该知识点已被<b>软删除</b>（删除时间 <b>${escapeHtml((kp.deleted_at || "").slice(0, 10))}</b>，原因：${escapeHtml(kp.delete_reason || "—")}）。以下仍可查看其全部历史答案。</div>` : ""}
+
+    <div class="card ov">
+      <div class="tabs" id="tabs">${tabs.map(t => `<div class="tab ${detS.tab === t[0] ? "active" : ""}" data-tab="${t[0]}">${t[1]}</div>`).join("")}</div>
+      ${body}
+    </div>
+  `;
+
+  document.querySelectorAll("#tabs .tab").forEach(tab => {
+    tab.addEventListener("click", () => { detS.tab = tab.dataset.tab; detRenderDetail(); });
+  });
+}
+
+const tipCube = document.createElement("div");
+tipCube.id = "tipCube";
+document.body.appendChild(tipCube);
+document.addEventListener("mousemove", e => {
+  const c = e.target.closest && e.target.closest(".c3cell");
+  if (c && c.dataset.tip) {
+    tipCube.innerHTML = c.dataset.tip;
+    tipCube.style.opacity = 1;
+    tipCube.style.left = Math.min(e.clientX + 14, innerWidth - 310) + "px";
+    tipCube.style.top = (e.clientY + 16) + "px";
+  } else {
+    tipCube.style.opacity = 0;
+  }
+});
+
+function initDetail() {
+  detKb = ROUTE.kb ? getKnowledgeBase(ROUTE.kb) : null;
+  if (!detKb || detKb.status !== "active") {
+    initShell("kp-list");
+    document.getElementById("pageTitle").textContent = "知识点详情";
+    document.getElementById("pageCrumb").textContent = "知识点列表 / 详情";
+    document.getElementById("pageContent").innerHTML = noKbCard();
+    return;
+  }
+  setCurrentKb(detKb.id);
+  detS = { filters: {}, qMode: "now", qTime: MOCK_NOW, ddOpen: false, ddDim: null, tab: "now" };
+  initShell("kp-list");
+  detRenderDetail();
+}
+
+/* ============================================================
+   视图：回收站(trash)
+   ============================================================ */
+let trsKb = null;
+
+function trsRenderTrash() {
+  const items = listTrash(trsKb.id);
+  const tbody = document.getElementById("trashBody");
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">回收站暂无记录</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(kp => `
+    <tr>
+      <td>${escapeHtml(kp.title)}</td>
+      <td class="num" style="font-weight:400">${escapeHtml((kp.deleted_at || "").slice(0, 10))}</td>
+      <td>${escapeHtml(kp.delete_reason || "—")}</td>
+      <td>${escapeHtml(kp.operator)}</td>
+      <td class="op-col ops">
+        <a onclick="go('detail',{kb:'${trsKb.id}',id:'${kp.id}'})">查看详情</a>
+        <a onclick="trsOpenRestoreModal('${kp.id}','${escapeHtml(kp.title)}')">恢复</a>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function trsOpenRestoreModal(id, title) {
+  document.getElementById("restoreId").value = id;
+  document.getElementById("restoreTitle").textContent = title;
+  openModal("restoreMask");
+}
+
+function trsSubmitRestore() {
+  const id = document.getElementById("restoreId").value;
+  const res = restoreKnowledgePoint(trsKb.id, id);
+  if (!res.ok) { toast(res.error, "err"); return; }
+  toast(`已恢复 ID ${id}`, "ok");
+  closeModal("restoreMask");
+  trsRenderTrash();
+}
+
+function initTrash() {
+  trsKb = ROUTE.kb ? getKnowledgeBase(ROUTE.kb) : null;
+  if (!trsKb || trsKb.status !== "active") {
+    initShell("trash");
+    document.getElementById("pageTitle").textContent = "回收站";
+    document.getElementById("pageCrumb").textContent = "回收站";
+    document.getElementById("pageContent").innerHTML = noKbCard();
+    return;
+  }
+  document.getElementById("pageTitle").textContent = "回收站";
+  document.getElementById("pageCrumb").textContent = `${trsKb.name} / 回收站`;
+  document.getElementById("pageContent").innerHTML = `
+    ${renderKbTabs("trash", trsKb.id)}
+    <div class="notice">
+      知识点删除为<b>软删除</b>：删除后不再出现在知识点列表与查询结果中，但全部历史答案与留痕永久保留，且可以在这里<b>恢复</b>。
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tick"></span>
+        <h3>已删除的知识点</h3>
+        <span class="sub">软删除快照，可恢复</span>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>标题</th>
+              <th>删除时间</th>
+              <th>删除原因</th>
+              <th>操作人</th>
+              <th class="op-col">操作</th>
+            </tr>
+          </thead>
+          <tbody id="trashBody"></tbody>
+        </table>
+      </div>
+    </div>`;
+  initShell("trash");
+  trsRenderTrash();
+}
+
+/* ============================================================
+   视图：全局操作日志(op-logs)
+   ============================================================ */
+let logPage = 1;
+const LOG_PAGE_SIZE = 10;
+
+function renderLogPage() {
+  const rows = buildGlobalChangeLog();
+  const tbody = document.getElementById("logBody");
+  const start = (logPage - 1) * LOG_PAGE_SIZE;
+  const pageItems = rows.slice(start, start + LOG_PAGE_SIZE);
+
+  if (!pageItems.length) {
+    tbody.innerHTML = `<tr><td colspan="11" class="empty">暂无变更记录</td></tr>`;
+  } else {
+    tbody.innerHTML = pageItems.map(l => {
+      const kb = getKnowledgeBase(l.kbId);
+      const kp = getKnowledgePoint(l.kbId, l.kpId);
+      return `<tr>
+        <td class="num" style="font-weight:400">${escapeHtml(l.t.replace("T", " ").slice(0, 19))}</td>
+        <td>${escapeHtml(kb ? kb.name : l.kbId)}</td>
+        <td>${kp ? `<a onclick="go('detail',{kb:'${l.kbId}',id:'${l.kpId}'})">${escapeHtml(kp.title)}</a>` : escapeHtml(l.kpId)}</td>
+        <td>${escapeHtml(l.who)}</td>
+        <td>${escapeHtml(l.act)}</td>
+        <td style="color:var(--ink-4)">${escapeHtml(l.tgt)}</td>
+        <td style="max-width:180px;color:var(--ink-4)">${escapeHtml(l.before)}</td>
+        <td style="max-width:180px">${escapeHtml(l.after)}</td>
+        <td><span class="tag purple">${escapeHtml(l.src)}</span></td>
+        <td>${stateTag(l.state)}</td>
+        <td class="op-col ops">${l.revocable ? `<a class="danger" onclick='openRevokeAnswerModal("${l.kbId}", "${l.kpId}", ${attrJson(l.coord)}, ${attrJson(l.after)})'>撤回</a>` : `<span style="color:var(--ink-7)">—</span>`}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  renderPager(document.getElementById("logPager"), {
+    total: rows.length, page: logPage, pageSize: LOG_PAGE_SIZE,
+    onChange: (p) => { logPage = p; renderLogPage(); },
+  });
+}
+
+function initOpLogs() {
+  document.getElementById("pageTitle").textContent = "操作日志";
+  document.getElementById("pageCrumb").textContent = "全局 / 操作日志";
+  document.getElementById("pageContent").innerHTML = `
+    <div class="notice">
+      跨全部知识库的答案变更流水：写答案 / 改答案 / 撤回答案，每一步都留痕，不可物理删除。「操作」列可以直接对仍然生效的答案执行撤回。
+    </div>
+    <div class="card ov">
+      <div class="card-head">
+        <span class="tick"></span>
+        <h3>全量变更留痕</h3>
+        <span class="sub">每个知识库、每个知识点、每次撤回，都可在此追溯</span>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>时间</th><th>知识库</th><th>知识点</th><th>操作人</th><th>动作</th>
+              <th>条件</th><th>变更前</th><th>变更后</th><th>来源</th><th>状态</th><th class="op-col">操作</th>
+            </tr>
+          </thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+      <div class="pager" id="logPager"></div>
+    </div>`;
+  logPage = 1;
+  initShell("op-logs");
+  renderLogPage();
+}
+
+/* ============================================================
+   路由分发
+   ============================================================ */
+function renderRoute() {
+  if (ROUTE.view === "kb-list") initKbList();
+  else if (ROUTE.view === "dimensions") initDimensions();
+  else if (ROUTE.view === "kb-settings") initKbSettings();
+  else if (ROUTE.view === "kp-list") initKpList();
+  else if (ROUTE.view === "detail") initDetail();
+  else if (ROUTE.view === "trash") initTrash();
+  else if (ROUTE.view === "op-logs") initOpLogs();
+  else initKbList();
+}
+
+seedIfEmpty();
+tickClock();
+go("kb-list");
+</script>
+</body>
+</html>
