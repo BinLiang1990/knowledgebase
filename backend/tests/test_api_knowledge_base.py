@@ -1,6 +1,11 @@
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
+
+from kb_backend.envelope import BusinessError
+from kb_backend.routers.knowledge_base import _raise_if_duplicate_name
 
 
 def _create(client: TestClient, name: str, description: str | None = None) -> dict:
@@ -213,3 +218,28 @@ def test_deactivate_nonexistent_id_returns_404(client: TestClient, migrated_sche
     resp = client.post("/knowledge-bases/999999999/deactivate")
     assert resp.status_code == 404
     assert resp.json()["code"] == 444
+
+
+def test_create_description_over_max_length_is_rejected_with_422(client: TestClient, migrated_schema) -> None:
+    resp = _create(client, "kb-long-desc", "x" * 2001)
+    assert resp.status_code == 422
+    assert resp.json()["code"] == 444
+
+
+class _FakeOrigError(Exception):
+    def __init__(self, *args) -> None:
+        super().__init__(*args)
+        self.args = args
+
+
+def test_raise_if_duplicate_name_translates_mysql_1062_only() -> None:
+    """Found by the Kimi review gate on PR #18: a blanket IntegrityError catch
+    would misreport any future constraint violation on this table as a
+    duplicate-name error. Only MySQL error 1062 (ER_DUP_ENTRY) may translate."""
+    duplicate_exc = IntegrityError("stmt", {}, _FakeOrigError(1062, "Duplicate entry"))
+    with pytest.raises(BusinessError):
+        _raise_if_duplicate_name(duplicate_exc)
+
+    other_exc = IntegrityError("stmt", {}, _FakeOrigError(1451, "Cannot delete or update a parent row"))
+    with pytest.raises(IntegrityError):
+        _raise_if_duplicate_name(other_exc)

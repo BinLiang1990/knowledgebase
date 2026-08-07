@@ -13,7 +13,7 @@ def _stripped_non_empty_name(v: str) -> str:
 
 class KnowledgeBaseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
 
     @field_validator("name")
     @classmethod
@@ -23,7 +23,7 @@ class KnowledgeBaseCreate(BaseModel):
 
 class KnowledgeBaseUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
 
     @field_validator("name")
     @classmethod

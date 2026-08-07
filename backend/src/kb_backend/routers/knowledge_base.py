@@ -15,6 +15,18 @@ router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-base"])
 
 _DUPLICATE_NAME_MSG = "知识库名称已存在，请使用其他名称"
 _NOT_FOUND_MSG = "知识库不存在"
+_MYSQL_ER_DUP_ENTRY = 1062
+
+
+def _raise_if_duplicate_name(exc: IntegrityError) -> None:
+    # Only translate an actual "duplicate entry" violation into the clean
+    # business error; any other integrity error (e.g. a future constraint
+    # added to this table) re-raises as-is instead of being misreported as a
+    # duplicate name. Found by the Kimi review gate on PR #18.
+    orig_args = getattr(exc.orig, "args", ())
+    if orig_args and orig_args[0] == _MYSQL_ER_DUP_ENTRY:
+        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400) from exc
+    raise exc
 
 
 def _get_active_point_count(db: Session, knowledge_base_id: int) -> int:
@@ -73,7 +85,7 @@ def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(ge
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400) from exc
+        _raise_if_duplicate_name(exc)
     db.refresh(kb)
 
     out = _to_out(kb, active_point_count=0)
@@ -123,7 +135,7 @@ def update_knowledge_base(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400) from exc
+        _raise_if_duplicate_name(exc)
     db.refresh(kb)
 
     out = _to_out(kb, _get_active_point_count(db, kb_id))
