@@ -1,0 +1,163 @@
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from ..db import get_db
+from ..envelope import BusinessError, envelope
+from ..models.knowledge_base import KnowledgeBase
+from ..models.knowledge_point import KnowledgePoint
+from ..schemas.knowledge_base import KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBaseUpdate
+
+router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-base"])
+
+_DUPLICATE_NAME_MSG = "知识库名称已存在，请使用其他名称"
+_NOT_FOUND_MSG = "知识库不存在"
+_MYSQL_ER_DUP_ENTRY = 1062
+
+
+def _raise_if_duplicate_name(exc: IntegrityError) -> None:
+    # Only translate an actual "duplicate entry" violation into the clean
+    # business error; any other integrity error (e.g. a future constraint
+    # added to this table) re-raises as-is instead of being misreported as a
+    # duplicate name. Found by the Kimi review gate on PR #18.
+    orig_args = getattr(exc.orig, "args", ())
+    if orig_args and orig_args[0] == _MYSQL_ER_DUP_ENTRY:
+        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400) from exc
+    raise exc
+
+
+def _get_active_point_count(db: Session, knowledge_base_id: int) -> int:
+    return (
+        db.execute(
+            select(func.count())
+            .select_from(KnowledgePoint)
+            .where(
+                KnowledgePoint.knowledge_base_id == knowledge_base_id,
+                KnowledgePoint.status == "active",
+            )
+        ).scalar_one()
+    )
+
+
+def _to_out(kb: KnowledgeBase, active_point_count: int) -> KnowledgeBaseOut:
+    return KnowledgeBaseOut(
+        id=kb.id,
+        name=kb.name,
+        description=kb.description,
+        status=kb.status,
+        active_knowledge_point_count=active_point_count,
+        created_at=kb.created_at,
+        updated_at=kb.updated_at,
+    )
+
+
+def _get_or_404(db: Session, kb_id: int) -> KnowledgeBase:
+    kb = db.get(KnowledgeBase, kb_id)
+    if kb is None:
+        raise BusinessError(_NOT_FOUND_MSG, status_code=404)
+    return kb
+
+
+def _ensure_name_available(db: Session, name: str, exclude_id: int | None = None) -> None:
+    # `knowledge_base.name` uses utf8mb4_0900_ai_ci (issue #1), so this
+    # comparison — and the backing unique index — are already case- and
+    # accent-insensitive ("FAQ" collides with "faq"). That is treated as the
+    # intended reading of PRD §4.1's "完全重复": it prevents confusing
+    # near-duplicates, and changing it would mean altering an already-shipped
+    # column collation. Flagged by the Codex outer-gate review on PR #18.
+    stmt = select(KnowledgeBase.id).where(KnowledgeBase.name == name)
+    if exclude_id is not None:
+        stmt = stmt.where(KnowledgeBase.id != exclude_id)
+    if db.execute(stmt).first() is not None:
+        raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400)
+
+
+@router.post("")
+def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(get_db)) -> dict:
+    _ensure_name_available(db, payload.name)
+
+    kb = KnowledgeBase(name=payload.name, description=payload.description, status="active")
+    db.add(kb)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        _raise_if_duplicate_name(exc)
+    db.refresh(kb)
+
+    out = _to_out(kb, active_point_count=0)
+    return envelope(out.model_dump(mode="json"))
+
+
+@router.get("")
+def list_knowledge_bases(
+    status: Literal["active", "deprecated"] | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    count_by_kb = dict(
+        db.execute(
+            select(KnowledgePoint.knowledge_base_id, func.count())
+            .where(KnowledgePoint.status == "active")
+            .group_by(KnowledgePoint.knowledge_base_id)
+        ).all()
+    )
+
+    stmt = select(KnowledgeBase).order_by(KnowledgeBase.id)
+    if status is not None:
+        stmt = stmt.where(KnowledgeBase.status == status)
+
+    rows = db.execute(stmt).scalars().all()
+    out = [_to_out(kb, count_by_kb.get(kb.id, 0)) for kb in rows]
+    return envelope([o.model_dump(mode="json") for o in out])
+
+
+@router.patch("/{kb_id}")
+def update_knowledge_base(
+    kb_id: int, payload: KnowledgeBaseUpdate, db: Session = Depends(get_db)
+) -> dict:
+    kb = _get_or_404(db, kb_id)
+
+    fields_set = payload.model_fields_set
+    if payload.name is not None and payload.name != kb.name:
+        _ensure_name_available(db, payload.name, exclude_id=kb_id)
+        kb.name = payload.name
+    # `description` must distinguish "field omitted" (no change) from
+    # "field explicitly sent as null" (clear it) — payload.description is
+    # None in both cases, so check model_fields_set instead of the value.
+    # Found by the Codex outer-gate review on PR #18.
+    if "description" in fields_set:
+        kb.description = payload.description
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        _raise_if_duplicate_name(exc)
+    db.refresh(kb)
+
+    out = _to_out(kb, _get_active_point_count(db, kb_id))
+    return envelope(out.model_dump(mode="json"))
+
+
+def _set_status(db: Session, kb_id: int, target_status: Literal["active", "deprecated"]) -> dict:
+    kb = _get_or_404(db, kb_id)
+    if kb.status != target_status:
+        kb.status = target_status
+        db.commit()
+        db.refresh(kb)
+
+    out = _to_out(kb, _get_active_point_count(db, kb_id))
+    return envelope(out.model_dump(mode="json"))
+
+
+@router.post("/{kb_id}/activate")
+def activate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    return _set_status(db, kb_id, "active")
+
+
+@router.post("/{kb_id}/deactivate")
+def deactivate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    return _set_status(db, kb_id, "deprecated")
