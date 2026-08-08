@@ -44,6 +44,10 @@ _MAX_SAFE_NUMBER = 2**64 - 1
 # (the real bound is _MAX_SAFE_NUMBER, checked after this cheaply rules out
 # the dangerous cases).
 _MAX_ADJUSTED_EXPONENT = 20
+# Every integer up to 2**53 is exactly representable as an IEEE-754 double;
+# beyond it, some are and some aren't, so a bare float this large can't be
+# trusted without the original text to verify against.
+_MAX_EXACT_FLOAT_INTEGER = 2**53
 
 
 def _reject_if_unsafe_magnitude(key: str, value: int | float) -> None:
@@ -69,7 +73,21 @@ def _normalize_number(key: str, raw_value: Any) -> int | float:
         return raw_value
     if isinstance(raw_value, float):
         _reject_if_unsafe_magnitude(key, raw_value)
-        return int(raw_value) if raw_value.is_integer() else raw_value
+        # A bare JSON number (not a quoted string) is already decoded to a
+        # lossy float by the request-body JSON parser BEFORE this function
+        # ever runs — e.g. the literal 9007199254740993.0 arrives as
+        # 9007199254740992.0, and there is no original text left to recover
+        # or verify against (unlike the str branch's Decimal/repr round-trip
+        # checks). Past 2**53, not every integer is exactly representable as
+        # a float, so a large integer-valued float can't be trusted to be
+        # the value the caller actually meant. Reject and require the caller
+        # to send it as a string instead, where exact parsing is possible.
+        # Found by the Codex outer-gate review on PR #20 (round 4).
+        if raw_value.is_integer():
+            if abs(raw_value) > _MAX_EXACT_FLOAT_INTEGER:
+                raise CoordValueError(key, f"维度 {key} 数值精度超出安全范围，请以字符串形式传入以保留精度")
+            return int(raw_value)
+        return raw_value
     if isinstance(raw_value, str):
         # Parse via Decimal, not int()-then-float(): an integer-valued
         # decimal STRING like "9007199254740993.0" isn't accepted by int()

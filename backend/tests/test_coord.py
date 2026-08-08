@@ -142,6 +142,29 @@ def test_normalize_number_accepts_ordinary_fractional_value() -> None:
     assert normalize_coord({"priority": "1.5"}, DIM_TYPES) == {"priority": 1.5}
 
 
+def test_normalize_number_rejects_bare_float_beyond_exact_integer_range() -> None:
+    """Found by the Codex outer-gate review on PR #20 (round 4): a bare JSON
+    number (not a quoted string) is already a lossy float by the time this
+    function sees it. Use 2**54 (exactly representable, unambiguously past
+    the 2**53 safe boundary) rather than e.g. 9007199254740993.0 — that
+    literal is itself rounded by Python's own source parsing down to
+    exactly 2**53 before this test even runs, which would defeat the point."""
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": 2.0**54}, DIM_TYPES)
+
+
+def test_normalize_number_accepts_bare_float_at_exact_integer_boundary() -> None:
+    boundary = float(2**53)
+    assert normalize_coord({"priority": boundary}, DIM_TYPES) == {"priority": 2**53}
+
+
+def test_normalize_number_string_form_still_exact_beyond_bare_float_boundary() -> None:
+    """The str/Decimal path is unaffected — it has the original text and can
+    verify exactness, so large integers are still supported via strings."""
+    out = normalize_coord({"priority": "9007199254740993"}, DIM_TYPES)
+    assert out["priority"] == 9007199254740993
+
+
 def test_normalize_date_canonicalizes_iso_format() -> None:
     assert normalize_coord({"valid_from": "2026-08-08"}, DIM_TYPES) == {"valid_from": "2026-08-08"}
 
