@@ -75,6 +75,16 @@ def test_create_dimension_blank_label_is_rejected(client: TestClient, migrated_s
     assert resp.status_code == 422
 
 
+def test_create_dimension_label_containing_slash_is_rejected(client: TestClient, migrated_schema) -> None:
+    """A "/" in the value that becomes `key` would make it unreachable by
+    PATCH/activate/deactivate's single {key} path segment afterwards —
+    Starlette decodes a percent-encoded "%2F" back to "/" before routing,
+    so no client-side encoding trick can address it. Codex outer-gate
+    finding on PR #25."""
+    resp = client.post("/dimensions", json={"label": "sales/region", "field_type": "text"})
+    assert resp.status_code == 422
+
+
 def test_create_dimension_weight_out_of_range_is_rejected(client: TestClient, migrated_schema) -> None:
     assert client.post("/dimensions", json={"label": "a", "field_type": "text", "weight": 0}).status_code == 422
     assert client.post("/dimensions", json={"label": "b", "field_type": "text", "weight": 101}).status_code == 422

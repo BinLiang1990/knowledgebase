@@ -24,7 +24,12 @@ register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allowed_origin_list,
-    allow_methods=["GET", "POST", "PATCH"],
+    # PUT added for issue #9's PUT .../enabled-dimensions — same "explicit
+    # list, not the middleware's own GET-only default" trap as the original
+    # comment above describes. Codex outer-gate finding on PR #25: this
+    # endpoint worked fine against TestClient (no CORS involved) but every
+    # real browser call would fail preflight.
+    allow_methods=["GET", "POST", "PATCH", "PUT"],
     allow_headers=["Content-Type"],
 )
 app.include_router(knowledge_base_router)

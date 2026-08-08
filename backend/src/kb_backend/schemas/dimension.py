@@ -48,7 +48,17 @@ class DimensionCreate(BaseModel):
     @field_validator("label")
     @classmethod
     def _validate_label(cls, v: str) -> str:
-        return _stripped_non_empty_label(v)
+        v = _stripped_non_empty_label(v)
+        # This value becomes `key`, embedded as a single {key} path segment
+        # in PATCH/activate/deactivate — a literal "/" splits into extra
+        # path segments no route matches, and Starlette decodes a
+        # percent-encoded "%2F" back to "/" *before* route matching, so
+        # there is no way for a client to address such a key afterwards.
+        # Rejecting it here is the only fix that doesn't require redesigning
+        # those routes. Codex outer-gate finding on PR #25.
+        if "/" in v:
+            raise ValueError("名称不能包含斜杠(/)")
+        return v
 
 
 class DimensionUpdate(BaseModel):

@@ -34,6 +34,23 @@ def test_preflight_for_patch_succeeds(client: TestClient) -> None:
     assert "PATCH" in resp.headers["access-control-allow-methods"]
 
 
+def test_preflight_for_put_succeeds(client: TestClient) -> None:
+    """PUT .../enabled-dimensions (issue #9) worked fine against TestClient
+    (no CORS involved there) but was unreachable from any real browser
+    until PUT was added to allow_methods — same class of bug as the POST/
+    PATCH cases above. Codex outer-gate finding on PR #25."""
+    resp = client.options(
+        "/knowledge-bases/1/enabled-dimensions",
+        headers={
+            "Origin": _ORIGIN,
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert resp.status_code == 200
+    assert "PUT" in resp.headers["access-control-allow-methods"]
+
+
 def test_disallowed_origin_is_not_echoed_back(client: TestClient) -> None:
     resp = client.options(
         "/knowledge-bases",
