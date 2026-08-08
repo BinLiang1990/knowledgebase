@@ -4,12 +4,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .db import get_db
-from .envelope import BusinessError, envelope, register_exception_handlers
-from .routers.dimension import router as dimension_router
-from .routers.knowledge_base import router as knowledge_base_router
-from .routers.knowledge_point import router as knowledge_point_router
+from kb_backend.config import get_settings
+from kb_backend.db import get_db
+from kb_backend.envelope import BusinessError, envelope, register_exception_handlers
+from kb_backend.routers.dimension import router as dimension_router
+from kb_backend.routers.knowledge_base import router as knowledge_base_router
+from kb_backend.routers.knowledge_point import router as knowledge_point_router
 
 app = FastAPI(title="Knowledge Base Backend")
 register_exception_handlers(app)
@@ -45,3 +45,14 @@ def health(probe: int | None = None, db: Session = Depends(get_db)) -> dict:
     except OperationalError as exc:
         raise BusinessError("database unavailable", status_code=500) from exc
     return envelope({"database": "ok"})
+
+
+if __name__ == "__main__":
+    # Lets this file be run directly (PyCharm's own ▶ gutter icon), as an
+    # alternative to a separate `uvicorn kb_backend.main:app` run
+    # configuration. `reload=True` needs the app passed as an import
+    # string, not the `app` object itself — hence "kb_backend.main:app"
+    # here rather than just `app`.
+    import uvicorn
+
+    uvicorn.run("kb_backend.main:app", host="127.0.0.1", port=8000, reload=True)
