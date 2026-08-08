@@ -112,6 +112,15 @@ describe('coordValueEquals', () => {
     expect(coordValueEquals('boolean', true, false)).toBe(false);
   });
 
+  it('treats the string "false" as false, not truthy (Kimi fix on PR #24)', () => {
+    // Boolean('false') is true — any non-empty string is truthy in JS — so
+    // a naive Boolean(a) === Boolean(b) wrongly reported these as
+    // different even though they represent the same value.
+    expect(coordValueEquals('boolean', false, 'false')).toBe(true);
+    expect(coordValueEquals('boolean', true, 'true')).toBe(true);
+    expect(coordValueEquals('boolean', false, 'true')).toBe(false);
+  });
+
   it('compares text/date-typed and unknown-field-type values as strings', () => {
     expect(coordValueEquals('text', 'acme', 'acme')).toBe(true);
     expect(coordValueEquals('date', '2026-01-01', '2026-01-01')).toBe(true);

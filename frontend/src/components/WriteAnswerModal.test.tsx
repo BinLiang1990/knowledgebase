@@ -42,7 +42,7 @@ describe('WriteAnswerModal', () => {
         kbId={1}
         kpId={1}
         dimensions={DIMS}
-        existing={{ answerId: 5, coord: { tenant: 'acme' }, content: 'old content' }}
+        existing={{ answerId: 5, coord: { tenant: 'acme' }, content: 'old content', effective_time: '2026-08-01', note: null }}
         onClose={() => {}}
       />,
     );
@@ -64,7 +64,7 @@ describe('WriteAnswerModal', () => {
         kbId={1}
         kpId={1}
         dimensions={DIMS}
-        existing={{ answerId: 5, coord: { tenant: 'acme' }, content: 'old content' }}
+        existing={{ answerId: 5, coord: { tenant: 'acme' }, content: 'old content', effective_time: '2026-08-01', note: null }}
         onClose={() => {}}
       />,
     );
@@ -93,7 +93,7 @@ describe('WriteAnswerModal', () => {
         kbId={1}
         kpId={1}
         dimensions={DIMS}
-        existing={{ answerId: 5, coord: { tenant: 'acme' }, content: 'old content' }}
+        existing={{ answerId: 5, coord: { tenant: 'acme' }, content: 'old content', effective_time: '2026-08-01', note: null }}
         onClose={() => {}}
       />,
     );
@@ -114,7 +114,7 @@ describe('WriteAnswerModal', () => {
         kbId={1}
         kpId={1}
         dimensions={[makeDimension({ key: 'priority', label: '优先级', field_type: 'number' })]}
-        existing={{ answerId: 5, coord: { priority: 1.5 }, content: 'old content' }}
+        existing={{ answerId: 5, coord: { priority: 1.5 }, content: 'old content', effective_time: '2026-08-01', note: null }}
         onClose={() => {}}
       />,
     );
@@ -129,7 +129,7 @@ describe('WriteAnswerModal', () => {
         kbId={1}
         kpId={1}
         dimensions={DIMS}
-        existing={{ answerId: 5, coord: { tenant: 'acme', old_dim: 'x' }, content: 'old content' }}
+        existing={{ answerId: 5, coord: { tenant: 'acme', old_dim: 'x' }, content: 'old content', effective_time: '2026-08-01', note: null }}
         onClose={() => {}}
       />,
     );
@@ -141,6 +141,35 @@ describe('WriteAnswerModal', () => {
     await userEvent.click(screen.getByText('确 定'));
 
     expect(await screen.findByText(/暂不支持迁移条件/)).toBeInTheDocument();
+  });
+
+  it('preserves the original effective_time and note when editing content only (Kimi fix on PR #24)', async () => {
+    let body: Record<string, unknown> | null = null;
+    server.use(
+      http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers/:answerId/edit`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(envelope(makeAnswer({ id: 102 })));
+      }),
+    );
+    renderWithProviders(
+      <WriteAnswerModal
+        kbId={1}
+        kpId={1}
+        dimensions={DIMS}
+        existing={{ answerId: 5, coord: { tenant: 'acme' }, content: 'old content', effective_time: '2026-01-15', note: 'existing note' }}
+        onClose={() => {}}
+      />,
+    );
+
+    // Editing without touching effective_time/note must not silently move
+    // the answer's schedule to today() or drop its note.
+    const textarea = screen.getByPlaceholderText('这个条件组合下的说法');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'edited content only');
+    await userEvent.click(screen.getByText('确 定'));
+
+    await waitFor(() => expect(body).not.toBeNull());
+    expect(body).toMatchObject({ effective_time: '2026-01-15', note: 'existing note' });
   });
 
   it('shows a required-field hint when content or effective time is missing', async () => {

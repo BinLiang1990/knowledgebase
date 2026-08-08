@@ -13,6 +13,8 @@ export interface ExistingAnswer {
   answerId: number;
   coord: Filters;
   content: string;
+  effective_time: string;
+  note: string | null;
 }
 
 interface WriteAnswerModalProps {
@@ -29,8 +31,11 @@ interface WriteAnswerModalProps {
 export function WriteAnswerModal({ kbId, kpId, dimensions, existing, onClose }: WriteAnswerModalProps) {
   const isEdit = existing !== undefined;
   const [content, setContent] = useState(existing?.content ?? '');
-  const [effectiveTime, setEffectiveTime] = useState(today());
-  const [note, setNote] = useState('');
+  // Kimi 终审 finding on PR #24: this used to always start at today(),
+  // silently moving an existing answer's effective date forward the moment
+  // its content/conditions were edited for any other reason.
+  const [effectiveTime, setEffectiveTime] = useState(existing?.effective_time ?? today());
+  const [note, setNote] = useState(existing?.note ?? '');
   const [rows, setRows] = useState<CoordRow[]>(() =>
     existing ? coordRowsFromCoord(existing.coord, dimensions) : [],
   );

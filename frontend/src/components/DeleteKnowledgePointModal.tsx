@@ -31,7 +31,12 @@ export function DeleteKnowledgePointModal({
     deleteMutation
       .mutateAsync({ id: target.id, deleteReason: trimmedReason })
       .then(() => {
-        toast.ok(`已删除「${target.title}」，可在回收站恢复`);
+        // Doesn't promise recycle-bin recovery — this app has no recycle-
+        // bin page yet (design doc §4.5 omits it for the same reason).
+        // The backend does support restoring a soft-deleted knowledge
+        // point, but not through any UI a user can reach today. Kimi 终审
+        // finding on PR #24.
+        toast.ok(`已删除「${target.title}」`);
         onClose();
       })
       .catch((err: unknown) => {
@@ -71,7 +76,7 @@ export function DeleteKnowledgePointModal({
         />
       </div>
       <div className="risk">
-        采用软删除：删除后不再出现在知识点列表与查询结果中；可在「回收站」中恢复，恢复后全部答案与历史照常可用。
+        采用软删除：删除后不再出现在知识点列表与查询结果中；数据与全部历史答案会保留，如需恢复请联系管理员。
       </div>
       {error && <p className="hint" style={{ color: 'var(--red)' }}>{error}</p>}
     </Modal>

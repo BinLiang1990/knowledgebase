@@ -109,8 +109,21 @@ export function hasUniqueTopMatch(sortedGroups: AnswerGroup[], hasFilter: boolea
 // locked row always echoes its original value unchanged.
 export function coordValueEquals(fieldType: Dimension['field_type'] | undefined, a: unknown, b: unknown): boolean {
   if (fieldType === 'number') return numbersEqual(a, b);
-  if (fieldType === 'boolean') return Boolean(a) === Boolean(b);
+  // Boolean(a) === Boolean(b) is wrong whenever either side is the STRING
+  // "false": Boolean('false') is true (any non-empty string is truthy in
+  // JS), so coordValueEquals('boolean', false, 'false') came out false —
+  // semantically equal values reported as different. This function is
+  // documented to handle exactly this asymmetric-representation case, so
+  // normalize both sides to the same "true"/"false" string before
+  // comparing instead of relying on JS's truthiness coercion. Kimi 终审
+  // finding on PR #24.
+  if (fieldType === 'boolean') return normalizeBoolean(a) === normalizeBoolean(b);
   return String(a) === String(b);
+}
+
+function normalizeBoolean(v: unknown): boolean {
+  if (typeof v === 'string') return v === 'true';
+  return Boolean(v);
 }
 
 // coord.py accepts exact integer coordinate values up to the uint64 range —

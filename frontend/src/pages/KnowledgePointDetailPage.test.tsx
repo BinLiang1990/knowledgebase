@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
-import { KnowledgePointDetailPage } from './KnowledgePointDetailPage';
+import { KnowledgePointDetailPage, coordGroupKey } from './KnowledgePointDetailPage';
 import { renderWithProviders } from '../test/renderWithProviders';
 import {
   API_BASE,
@@ -25,6 +25,23 @@ function renderPage(initialPath = '/knowledge-bases/1/knowledge-points/1') {
     { initialEntries: [initialPath] },
   );
 }
+
+describe('coordGroupKey', () => {
+  it('stays the same across an edit that only changes the answer id (Kimi fix on PR #24)', () => {
+    // Using latest_answer.id as the React key would treat every edit as a
+    // brand-new row, since a new version means a new answer id.
+    expect(coordGroupKey({ tenant: 'acme' })).toBe(coordGroupKey({ tenant: 'acme' }));
+  });
+
+  it('differs for genuinely different coords', () => {
+    expect(coordGroupKey({ tenant: 'acme' })).not.toBe(coordGroupKey({ tenant: 'other' }));
+    expect(coordGroupKey({})).not.toBe(coordGroupKey({ tenant: 'acme' }));
+  });
+
+  it('is stable regardless of key insertion order', () => {
+    expect(coordGroupKey({ a: '1', b: '2' })).toBe(coordGroupKey({ b: '2', a: '1' }));
+  });
+});
 
 describe('KnowledgePointDetailPage', () => {
   it('renders the header: title, id, active answer count, created info, status tag', async () => {

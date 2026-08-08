@@ -41,6 +41,16 @@ function describeCoord(coord: Record<string, unknown>, dimensions: Dimension[]):
   return `适用条件：${parts.join(' 且 ')}`;
 }
 
+// A stable identity for a coord group across edits — `latest_answer.id`
+// changes every time a new version is appended to the same group, which
+// would make React treat an edited row as a brand-new element instead of
+// the same logical group (losing DOM state, remount flicker). Mirrors the
+// demo's coordKeyOf. Kimi 终审 finding on PR #24.
+export function coordGroupKey(coord: Record<string, unknown>): string {
+  const keys = Object.keys(coord).sort();
+  return keys.length ? keys.map((k) => `${k}:${String(coord[k])}`).join('|') : '(默认)';
+}
+
 function AnswerRow({
   group,
   dimensions,
@@ -322,12 +332,20 @@ export function KnowledgePointDetailPage() {
               !groupsQuery.isError &&
               sorted.map((g, i) => (
                 <AnswerRow
-                  key={g.latest_answer.id}
+                  key={coordGroupKey(g.coord)}
                   group={g}
                   dimensions={dimensions}
                   isTop={uniqueTop && i === 0}
                   editDisabled={!dimensionsReady}
-                  onEdit={() => setWriteTarget({ answerId: g.live_answer!.id, coord: g.coord, content: g.live_answer!.content })}
+                  onEdit={() =>
+                    setWriteTarget({
+                      answerId: g.live_answer!.id,
+                      coord: g.coord,
+                      content: g.live_answer!.content,
+                      effective_time: g.live_answer!.effective_time,
+                      note: g.live_answer!.note,
+                    })
+                  }
                 />
               ))}
           </>
