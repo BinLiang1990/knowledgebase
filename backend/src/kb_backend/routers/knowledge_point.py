@@ -208,7 +208,11 @@ def list_knowledge_points(
         # Case-insensitive substring match, mirroring frontend-mock's
         # kp.title.toLowerCase().includes(S.kw) — done in the query rather
         # than in Python so it's not fetching rows we'll immediately drop.
-        stmt = stmt.where(func.lower(KnowledgePoint.title).contains(keyword.strip().lower()))
+        # autoescape=True: without it, a literal "%" or "_" in the keyword
+        # is interpreted as a SQL LIKE wildcard instead of a literal
+        # character, diverging from JS .includes()'s literal-substring
+        # semantics. Found by the Codex outer-gate review on PR #21.
+        stmt = stmt.where(func.lower(KnowledgePoint.title).contains(keyword.strip().lower(), autoescape=True))
     rows = db.execute(stmt.order_by(KnowledgePoint.id)).scalars().all()
 
     out = []
@@ -237,9 +241,19 @@ def resolve_knowledge_point(
     coord: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
-    _get_kp_or_404(db, kb_id, kp_id)
+    kp = _get_kp_or_404(db, kb_id, kp_id)
     at = at or date.today()
     query_coord = _parse_query_coord(db, kb_id, coord)
+
+    if kp.status == "deleted":
+        # PRD §4.4: a soft-deleted knowledge point must not appear in query
+        # results (its retained answers are for the recycle-bin/restore
+        # flow only, not for this externally-facing resolve endpoint).
+        # Behaves like "no answers exist" rather than 404 — this endpoint's
+        # own contract is "always 200 + a status field" for any KP that
+        # does genuinely exist. Found by the Codex outer-gate review on
+        # PR #21.
+        return envelope(_to_resolved_out(ResolveResult(status="none", answer=None)).model_dump(mode="json"))
 
     groups = compute_live_groups(db, kb_id, kp_id, at)
     result = resolve(groups, query_coord)

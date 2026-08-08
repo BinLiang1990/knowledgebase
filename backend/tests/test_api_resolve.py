@@ -150,6 +150,24 @@ def test_resolve_coord_not_a_json_object_returns_422(client: TestClient, migrate
     assert resp.status_code == 422
 
 
+def test_resolve_deleted_knowledge_point_returns_none_not_its_answers(
+    client: TestClient, migrated_schema
+) -> None:
+    """PRD §4.4: a soft-deleted knowledge point must not appear in query
+    results, even though its answers are retained for the recycle-bin flow.
+    Found by the Codex outer-gate review on PR #21."""
+    kb = _create_kb(client, "kb-resolve-deleted-kp")
+    kp = _create_kp(client, kb["id"], "kp-resolve-deleted-kp")
+    _write_answer(client, kb["id"], kp["id"], "should not be resolvable", "2026-08-08")
+    client.post(f"/knowledge-bases/{kb['id']}/knowledge-points/{kp['id']}/delete", json={"delete_reason": "x"})
+
+    resp = _resolve(client, kb["id"], kp["id"])
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["status"] == "none"
+    assert data["answer"] is None
+
+
 # ---------------------------------------------------------------------------
 # List + filter endpoint
 # ---------------------------------------------------------------------------
@@ -179,6 +197,20 @@ def test_list_keyword_filter_is_case_insensitive_substring(client: TestClient, m
     resp = client.get(_list_url(kb["id"]), params={"keyword": "refund"})
     titles = [r["title"] for r in resp.json()["data"]]
     assert titles == ["Refund Policy"]
+
+
+def test_list_keyword_filter_escapes_sql_like_wildcards(client: TestClient, migrated_schema) -> None:
+    """Found by the Codex outer-gate review on PR #21: without autoescape,
+    a literal "%" or "_" in the keyword is interpreted as a SQL LIKE
+    wildcard rather than a literal character, diverging from JS
+    .includes()'s literal-substring semantics."""
+    kb = _create_kb(client, "kb-list-keyword-wildcard")
+    _create_kp(client, kb["id"], "50%_off deal")
+    _create_kp(client, kb["id"], "50X0off deal")
+
+    resp = client.get(_list_url(kb["id"]), params={"keyword": "50%_off"})
+    titles = [r["title"] for r in resp.json()["data"]]
+    assert titles == ["50%_off deal"]
 
 
 def test_list_with_coord_excludes_none_matches(
