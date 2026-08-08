@@ -26,6 +26,17 @@ describe('sortLiveGroupsByPriority', () => {
     expect(coords).not.toContainEqual({ tenant: 'other' });
   });
 
+  it('matches a number-typed filter against an equivalent group value regardless of string/number formatting (Codex fix on PR #24)', () => {
+    const dims = [makeDimension({ key: 'priority', field_type: 'number' })];
+    const groups = [makeAnswerGroup({ coord: { priority: 1 }, live_answer: makeAnswer() })];
+    // The filter value arrives as a precision-preserving string (issue #7),
+    // the group's own coord value is a JSON number — a naive String()
+    // comparison would already treat "1" === "1" fine, but "1.0" would not
+    // naively match the group's bare `1`, even though /resolve considers
+    // them the same condition.
+    expect(sortLiveGroupsByPriority(groups, { priority: '1.0' }, dims)).toHaveLength(1);
+  });
+
   it('sorts by spec desc, then weight desc, then effective_time desc', () => {
     const dims = [makeDimension({ key: 'tenant', weight: 10 }), makeDimension({ key: 'region', weight: 90 })];
     const groups = [
@@ -106,6 +117,19 @@ describe('coordValueEquals', () => {
     expect(coordValueEquals('date', '2026-01-01', '2026-01-01')).toBe(true);
     expect(coordValueEquals(undefined, 'x', 'x')).toBe(true);
     expect(coordValueEquals(undefined, 'x', 'y')).toBe(false);
+  });
+
+  it('distinguishes large integers beyond Number precision instead of collapsing them (Codex fix on PR #24)', () => {
+    // Number(a) === Number(b) would collapse both of these onto the same
+    // double (9007199254740992) even though they're distinct, backend-
+    // supported integers — 2**53 is exactly representable as `a`, so this
+    // isn't testing a value already mangled by the test's own JS literal.
+    expect(coordValueEquals('number', 9007199254740992, '9007199254740993')).toBe(false);
+    expect(coordValueEquals('number', 9007199254740992, '9007199254740992')).toBe(true);
+    // Both sides as exact digit strings (as they'd arrive via toFilterValue
+    // on both ends) stays exact arbitrarily far past 2**53.
+    expect(coordValueEquals('number', '18446744073709551615', '18446744073709551615')).toBe(true);
+    expect(coordValueEquals('number', '18446744073709551615', '18446744073709551614')).toBe(false);
   });
 });
 

@@ -281,13 +281,19 @@ def list_answer_groups(
     just the single best-matching one `resolve` returns. Deliberately uses
     compute_all_answer_groups(), not compute_live_groups(): the latter
     drops whole-chain-revoked groups outright, but the tree must still show
-    them (struck through) per PRD §4.4's "全部答案的分组树"."""
+    them (struck through) per PRD §4.4's "全部答案的分组树".
+
+    Deliberately does NOT special-case a soft-deleted knowledge point the
+    way resolve_knowledge_point does. That endpoint's "none" contract is for
+    third-party query consumers, where a deleted KP correctly has no answer.
+    This one backs the detail page's answer tree/current-answers view, which
+    PRD §4.7 requires to keep showing a deleted KP's full historical answers
+    ("以下仍可查看其全部历史答案") — issue #8's Codex outer-gate review found
+    the original short-circuit here (copied from the resolve endpoint
+    without re-checking whether it applied) silently emptied that view.
+    """
     kp = _get_kp_or_404(db, kb_id, kp_id)
     at = at or date.today()
-
-    if kp.status == "deleted":
-        # Same "not in query results" rule as the resolve endpoint above.
-        return envelope([])
 
     groups = compute_all_answer_groups(db, kb_id, kp_id, at)
     out = [

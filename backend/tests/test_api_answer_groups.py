@@ -117,7 +117,15 @@ def test_answer_groups_not_yet_effective_is_distinct_from_revoked(
     assert groups[0]["latest_answer"]["content"] == "future content"
 
 
-def test_answer_groups_deleted_knowledge_point_returns_empty(client: TestClient, migrated_schema) -> None:
+def test_answer_groups_deleted_knowledge_point_still_returns_its_history(client: TestClient, migrated_schema) -> None:
+    """PRD §4.7: the detail page must keep showing a soft-deleted knowledge
+    point's full historical answers ("以下仍可查看其全部历史答案") — unlike
+    resolve_knowledge_point's "none" contract for third-party query
+    consumers, this read-only view has no reason to hide them. Originally
+    returned [] here (copied from the resolve endpoint's short-circuit
+    without checking it applied) — issue #8's Codex outer-gate review caught
+    that this silently emptied the detail page's answer tab for any deleted
+    KP."""
     kb = _create_kb(client, "kb-groups-deleted-kp")
     kp = _create_kp(client, kb["id"], "kp-groups-deleted")
     _write_answer(client, kb["id"], kp["id"], "content", "2026-08-01")
@@ -125,7 +133,9 @@ def test_answer_groups_deleted_knowledge_point_returns_empty(client: TestClient,
 
     resp = client.get(_groups_url(kb["id"], kp["id"]))
     assert resp.status_code == 200
-    assert resp.json()["data"] == []
+    groups = resp.json()["data"]
+    assert len(groups) == 1
+    assert groups[0]["latest_answer"]["content"] == "content"
 
 
 def test_answer_groups_no_answers_returns_empty(client: TestClient, migrated_schema) -> None:

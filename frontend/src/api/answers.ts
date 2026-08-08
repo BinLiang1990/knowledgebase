@@ -39,10 +39,18 @@ function coordWeight(coord: Record<string, unknown>, dimensions: Dimension[]): n
 // wherever the query also specifies it; a key the query asks about but the
 // group never wrote (or vice versa) is not checked. coord={} is therefore
 // always compatible.
-function coordCompatible(groupCoord: Record<string, unknown>, query: Filters): boolean {
+//
+// Comparisons go through coordValueEquals, not a bare String()/== check
+// (Codex outer-gate finding on PR #24): a number-type filter value is a
+// precision-preserving string (issue #7) while the group's own coord value
+// is a JSON number, so a naive comparison rejects equivalent values like
+// group `1` vs filter `"1.0"` — silently hiding an answer /resolve would
+// have matched for the same condition.
+function coordCompatible(groupCoord: Record<string, unknown>, query: Filters, dimensions: Dimension[]): boolean {
   for (const [key, value] of Object.entries(groupCoord)) {
     if (!(key in query)) continue;
-    if (String(value) !== String(query[key])) return false;
+    const fieldType = dimensions.find((d) => d.key === key)?.field_type;
+    if (!coordValueEquals(fieldType, value, query[key])) return false;
   }
   return true;
 }
@@ -67,7 +75,8 @@ export function sortLiveGroupsByPriority(
   dimensions: Dimension[],
 ): AnswerGroup[] {
   const live = groups.filter((g) => g.live_answer !== null);
-  const compatible = Object.keys(filters).length === 0 ? live : live.filter((g) => coordCompatible(g.coord, filters));
+  const compatible =
+    Object.keys(filters).length === 0 ? live : live.filter((g) => coordCompatible(g.coord, filters, dimensions));
   return [...compatible].sort((a, b) => {
     const specDiff = coordSpec(b.coord) - coordSpec(a.coord);
     if (specDiff !== 0) return specDiff;
@@ -99,9 +108,37 @@ export function hasUniqueTopMatch(sortedGroups: AnswerGroup[], hasFilter: boolea
 // row) falls back to String() comparison, which is exact here since a
 // locked row always echoes its original value unchanged.
 export function coordValueEquals(fieldType: Dimension['field_type'] | undefined, a: unknown, b: unknown): boolean {
-  if (fieldType === 'number') return Number(a) === Number(b);
+  if (fieldType === 'number') return numbersEqual(a, b);
   if (fieldType === 'boolean') return Boolean(a) === Boolean(b);
   return String(a) === String(b);
+}
+
+// coord.py accepts exact integer coordinate values up to the uint64 range —
+// well beyond 2^53, where every JS `Number` stops representing every
+// integer exactly. `Number(a) === Number(b)` collapses distinct in-range
+// integers onto the same double (e.g. 9007199254740992 and
+// "9007199254740993" both become 9007199254740992), so an edit that only
+// changes a large numeric condition would be wrongly detected as
+// unchanged — silently leaving the answer under its old condition, since
+// `coord` would then be omitted entirely (design doc §4.4). Compare via
+// BigInt when both sides parse as plain integers, which is exact
+// regardless of magnitude; fall back to Number for fractional values,
+// where this app's precision needs don't extend past double range. Codex
+// outer-gate finding on PR #24.
+function numbersEqual(a: unknown, b: unknown): boolean {
+  const sa = String(a);
+  const sb = String(b);
+  if (sa === sb) return true;
+  const isPlainInt = (s: string) => /^-?\d+$/.test(s);
+  if (isPlainInt(sa) && isPlainInt(sb)) {
+    try {
+      return BigInt(sa) === BigInt(sb);
+    } catch {
+      // Unparseable as BigInt (shouldn't happen given the regex) — fall
+      // through to the float comparison below.
+    }
+  }
+  return Number(a) === Number(b);
 }
 
 // True if `current` differs from `original` in a way that matters to the

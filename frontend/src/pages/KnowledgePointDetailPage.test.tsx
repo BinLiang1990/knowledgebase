@@ -42,6 +42,21 @@ describe('KnowledgePointDetailPage', () => {
     expect(screen.getByText('正常')).toBeInTheDocument();
   });
 
+  it('disables write/edit actions until enabled-dimensions has loaded (Codex fix on PR #24)', async () => {
+    // Never resolves — simulates enabled-dimensions still being in flight
+    // while answer-groups has already returned, the race that used to
+    // permanently lock every condition row as "deprecated dimension".
+    server.use(http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () => new Promise(() => {})));
+    renderPage();
+    await screen.findByText('kp-1');
+    await screen.findByText('answer content');
+
+    expect(screen.getByText('+ 写一条答案')).toBeDisabled();
+    await userEvent.click(screen.getByText('编辑'));
+    expect(screen.queryByText('写一条答案', { selector: 'h3' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '编辑答案' })).not.toBeInTheDocument();
+  });
+
   it('shows a guard when the knowledge base does not exist', async () => {
     server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([]))));
     renderPage('/knowledge-bases/999/knowledge-points/1');

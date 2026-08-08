@@ -45,11 +45,13 @@ function AnswerRow({
   group,
   dimensions,
   isTop,
+  editDisabled,
   onEdit,
 }: {
   group: AnswerGroup;
   dimensions: Dimension[];
   isTop: boolean;
+  editDisabled: boolean;
   onEdit: () => void;
 }) {
   const live = group.live_answer!;
@@ -60,7 +62,13 @@ function AnswerRow({
           {live.content}
         </div>
         <span className="ops" style={{ fontSize: '12.5px', whiteSpace: 'nowrap', paddingTop: 3 }}>
-          <a onClick={onEdit}>编辑</a>
+          <a
+            onClick={editDisabled ? undefined : onEdit}
+            style={editDisabled ? { color: 'var(--ink-6)', cursor: 'not-allowed' } : undefined}
+            title={editDisabled ? '维度加载完成后才能编辑' : undefined}
+          >
+            编辑
+          </a>
         </span>
       </div>
       <div className="ai-cond">
@@ -101,6 +109,14 @@ export function KnowledgePointDetailPage() {
 
   const dimensionsQuery = useEnabledDimensions(kbId, kbReady);
   const dimensions = dimensionsQuery.data ?? [];
+  // WriteAnswerModal builds its CoordEditor rows from `dimensions` exactly
+  // once, on mount — if it opens before this query has settled, every
+  // existing condition row would be permanently misclassified as
+  // referencing a deprecated dimension (dimensions=[] at that instant), for
+  // the modal's whole lifetime. Block write/edit until it's actually ready
+  // rather than let that race decide the outcome. Codex outer-gate finding
+  // on PR #24.
+  const dimensionsReady = !dimensionsQuery.isLoading && !dimensionsQuery.isError;
 
   const kpQuery = useKnowledgePoint(kbId, kpId, kbReady);
   const kp = kpQuery.data;
@@ -219,7 +235,13 @@ export function KnowledgePointDetailPage() {
           <div className="ops">
             {!isDeleted && (
               <>
-                <button type="button" className="btn primary" onClick={() => setWriteTarget('create')}>
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={!dimensionsReady}
+                  title={dimensionsReady ? undefined : '维度加载完成后才能写答案'}
+                  onClick={() => setWriteTarget('create')}
+                >
                   + 写一条答案
                 </button>
                 <button type="button" className="btn" onClick={() => setEditTitleOpen(true)}>
@@ -304,6 +326,7 @@ export function KnowledgePointDetailPage() {
                   group={g}
                   dimensions={dimensions}
                   isTop={uniqueTop && i === 0}
+                  editDisabled={!dimensionsReady}
                   onEdit={() => setWriteTarget({ answerId: g.live_answer!.id, coord: g.coord, content: g.live_answer!.content })}
                 />
               ))}
