@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 import type { Answer } from './answers';
+import { KNOWLEDGE_BASES_KEY } from './knowledgeBases';
 
 export type ResolveStatus = 'exact' | 'weighted' | 'default' | 'fallback-latest' | 'none';
 
@@ -87,13 +88,22 @@ interface CreateKnowledgePointInput {
   default_answer?: { content: string; effective_time: string };
 }
 
+// Creating/deleting a knowledge point changes the knowledge base's own
+// active_knowledge_point_count (the "知识主题" stat card reads it straight
+// off useKnowledgeBases()'s cache) — both mutations must invalidate that
+// query too, not just the knowledge-points list. Codex outer-gate finding
+// on PR #23.
+function invalidateAfterKpMutation(queryClient: ReturnType<typeof useQueryClient>, kbId: number) {
+  queryClient.invalidateQueries({ queryKey: ['knowledge-bases', kbId, 'knowledge-points'] });
+  queryClient.invalidateQueries({ queryKey: KNOWLEDGE_BASES_KEY });
+}
+
 export function useCreateKnowledgePoint(kbId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateKnowledgePointInput) =>
       apiClient.post<KnowledgePoint>(`/knowledge-bases/${kbId}/knowledge-points`, input),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['knowledge-bases', kbId, 'knowledge-points'] }),
+    onSuccess: () => invalidateAfterKpMutation(queryClient, kbId),
   });
 }
 
@@ -104,7 +114,6 @@ export function useDeleteKnowledgePoint(kbId: number) {
       apiClient.post<KnowledgePoint>(`/knowledge-bases/${kbId}/knowledge-points/${id}/delete`, {
         delete_reason: deleteReason,
       }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['knowledge-bases', kbId, 'knowledge-points'] }),
+    onSuccess: () => invalidateAfterKpMutation(queryClient, kbId),
   });
 }

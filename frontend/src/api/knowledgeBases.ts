@@ -17,7 +17,7 @@ export interface KnowledgeBaseInput {
   description?: string;
 }
 
-const KNOWLEDGE_BASES_KEY = ['knowledge-bases'] as const;
+export const KNOWLEDGE_BASES_KEY = ['knowledge-bases'] as const;
 
 // The list endpoint has no keyword-search param and no pagination — fetch
 // every knowledge base (issue #2's default already includes deprecated

@@ -19,14 +19,22 @@ import { useToast } from '../components/ui/Toast';
 const PAGE_SIZE = 6;
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  // toISOString() reports the UTC calendar date, which lags the local date
+  // by up to a day in timezones ahead of UTC (e.g. UTC+8 China, for the
+  // first 8 hours after local midnight) — Codex outer-gate finding on PR
+  // #23. Format from the local Date fields instead.
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function KnowledgePointListPage() {
   const { kbId: kbIdParam } = useParams<{ kbId: string }>();
   const kbId = Number(kbIdParam);
 
-  const { data: knowledgeBases, isLoading: kbLoading } = useKnowledgeBases();
+  const { data: knowledgeBases, isLoading: kbLoading, isError: kbIsError, refetch: kbRefetch } = useKnowledgeBases();
   const kb = knowledgeBases?.find((k) => k.id === kbId);
 
   const [keywordInput, setKeywordInput] = useState('');
@@ -84,6 +92,26 @@ export function KnowledgePointListPage() {
         <div className="card">
           <div className="empty-block">
             <span className="spin" /> 加载中…
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (kbIsError) {
+    // Distinct from the "no such knowledge base" guard below (Codex
+    // outer-gate finding on PR #23): a failed fetch must not be reported as
+    // "this knowledge base doesn't exist" — that's misleading and gives the
+    // user nothing to retry.
+    return (
+      <AppShell title="知识点列表" crumb="知识库列表 / 知识点列表">
+        <div className="card">
+          <div className="empty-block">
+            加载知识库失败，请稍后重试
+            <br />
+            <span style={{ display: 'inline-block', marginTop: 12 }}>
+              <a onClick={() => kbRefetch()}>重试</a>
+            </span>
           </div>
         </div>
       </AppShell>
@@ -161,15 +189,25 @@ export function KnowledgePointListPage() {
               if (e.key === 'Enter') applyFilter();
             }}
           />
-          <ConditionPicker
-            dimensions={dimensions}
-            filters={filters}
-            onFiltersChange={handleFiltersChange}
-            qMode={qMode}
-            qTime={qTime}
-            today={today()}
-            onTimeChange={handleTimeChange}
-          />
+          {dimensionsQuery.isError ? (
+            // Codex outer-gate finding on PR #23: silently falling back to
+            // `[]` on a failed fetch made the picker claim "this knowledge
+            // base has no enabled dimensions," indistinguishable from the
+            // genuine empty case. Surface the failure instead.
+            <span className="hint" style={{ color: 'var(--red)' }}>
+              维度加载失败，条件筛选暂不可用 · <a onClick={() => dimensionsQuery.refetch()}>重试</a>
+            </span>
+          ) : (
+            <ConditionPicker
+              dimensions={dimensions}
+              filters={filters}
+              onFiltersChange={handleFiltersChange}
+              qMode={qMode}
+              qTime={qTime}
+              today={today()}
+              onTimeChange={handleTimeChange}
+            />
+          )}
           <button type="button" className="btn primary sm" onClick={applyFilter}>
             查 询
           </button>

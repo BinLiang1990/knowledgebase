@@ -8,6 +8,7 @@ import {
   API_BASE,
   HttpResponse,
   envelope,
+  errorEnvelope,
   http,
   makeAnswer,
   makeAnswerGroup,
@@ -232,5 +233,50 @@ describe('KnowledgePointListPage', () => {
     expect(within(subjectCard as HTMLElement).getByText('7')).toBeInTheDocument();
     expect(within(dimensionCard as HTMLElement).getByText('1')).toBeInTheDocument();
     expect(screen.getAllByText('统计接口开发中')).toHaveLength(2);
+  });
+
+  it('refreshes the 知识主题 stat after creating a knowledge point (issue #7 Codex fix)', async () => {
+    let count = 3;
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([makeKb({ active_knowledge_point_count: count })]))),
+    );
+    server.use(
+      http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points`, () => {
+        count = 4;
+        return HttpResponse.json(envelope(makeKp({ id: 2, title: 'new-kp' })));
+      }),
+    );
+    renderPage();
+    await screen.findByText('kp-1');
+    const statGrid = document.querySelector('.stat-grid') as HTMLElement;
+    const subjectCard = statGrid.querySelectorAll('.stat')[0] as HTMLElement;
+    expect(within(subjectCard).getByText('3')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('+ 新增知识点'));
+    const dialog = (await screen.findByText('新增知识点')).closest('.modal') as HTMLElement;
+    await userEvent.type(within(dialog).getByPlaceholderText('知识点标题，例如：退款政策'), 'brand-new-kp');
+    await userEvent.click(within(dialog).getByText('确 定'));
+    await waitFor(() => expect(screen.queryByText('新增知识点')).not.toBeInTheDocument());
+
+    await waitFor(() => expect(within(subjectCard).getByText('4')).toBeInTheDocument());
+  });
+
+  it('surfaces an enabled-dimensions load failure instead of claiming zero dimensions', async () => {
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () =>
+        HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 }),
+      ),
+    );
+    renderPage();
+    await screen.findByText('kp-1');
+    expect(await screen.findByText(/维度加载失败/)).toBeInTheDocument();
+    expect(screen.queryByText('+ 加一个条件')).not.toBeInTheDocument();
+  });
+
+  it('distinguishes a knowledge-base load failure from "no such knowledge base"', async () => {
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 })));
+    renderPage();
+    expect(await screen.findByText(/加载知识库失败/)).toBeInTheDocument();
+    expect(screen.queryByText(/没有指定有效的知识库/)).not.toBeInTheDocument();
   });
 });
