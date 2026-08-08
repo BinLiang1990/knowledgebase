@@ -83,4 +83,8 @@ class EnabledDimensionsUpdate(BaseModel):
     # an omitted field or a misspelled key name (e.g. "dimension_key") must
     # 422 instead of silently defaulting to that same empty list and wiping
     # every enabled dimension for the KB. Codex outer-gate finding on PR #25.
-    dimension_keys: list[str]
+    # max_length=200 bounds the individual-key-lookup loop this feeds
+    # (design doc §4.3/Codex fix on PR #25) — no real deployment has
+    # anywhere near this many global dimensions, so this only rejects
+    # abuse, never a legitimate request. Kimi 终审 finding on PR #25.
+    dimension_keys: list[str] = Field(max_length=200)

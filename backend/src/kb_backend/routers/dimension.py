@@ -57,9 +57,13 @@ def _to_admin_out(dim: DimensionDefinition, answer_count: int) -> DimensionAdmin
 
 def _set_status(db: Session, key: str, status: str) -> dict:
     dim = _get_or_404(db, key)
-    dim.status = status
-    db.commit()
-    db.refresh(dim)
+    # Mirrors knowledge_base.py's own _set_status: skip the write entirely
+    # when already at the target status, instead of committing a no-op on
+    # every idempotent activate/deactivate call. Kimi 终审 finding on PR #25.
+    if dim.status != status:
+        dim.status = status
+        db.commit()
+        db.refresh(dim)
     # dim.key (the canonical stored spelling), not the raw `key` path
     # param — dimension_definition.key's collation is case/accent
     # insensitive (same as knowledge_base.name), so _get_or_404 can

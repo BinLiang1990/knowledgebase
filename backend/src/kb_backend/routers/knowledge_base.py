@@ -249,16 +249,37 @@ def set_enabled_dimensions(
     # anyone saves this KB's settings — reactivating the dimension later
     # would then no longer show it enabled for this KB. Codex outer-gate
     # finding on PR #25.
-    db.execute(
-        delete(KnowledgeBaseEnabledDimension).where(
-            KnowledgeBaseEnabledDimension.knowledge_base_id == kb_id,
-            KnowledgeBaseEnabledDimension.dimension_key.in_(
-                select(DimensionDefinition.key).where(DimensionDefinition.status == "active")
-            ),
+    #
+    # A dimension can be deactivated by a concurrent request between the
+    # validation loop above and this commit — Kimi 终审 finding on PR #25.
+    # PRD §4.10 explicitly defers concurrency/conflict control to P2 and
+    # this app takes no row locks anywhere else, so this doesn't add
+    # `.with_for_update()` locking here either; instead this just makes
+    # sure that race can never surface as an unhandled 500. Two outcomes:
+    # (a) the dimension had no existing link for this KB — the insert
+    # below creates one to a now-deprecated dimension, which is harmless
+    # because _enabled_dimensions()/get_enabled_dimension_types() both
+    # INNER JOIN on status=active, so that link is functionally inert
+    # until someone reactivates the dimension (identical reasoning to why
+    # "enabling a deprecated dimension" is accepted as harmless elsewhere
+    # in this design); (b) the dimension already had a link — the delete
+    # above skips it (no longer status=active) and the insert then hits
+    # that same composite primary key, which IntegrityError below turns
+    # into a clean retry-able error instead of a crash.
+    try:
+        db.execute(
+            delete(KnowledgeBaseEnabledDimension).where(
+                KnowledgeBaseEnabledDimension.knowledge_base_id == kb_id,
+                KnowledgeBaseEnabledDimension.dimension_key.in_(
+                    select(DimensionDefinition.key).where(DimensionDefinition.status == "active")
+                ),
+            )
         )
-    )
-    for key in keys:
-        db.add(KnowledgeBaseEnabledDimension(knowledge_base_id=kb_id, dimension_key=key))
-    db.commit()
+        for key in keys:
+            db.add(KnowledgeBaseEnabledDimension(knowledge_base_id=kb_id, dimension_key=key))
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessError("启用维度失败，请刷新后重试", status_code=400) from exc
 
     return _enabled_dimensions_envelope(db, kb_id)

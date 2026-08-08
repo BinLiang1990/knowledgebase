@@ -320,6 +320,19 @@ def test_set_enabled_dimensions_dedupes_case_equivalent_spellings(client: TestCl
     assert len(resp.json()["data"]) == 1
 
 
+def test_set_enabled_dimensions_rejects_an_excessively_long_list(client: TestClient, migrated_schema) -> None:
+    """Each requested key resolves via its own SELECT (design doc §4.3's
+    canonicalization fix) — an unbounded list turns this into an easy way
+    to force the endpoint to issue an unbounded number of queries. Kimi
+    终审 finding on PR #25."""
+    kb = _create_kb(client, "kb-too-many-dims")
+    resp = client.put(
+        f"/knowledge-bases/{kb['id']}/enabled-dimensions",
+        json={"dimension_keys": [f"key-{i}" for i in range(201)]},
+    )
+    assert resp.status_code == 422
+
+
 def test_set_enabled_dimensions_nonexistent_key_is_rejected(client: TestClient, migrated_schema) -> None:
     kb = _create_kb(client, "kb-bad-dims")
     resp = client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["no-such-dim"]})
