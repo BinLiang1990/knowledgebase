@@ -184,7 +184,10 @@ def create_knowledge_point(
 def list_knowledge_points(
     kb_id: int,
     status: Literal["active", "deleted"] = Query(default="active"),
-    keyword: str | None = Query(default=None),
+    # max_length=255 matches knowledge_point.title's own VARCHAR(255) — an
+    # unbounded keyword fed straight into a SQL LIKE is a trivial CPU/memory
+    # DoS vector. Found by the Kimi review gate on PR #21.
+    keyword: str | None = Query(default=None, max_length=255),
     at: date | None = Query(default=None),
     coord: str | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -204,7 +207,12 @@ def list_knowledge_points(
     stmt = select(KnowledgePoint).where(
         KnowledgePoint.knowledge_base_id == kb_id, KnowledgePoint.status == status
     )
-    if keyword:
+    # Guard on the STRIPPED value, not the raw one: a whitespace-only
+    # keyword (e.g. "   ") is truthy but strips to "", and contains("")
+    # matches every title — silently disabling filtering instead of either
+    # filtering or erroring. Found by the Kimi review gate on PR #21.
+    stripped_keyword = keyword.strip() if keyword else ""
+    if stripped_keyword:
         # Case-insensitive substring match, mirroring frontend-mock's
         # kp.title.toLowerCase().includes(S.kw) — done in the query rather
         # than in Python so it's not fetching rows we'll immediately drop.
@@ -212,7 +220,7 @@ def list_knowledge_points(
         # is interpreted as a SQL LIKE wildcard instead of a literal
         # character, diverging from JS .includes()'s literal-substring
         # semantics. Found by the Codex outer-gate review on PR #21.
-        stmt = stmt.where(func.lower(KnowledgePoint.title).contains(keyword.strip().lower(), autoescape=True))
+        stmt = stmt.where(func.lower(KnowledgePoint.title).contains(stripped_keyword.lower(), autoescape=True))
     rows = db.execute(stmt.order_by(KnowledgePoint.id)).scalars().all()
 
     out = []

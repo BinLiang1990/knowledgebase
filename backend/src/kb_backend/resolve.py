@@ -75,7 +75,12 @@ def compute_live_groups(db: Session, kb_id: int, kp_id: int, at: date) -> list[L
 
     groups = []
     for coord_hash, versions in by_hash.items():
-        current = max(versions, key=lambda a: (a.effective_time, a.created_at))
+        # id as a final tie-break: `versions` comes from an unordered SELECT
+        # (no ORDER BY), so relying on Python's stable max() over
+        # MySQL's execution-plan-dependent row order would make the winner
+        # non-deterministic whenever (effective_time, created_at) also tie.
+        # Found by the Kimi review gate on PR #21.
+        current = max(versions, key=lambda a: (a.effective_time, a.created_at, a.id))
         coord = current.coord
         groups.append(
             LiveGroup(
@@ -116,7 +121,9 @@ def resolve(groups: list[LiveGroup], query_coord: dict[str, Any]) -> ResolveResu
         default_group = next((g for g in groups if g.spec == 0), None)
         if default_group is not None:
             return ResolveResult(status="default", answer=default_group.live_answer)
-        latest = max(groups, key=lambda g: (g.live_answer.effective_time, g.live_answer.created_at))
+        latest = max(
+            groups, key=lambda g: (g.live_answer.effective_time, g.live_answer.created_at, g.live_answer.id)
+        )
         return ResolveResult(status="fallback-latest", answer=latest.live_answer)
 
     candidates = [g for g in groups if _coord_compatible(g.coord, query_coord)]
@@ -125,7 +132,13 @@ def resolve(groups: list[LiveGroup], query_coord: dict[str, Any]) -> ResolveResu
 
     top = max(
         candidates,
-        key=lambda g: (g.spec, g.weight, g.live_answer.effective_time, g.live_answer.created_at),
+        key=lambda g: (
+            g.spec,
+            g.weight,
+            g.live_answer.effective_time,
+            g.live_answer.created_at,
+            g.live_answer.id,
+        ),
     )
     is_exact = top.spec == len(query_coord) and all(
         top.coord[k] == query_coord.get(k) for k in top.coord

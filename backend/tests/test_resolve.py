@@ -4,19 +4,22 @@ from kb_backend.models.answer import Answer
 from kb_backend.resolve import LiveGroup, resolve
 
 
-def _answer(effective_time: str, created_at: str, content: str = "content") -> Answer:
+def _answer(effective_time: str, created_at: str, content: str = "content", id: int = 1) -> Answer:
     return Answer(
+        id=id,
         content=content,
         effective_time=date.fromisoformat(effective_time),
         created_at=datetime.fromisoformat(created_at),
     )
 
 
-def _group(coord: dict, spec: int, weight: int, effective_time: str, created_at: str, content: str = "c") -> LiveGroup:
+def _group(
+    coord: dict, spec: int, weight: int, effective_time: str, created_at: str, content: str = "c", id: int = 1
+) -> LiveGroup:
     return LiveGroup(
         coord=coord,
         coord_hash=f"hash-{coord}",
-        live_answer=_answer(effective_time, created_at, content),
+        live_answer=_answer(effective_time, created_at, content, id=id),
         spec=spec,
         weight=weight,
     )
@@ -87,6 +90,20 @@ def test_resolve_ranks_by_spec_then_weight_then_effective_time_then_created_at()
     )
     result = resolve([low_spec, high_spec], {"tenant": "acme", "priority": 5})
     assert result.answer.content == "high-spec"
+
+
+def test_resolve_tie_break_uses_id_when_everything_else_ties() -> None:
+    """Found by the Kimi review gate on PR #21: without `id` as a final tie-
+    break, the winner among fully-tied candidates depends on the row order
+    returned by an unordered SQL SELECT — non-deterministic across
+    identical queries. Locks in `id` as the deterministic last resort."""
+    first = _group({"tenant": "a"}, spec=1, weight=90, effective_time="2026-08-05", created_at="2026-08-05T00:00:00", content="first", id=5)
+    second = _group({"tenant": "b"}, spec=1, weight=90, effective_time="2026-08-05", created_at="2026-08-05T00:00:00", content="second", id=9)
+    result = resolve([first, second], {})
+    assert result.answer.content == "second"
+    # Order-independence: same inputs, reversed list order, same winner.
+    result_reversed = resolve([second, first], {})
+    assert result_reversed.answer.content == "second"
 
 
 def test_resolve_tie_break_uses_created_at_when_spec_weight_and_effective_time_all_equal() -> None:

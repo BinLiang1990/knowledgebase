@@ -213,6 +213,30 @@ def test_list_keyword_filter_escapes_sql_like_wildcards(client: TestClient, migr
     assert titles == ["50%_off deal"]
 
 
+def test_list_whitespace_only_keyword_does_not_disable_filtering_silently(
+    client: TestClient, migrated_schema
+) -> None:
+    """Found by the Kimi review gate on PR #21: keyword="   " is truthy but
+    strips to "", and contains("") would match every title — silently
+    returning everything instead of applying no filter deliberately. Both
+    behave the same in the end (no filter applied), but this test pins the
+    guard to the stripped value so a future refactor can't reintroduce a
+    raw-truthiness check by accident."""
+    kb = _create_kb(client, "kb-list-whitespace-keyword")
+    _create_kp(client, kb["id"], "kp-one")
+    _create_kp(client, kb["id"], "kp-two")
+
+    resp = client.get(_list_url(kb["id"]), params={"keyword": "   "})
+    assert resp.status_code == 200
+    assert len(resp.json()["data"]) == 2
+
+
+def test_list_keyword_over_max_length_returns_422(client: TestClient, migrated_schema) -> None:
+    kb = _create_kb(client, "kb-list-keyword-too-long")
+    resp = client.get(_list_url(kb["id"]), params={"keyword": "x" * 256})
+    assert resp.status_code == 422
+
+
 def test_list_with_coord_excludes_none_matches(
     client: TestClient, migrated_schema, db_engine: Engine
 ) -> None:
