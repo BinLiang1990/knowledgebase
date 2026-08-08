@@ -146,9 +146,18 @@ def create_dimension(payload: DimensionCreate, db: Session = Depends(get_db)) ->
 def update_dimension(key: str, payload: DimensionUpdate, db: Session = Depends(get_db)) -> dict:
     dim = _get_or_404(db, key)
 
-    if payload.label is not None:
+    # label/weight back a non-nullable column — unlike default_value below,
+    # there's no legitimate "clear it" meaning for an explicit null. Without
+    # this check, `{"label": null}` silently no-ops (indistinguishable from
+    # omitting the field) instead of failing loud on a request that
+    # probably didn't mean to send a no-op. Kimi 终审 finding on PR #25.
+    if "label" in payload.model_fields_set:
+        if payload.label is None:
+            raise BusinessError("标题不能为空", status_code=400)
         dim.label = payload.label
-    if payload.weight is not None:
+    if "weight" in payload.model_fields_set:
+        if payload.weight is None:
+            raise BusinessError("权重不能为空", status_code=400)
         dim.weight = payload.weight
     # "default_value omitted" (keep unchanged) and "default_value explicitly
     # null" (clear it) are both meaningful and distinct — check

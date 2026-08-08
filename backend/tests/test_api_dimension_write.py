@@ -119,6 +119,23 @@ def test_update_dimension_default_value_can_be_cleared(client: TestClient, migra
     assert resp.json()["data"]["default_value"] is None
 
 
+def test_update_dimension_explicit_null_label_is_rejected(client: TestClient, migrated_schema) -> None:
+    """label backs a non-nullable column — unlike default_value, there's no
+    "clear it" meaning for an explicit null. Silently no-oping on
+    `{"label": null}` (indistinguishable from omitting the field) would
+    hide a request that probably didn't mean to send a no-op. Kimi 终审
+    finding on PR #25."""
+    client.post("/dimensions", json={"label": "地区", "field_type": "text"})
+    resp = client.patch("/dimensions/地区", json={"label": None})
+    assert resp.status_code == 400
+
+
+def test_update_dimension_explicit_null_weight_is_rejected(client: TestClient, migrated_schema) -> None:
+    client.post("/dimensions", json={"label": "地区", "field_type": "text"})
+    resp = client.patch("/dimensions/地区", json={"weight": None})
+    assert resp.status_code == 400
+
+
 def test_update_dimension_omitting_default_value_keeps_it_unchanged(client: TestClient, migrated_schema) -> None:
     client.post("/dimensions", json={"label": "地区", "field_type": "text", "default_value": "华东"})
     resp = client.patch("/dimensions/地区", json={"weight": 60})
@@ -330,6 +347,15 @@ def test_set_enabled_dimensions_rejects_an_excessively_long_list(client: TestCli
         f"/knowledge-bases/{kb['id']}/enabled-dimensions",
         json={"dimension_keys": [f"key-{i}" for i in range(201)]},
     )
+    assert resp.status_code == 422
+
+
+def test_set_enabled_dimensions_rejects_an_oversized_individual_key(client: TestClient, migrated_schema) -> None:
+    """An oversized string can never match a real key (dimension_definition
+    .key is capped at 100 chars) — reject it before wasting a DB round-trip
+    resolving it to "not found". Kimi 终审 finding on PR #25."""
+    kb = _create_kb(client, "kb-oversized-dim-key")
+    resp = client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["a" * 101]})
     assert resp.status_code == 422
 
 

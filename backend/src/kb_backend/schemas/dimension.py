@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -86,5 +86,8 @@ class EnabledDimensionsUpdate(BaseModel):
     # max_length=200 bounds the individual-key-lookup loop this feeds
     # (design doc §4.3/Codex fix on PR #25) — no real deployment has
     # anywhere near this many global dimensions, so this only rejects
-    # abuse, never a legitimate request. Kimi 终审 finding on PR #25.
-    dimension_keys: list[str] = Field(max_length=200)
+    # abuse, never a legitimate request. Each item is also capped at 100
+    # chars, matching dimension_definition.key's own column width — an
+    # oversized string would resolve to "not found" anyway, but only after
+    # wasting a DB round-trip on it first. Kimi 终审 finding on PR #25.
+    dimension_keys: list[Annotated[str, Field(max_length=100)]] = Field(max_length=200)
