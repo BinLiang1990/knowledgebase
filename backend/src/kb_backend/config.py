@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     db_user: str
     db_password: str
     db_name: str = "knowledgebase"
+    # Comma-separated origins allowed to call this API cross-origin — the
+    # React dev server (issue #6) runs on a different port than the
+    # backend, so without this the browser blocks every request outright.
+    cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def cors_allowed_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
     @property
     def database_url(self) -> str:

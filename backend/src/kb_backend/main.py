@@ -1,8 +1,10 @@
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from .config import get_settings
 from .db import get_db
 from .envelope import BusinessError, envelope, register_exception_handlers
 from .routers.dimension import router as dimension_router
@@ -11,6 +13,20 @@ from .routers.knowledge_point import router as knowledge_point_router
 
 app = FastAPI(title="Knowledge Base Backend")
 register_exception_handlers(app)
+# allow_methods/allow_headers must be explicit: CORSMiddleware's own
+# defaults are allow_methods=("GET",) and allow_headers=() — every
+# POST/PATCH request (create/edit/activate/deactivate) sends
+# Content-Type: application/json, which triggers a preflight OPTIONS
+# request that fails under those defaults. The middleware being present is
+# not sufficient on its own; found during issue #6 design review before
+# any frontend code was written, since this bug is invisible in code
+# review and only shows up in a real browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_allowed_origin_list,
+    allow_methods=["GET", "POST", "PATCH"],
+    allow_headers=["Content-Type"],
+)
 app.include_router(knowledge_base_router)
 app.include_router(dimension_router)
 app.include_router(knowledge_point_router)
