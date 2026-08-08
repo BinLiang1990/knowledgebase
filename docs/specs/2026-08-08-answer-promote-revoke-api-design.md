@@ -26,12 +26,18 @@ issue #10 明确要求（P1，PRD §4.5/§6 规则 #3/#4/§8）：
 ```python
 db.execute(
     update(Answer)
-    .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == target.coord_hash)
+    .where(
+        Answer.knowledge_point_id == kp_id,
+        Answer.coord_hash == target.coord_hash,
+        Answer.revoked.is_(False),
+    )
     .values(revoked=True, revoked_at=func.now(), revoked_by="admin", revoke_reason=payload.revoke_reason)
 )
 ```
 
 这个 `knowledge_point_id == kp_id` 条件不是可以省略的细节——`compute_coord_hash`（`coord.py:201-203`）是纯函数，只取决于归一化后的 coord 字典本身，跟任何知识点/知识库都没有关系。`compute_coord_hash({})` 对**全库所有知识点**都是同一个值；只要漏掉 `knowledge_point_id` 这个过滤条件，撤回任何一个知识点的默认答案链，就会把全库所有知识点的默认答案链一起撤回（对非空 coord，只要两个知识点碰巧用了同一个条件组合，也会撞上同样的问题）。对抗式审查在这里抓到了一处初稿里漏写这个条件的错误——写代码时对着这段贴，不要凭记忆重新写一遍。
+
+`Answer.revoked.is_(False)` 这个条件同样不是可以省略的细节——见 §4.5：幂等判断必须落在这条 `UPDATE` 语句自己的 `WHERE` 里，不能是先在 Python 里 `if not target.revoked` 判断一次再跑这条不带该条件的 `UPDATE`（Kimi 终审在实现阶段抓到的一处竟态：两个并发的重复撤回请求都可能在各自事务里读到 `revoked=False`，都跑了 `UPDATE`，第二个提交会覆盖第一个的 `revoked_at`/`revoked_by`/`revoke_reason`，违反本节开头"保留第一次撤回原因"的承诺）。
 
 获取目标答案（`target = ...`）同样要三重过滤：`Answer.id == answer_id, Answer.knowledge_point_id == kp_id, Answer.knowledge_base_id == kb_id`——跟 `edit_answer` 现有代码完全一致，防止拿别的知识点/知识库下的 `answer_id` 冒充。
 
@@ -74,7 +80,7 @@ PRD §6 规则 #8："知识点软删除是粗粒度操作，独立于答案撤�
 
 不选 1（报错）是因为 PRD 没有把"重复撤回"列为错误场景，且 §8"不支持撤回的撤回"讨论的是"能不能恢复"，不是"能不能再撤回一次"——两者是不同的问题，不应该混为一谈去推导出"重复撤回必须报错"的结论。
 
-**这条幂等判断必须写在 §3 那条 `UPDATE` 语句前面，而不是事后补救**：`edit_answer` 的迁移分支能不加任何幂等判断就直接跑那条 `UPDATE`，是因为它上面已经有 `if target.revoked: raise BusinessError(...)` 挡住了"目标本来就是已撤回状态"这个入口——到迁移分支时，链条必然还没被撤回过。本设计的撤回端点没有类似的上游拦截（它必须支持对已撤回的链再调用一次），所以流程是：先查 `target.revoked`，`False` 才执行那条 `UPDATE`；`True` 直接跳过写库，把 `target` 现有的 `revoked_at`/`revoked_by`/`revoke_reason` 原样返回。落地时如果直接把 §3 的 `UPDATE` 语句复制过去、不加这个判断，每次重复撤回都会用新请求的 `revoke_reason` 覆盖旧的，跟本节的决定正好相反。
+**这条幂等判断必须落在 §3 那条 `UPDATE` 语句自己的 `WHERE` 里（`Answer.revoked.is_(False)`），不能是在 Python 里先 `if not target.revoked` 判断一次、再跑一条不带这个条件的 `UPDATE`**：`edit_answer` 的迁移分支能不加任何幂等判断就直接跑一条不带 `revoked=False` 的 `UPDATE`，是因为它上面已经有 `if target.revoked: raise BusinessError(...)` 挡住了"目标本来就是已撤回状态"这个入口——到迁移分支时，链条必然还没被撤回过，不存在并发重复撤回的场景。本设计的撤回端点没有类似的上游拦截（它必须支持对已撤回的链再调用一次），如果照搬"Python 先判断、再跑不带条件的 UPDATE"这个思路，两个并发的重复撤回请求会在各自事务里都读到 `revoked=False`、都跑那条 `UPDATE`，第二个提交覆盖第一个的 `revoked_at`/`revoked_by`/`revoke_reason`，正好违反本节"保留第一次原因"的结论（Kimi 终审在实现阶段抓到的竟态，见 §3 的批注）。正确做法是让 `UPDATE` 本身只在 `revoked=False` 时才生效：命中 0 行就是"已经撤回过，本次是no-op"，命中 1 行（按 chain 内版本数，多行）就是"第一次撤回，成功写入"——幂等性由数据库的原子写入保证，不依赖 Python 里任何"先查后写"的判断。
 
 ### 4.6 设为默认/撤回都不改变 `answer.coord_hash` 以外任何"这条答案属于哪条链"的判定逻辑
 
