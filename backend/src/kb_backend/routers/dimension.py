@@ -60,7 +60,15 @@ def _set_status(db: Session, key: str, status: str) -> dict:
     dim.status = status
     db.commit()
     db.refresh(dim)
-    out = _to_admin_out(dim, _answer_count_for_key(db, key))
+    # dim.key (the canonical stored spelling), not the raw `key` path
+    # param — dimension_definition.key's collation is case/accent
+    # insensitive (same as knowledge_base.name), so _get_or_404 can
+    # resolve e.g. "region" to a row actually stored as "Region". Answers'
+    # coord always uses the canonical spelling; counting against the raw
+    # URL spelling would silently report 0 for any request that used a
+    # collation-equivalent but differently-spelled key. Codex outer-gate
+    # finding on PR #25.
+    out = _to_admin_out(dim, _answer_count_for_key(db, dim.key))
     return envelope(out.model_dump(mode="json"))
 
 
@@ -148,7 +156,7 @@ def update_dimension(key: str, payload: DimensionUpdate, db: Session = Depends(g
     db.commit()
     db.refresh(dim)
 
-    out = _to_admin_out(dim, _answer_count_for_key(db, key))
+    out = _to_admin_out(dim, _answer_count_for_key(db, dim.key))
     return envelope(out.model_dump(mode="json"))
 
 

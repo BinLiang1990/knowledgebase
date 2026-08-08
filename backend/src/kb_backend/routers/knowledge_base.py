@@ -213,23 +213,30 @@ def set_enabled_dimensions(
     checkbox-list-plus-one-save-button interaction (design doc §3.2)."""
     _get_or_404(db, kb_id)
 
-    # Duplicate keys in the request are collapsed rather than rejected — a
-    # resubmitted/duplicated key means the same thing as sending it once.
-    # Without this, a naive bulk-insert would hit the (knowledge_base_id,
-    # dimension_key) composite primary key twice in one transaction and
-    # fail a request that should have succeeded. Design doc §4.3.
-    keys = list(dict.fromkeys(payload.dimension_keys))
-
-    if keys:
-        rows = db.execute(
-            select(DimensionDefinition.key, DimensionDefinition.status).where(DimensionDefinition.key.in_(keys))
-        ).all()
-        found_status = dict(rows)
-        for key in keys:
-            if key not in found_status:
-                raise BusinessError(f"维度「{key}」不存在", status_code=400)
-            if found_status[key] != "active":
-                raise BusinessError(f"维度「{key}」已停用，无法启用", status_code=400)
+    # Resolve each requested spelling to its canonical stored `key` via a
+    # collation-aware equality lookup (dimension_definition.key uses the
+    # same case/accent-insensitive utf8mb4_0900_ai_ci as knowledge_base.name)
+    # before validating/deduping/inserting. A single batched `IN (...)`
+    # lookup can't tell which requested spelling matched which returned row
+    # once two requested values collapse onto the same DB row under that
+    # collation (e.g. "Region" and "region"), so an exact-string Python
+    # membership check against it would wrongly report an existing
+    # dimension as "不存在". Resolving one at a time also makes dedup
+    # canonical-key-based, not raw-spelling-based, and guarantees every
+    # inserted row uses the DB's own spelling rather than whatever
+    # case/accent variant the client happened to type. Codex outer-gate
+    # finding on PR #25.
+    keys: list[str] = []
+    seen: set[str] = set()
+    for requested_key in payload.dimension_keys:
+        dim = db.execute(select(DimensionDefinition).where(DimensionDefinition.key == requested_key)).scalar_one_or_none()
+        if dim is None:
+            raise BusinessError(f"维度「{requested_key}」不存在", status_code=400)
+        if dim.status != "active":
+            raise BusinessError(f"维度「{requested_key}」已停用，无法启用", status_code=400)
+        if dim.key not in seen:
+            seen.add(dim.key)
+            keys.append(dim.key)
 
     # Only replace the *active*-dimension portion of this KB's enabled set,
     # not the whole table. A dimension that was enabled here and later

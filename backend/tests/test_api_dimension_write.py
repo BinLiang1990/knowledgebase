@@ -130,6 +130,24 @@ def test_update_nonexistent_dimension_returns_404(client: TestClient, migrated_s
     assert resp.status_code == 404
 
 
+def test_answer_count_uses_canonical_key_not_the_requested_url_spelling(
+    client: TestClient, migrated_schema
+) -> None:
+    """dimension_definition.key's collation resolves "region" and "Region"
+    as the same row, but a Python membership check against the raw URL
+    spelling would report 0 instead of the real count. Codex outer-gate
+    finding on PR #25."""
+    client.post("/dimensions", json={"label": "Region", "field_type": "text"})
+    kb = _create_kb(client, "kb-dim-case-count")
+    client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["Region"]})
+    kp = _create_kp(client, kb["id"], "kp-1")
+    _write_answer(client, kb["id"], kp["id"], {"Region": "east"})
+
+    resp = client.patch("/dimensions/region", json={"weight": 60})
+    assert resp.status_code == 200
+    assert resp.json()["data"]["answer_count"] == 1
+
+
 def test_update_dimension_reflects_real_answer_count_not_zero(client: TestClient, migrated_schema) -> None:
     client.post("/dimensions", json={"label": "地区", "field_type": "text"})
     kb = _create_kb(client, "kb-dim-update-count")
@@ -274,6 +292,30 @@ def test_set_enabled_dimensions_dedupes_repeated_keys(client: TestClient, migrat
     kb = _create_kb(client, "kb-dedupe-dims")
 
     resp = client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["地区", "地区"]})
+    assert resp.status_code == 200
+    assert len(resp.json()["data"]) == 1
+
+
+def test_set_enabled_dimensions_accepts_a_case_and_accent_equivalent_spelling(
+    client: TestClient, migrated_schema
+) -> None:
+    """"Region" is stored; requesting "region" must resolve via the same
+    collation the DB itself uses for equality, not 400 as "不存在". Codex
+    outer-gate finding on PR #25."""
+    client.post("/dimensions", json={"label": "Region", "field_type": "text"})
+    kb = _create_kb(client, "kb-case-insensitive-dims")
+
+    resp = client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["region"]})
+    assert resp.status_code == 200
+    # Stored using the DB's own canonical spelling, not the requested one.
+    assert resp.json()["data"] == [{"key": "Region", "label": "Region", "field_type": "text", "weight": 50}]
+
+
+def test_set_enabled_dimensions_dedupes_case_equivalent_spellings(client: TestClient, migrated_schema) -> None:
+    client.post("/dimensions", json={"label": "Region", "field_type": "text"})
+    kb = _create_kb(client, "kb-dedupe-case-dims")
+
+    resp = client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["Region", "region"]})
     assert resp.status_code == 200
     assert len(resp.json()["data"]) == 1
 
