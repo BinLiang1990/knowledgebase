@@ -184,7 +184,17 @@ def normalize_coord(coord: dict[str, Any], dimension_types: dict[str, str]) -> d
         field_type = dimension_types.get(key)
         if field_type is None:
             raise CoordValueError(key, f"维度 {key} 未在本知识库启用")
-        normalized[key] = _NORMALIZERS[field_type](key, raw_value)
+        value = _NORMALIZERS[field_type](key, raw_value)
+        # An empty string (only reachable via the text normalizer — every
+        # other field_type's validation rejects "" outright) means "this
+        # dimension wasn't really specified", matching frontend-mock's
+        # treatment of coord[k] === "" as equivalent to unset everywhere
+        # (coordKeyOf/coordSpec/coordWeight/coordCompatible). Found by
+        # adversarial review during issue #5 design; fixed here since it's
+        # shared write/query infrastructure, not issue #5-specific.
+        if value == "":
+            continue
+        normalized[key] = value
     return normalized
 
 

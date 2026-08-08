@@ -107,3 +107,8 @@ class AnswerOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ResolvedOut(BaseModel):
+    status: Literal["exact", "weighted", "default", "fallback-latest", "none"]
+    answer: AnswerOut | None

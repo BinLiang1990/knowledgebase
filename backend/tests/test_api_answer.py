@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from kb_backend.coord import compute_coord_hash
+
 
 def _create_kb(client: TestClient, name: str) -> dict:
     return client.post("/knowledge-bases", json={"name": name}).json()["data"]
@@ -42,6 +44,26 @@ def test_write_answer_with_no_coord_creates_default_answer(client: TestClient, m
     assert data["source"] == "人工填报"
     assert data["operator"] == "admin"
     assert data["revoked"] is False
+
+
+def test_write_answer_with_empty_string_coord_value_collapses_to_default(
+    client: TestClient, migrated_schema, db_engine: Engine
+) -> None:
+    """Found during issue #5 design review: an empty-string dimension value
+    means "not really specified" (frontend-mock parity), so it must collapse
+    to the same coord_hash as the true default answer group ({})."""
+    kb = _create_kb(client, "kb-answer-empty-string-coord")
+    _enable_dimension(db_engine, kb["id"], "tenant", "租户")
+    kp = _create_kp(client, kb["id"], "kp-answer-empty-string-coord")
+
+    resp = client.post(
+        _answers_url(kb["id"], kp["id"]),
+        json={"content": "x", "effective_time": "2026-08-08", "coord": {"tenant": ""}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["coord"] == {}
+    assert data["coord_hash"] == compute_coord_hash({})
 
 
 def test_write_answer_with_enabled_dimension_succeeds(

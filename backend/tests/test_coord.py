@@ -214,3 +214,17 @@ def test_compute_coord_hash_differs_for_different_values() -> None:
 
 def test_compute_coord_hash_empty_coord_is_stable() -> None:
     assert compute_coord_hash({}) == compute_coord_hash(normalize_coord({}, DIM_TYPES))
+
+
+def test_normalize_coord_drops_empty_string_text_value() -> None:
+    """frontend-mock treats coord[k] === "" as equivalent to unset
+    everywhere (coordKeyOf/coordSpec/coordWeight/coordCompatible). Found
+    during issue #5 design review; fixed in this shared module since both
+    the write and query paths need the same equivalence."""
+    assert normalize_coord({"tenant": ""}, DIM_TYPES) == {}
+    assert normalize_coord({"tenant": "  "}, DIM_TYPES) == {}
+
+
+def test_normalize_coord_empty_string_alongside_real_value() -> None:
+    out = normalize_coord({"tenant": "", "priority": 1}, DIM_TYPES)
+    assert out == {"priority": 1}
