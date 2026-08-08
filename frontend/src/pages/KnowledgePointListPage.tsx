@@ -55,10 +55,16 @@ export function KnowledgePointListPage() {
   const at = qMode === 'day' ? qTime : undefined;
   const hasFilter = Boolean(keyword) || Object.keys(filters).length > 0;
 
-  const dimensionsQuery = useEnabledDimensions(kbId);
+  // Don't fire these until the knowledge base itself is confirmed valid and
+  // active — otherwise a malformed :kbId (NaN) or a missing/deprecated KB
+  // still triggers avoidable 404s while the guard below is about to reject
+  // the page anyway. Kimi 终审 finding on PR #23.
+  const kbReady = kb?.status === 'active';
+
+  const dimensionsQuery = useEnabledDimensions(kbId, kbReady);
   const dimensions = dimensionsQuery.data ?? [];
 
-  const kpQuery = useKnowledgePoints(kbId, { keyword, at, coord: filters });
+  const kpQuery = useKnowledgePoints(kbId, { keyword, at, coord: filters }, kbReady);
   const knowledgePoints = kpQuery.data ?? [];
   const pageCount = Math.max(1, Math.ceil(knowledgePoints.length / PAGE_SIZE));
   useEffect(() => {

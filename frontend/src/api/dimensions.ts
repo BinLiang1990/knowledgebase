@@ -9,9 +9,10 @@ export interface Dimension {
   weight: number;
 }
 
-export function useEnabledDimensions(kbId: number) {
+export function useEnabledDimensions(kbId: number, enabled = true) {
   return useQuery({
     queryKey: ['knowledge-bases', kbId, 'enabled-dimensions'],
     queryFn: ({ signal }) => apiClient.get<Dimension[]>(`/knowledge-bases/${kbId}/enabled-dimensions`, { signal }),
+    enabled,
   });
 }

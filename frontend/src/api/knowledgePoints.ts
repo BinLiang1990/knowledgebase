@@ -57,7 +57,7 @@ function knowledgePointsKey(kbId: number, filters: KnowledgePointFilters) {
   return ['knowledge-bases', kbId, 'knowledge-points', filters] as const;
 }
 
-export function useKnowledgePoints(kbId: number, filters: KnowledgePointFilters) {
+export function useKnowledgePoints(kbId: number, filters: KnowledgePointFilters, enabled = true) {
   return useQuery({
     queryKey: knowledgePointsKey(kbId, filters),
     queryFn: ({ signal }) =>
@@ -65,6 +65,7 @@ export function useKnowledgePoints(kbId: number, filters: KnowledgePointFilters)
         `/knowledge-bases/${kbId}/knowledge-points${buildKnowledgePointsQuery(filters)}`,
         { signal },
       ),
+    enabled,
   });
 }
 

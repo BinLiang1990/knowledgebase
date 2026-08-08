@@ -59,6 +59,28 @@ describe('KnowledgePointListPage', () => {
     expect(await screen.findByText(/没有指定有效的知识库/)).toBeInTheDocument();
   });
 
+  it('does not fetch dimensions or knowledge points for a deactivated knowledge base (issue #7 Kimi fix)', async () => {
+    let dimensionsRequested = false;
+    let kpsRequested = false;
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([makeKb({ status: 'deprecated' })]))));
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () => {
+        dimensionsRequested = true;
+        return HttpResponse.json(envelope([]));
+      }),
+    );
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points`, () => {
+        kpsRequested = true;
+        return HttpResponse.json(envelope([]));
+      }),
+    );
+    renderPage();
+    await screen.findByText(/没有指定有效的知识库/);
+    expect(dimensionsRequested).toBe(false);
+    expect(kpsRequested).toBe(false);
+  });
+
   it.each([
     ['exact', '精确命中'],
     ['weighted', '未精确命中 · 按权重回退'],
@@ -87,6 +109,20 @@ describe('KnowledgePointListPage', () => {
     );
     renderPage();
     expect(await screen.findByText('还没有写过任何答案')).toBeInTheDocument();
+  });
+
+  it('shows a distinct fallback message for "回看某天" mode with no other filter (issue #7 Kimi fix)', async () => {
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points`, () =>
+        HttpResponse.json(envelope([makeKp({ resolved: { status: 'none', answer: null } })])),
+      ),
+    );
+    renderPage();
+    await screen.findByText('还没有写过任何答案');
+
+    await userEvent.click(screen.getByText('回看某天'));
+    expect(await screen.findByText('这个时间点还没有匹配的答案')).toBeInTheDocument();
+    expect(screen.queryByText('还没有写过任何答案')).not.toBeInTheDocument();
   });
 
   it('the condition picker only lists this KB\'s enabled dimensions', async () => {

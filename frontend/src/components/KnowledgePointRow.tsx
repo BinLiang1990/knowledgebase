@@ -64,7 +64,16 @@ export function KnowledgePointRow({
         ：
         {status === 'none' || !answer ? (
           <span style={{ color: 'var(--ink-7)' }}>
-            {hasFilter ? '这个条件、这个时间点还没有匹配的答案' : '还没有写过任何答案'}
+            {hasFilter
+              ? '这个条件、这个时间点还没有匹配的答案'
+              // "回看某天" with no other filter is still a time constraint —
+              // conflating it with "no answers were ever written" would be
+              // misleading when the knowledge point does have answers that
+              // just aren't effective yet at the selected date. Kimi 终审
+              // finding on PR #23.
+              : qMode === 'day'
+                ? '这个时间点还没有匹配的答案'
+                : '还没有写过任何答案'}
           </span>
         ) : status === 'default' || status === 'fallback-latest' ? (
           <>
