@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, CHAR, DateTime, ForeignKeyConstraint, Index, String, Text, false
+from sqlalchemy import Boolean, CHAR, DateTime, ForeignKeyConstraint, Index, String, false
 from sqlalchemy.dialects.mysql import BIGINT, JSON, LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,12 @@ class Answer(Base):
             name="fk_answer_kp_kb",
         ),
         Index("ix_answer_resolve", "knowledge_point_id", "coord_hash", "effective_time", "created_at"),
+        # Supports list_knowledge_points' per-KB active-answer-count query
+        # (WHERE knowledge_base_id = ? AND revoked = 0 GROUP BY
+        # knowledge_point_id) — neither index above leads with
+        # knowledge_base_id. Added in migration 0003; found by the Kimi
+        # review gate on PR #20.
+        Index("ix_answer_kb_revoked_kp", "knowledge_base_id", "revoked", "knowledge_point_id"),
         TABLE_ARGS,
     )
 
@@ -30,7 +36,7 @@ class Answer(Base):
     effective_time: Mapped[date] = mapped_column(nullable=False)
     operator: Mapped[str] = mapped_column(String(100), nullable=False, server_default="admin")
     source: Mapped[str] = mapped_column(String(100), nullable=False, server_default="人工填报")
-    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(LONGTEXT, nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -57,6 +57,13 @@ def test_answer_resolve_index_exists(migrated_schema, db_engine: Engine) -> None
     assert rows, "expected ix_answer_resolve on answer to exist"
 
 
+def test_answer_kb_revoked_kp_index_exists(migrated_schema, db_engine: Engine) -> None:
+    """Migration 0003 (Kimi review gate on PR #20): supports
+    list_knowledge_points' per-KB active-answer-count query."""
+    rows = _index_rows(db_engine, "answer", "ix_answer_kb_revoked_kp")
+    assert rows, "expected ix_answer_kb_revoked_kp on answer to exist"
+
+
 def test_duplicate_knowledge_base_name_is_rejected(migrated_schema, db_engine: Engine) -> None:
     with db_engine.begin() as conn:
         conn.execute(text("INSERT INTO knowledge_base (name) VALUES ('dup-kb')"))
@@ -102,6 +109,26 @@ def test_weight_check_constraint_rejects_out_of_range(migrated_schema, db_engine
 def test_upgrade_head_is_idempotent(migrated_schema, alembic_cfg: AlembicConfig) -> None:
     # migrated_schema fixture already brought the DB to head; running it again
     # must be a no-op, not an error.
+    command.upgrade(alembic_cfg, "head")
+
+
+def test_answer_note_column_is_longtext(migrated_schema, db_engine: Engine) -> None:
+    """docs/PRD.md §4.5: content/note 均不设长度上限. `content` was already
+    LONGTEXT from issue #1; `note` was left as plain TEXT (65,535-byte cap)
+    until migration 0002. Found by the Codex outer-gate review on PR #20
+    (round 5)."""
+    with db_engine.connect() as conn:
+        data_type = conn.execute(
+            text(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answer' AND COLUMN_NAME = 'note'"
+            )
+        ).scalar_one()
+    assert data_type == "longtext"
+
+
+def test_downgrade_to_0001_is_reversible(migrated_schema, alembic_cfg: AlembicConfig) -> None:
+    command.downgrade(alembic_cfg, "0001")
     command.upgrade(alembic_cfg, "head")
 
 
