@@ -57,6 +57,13 @@ def test_answer_resolve_index_exists(migrated_schema, db_engine: Engine) -> None
     assert rows, "expected ix_answer_resolve on answer to exist"
 
 
+def test_answer_kb_revoked_kp_index_exists(migrated_schema, db_engine: Engine) -> None:
+    """Migration 0003 (Kimi review gate on PR #20): supports
+    list_knowledge_points' per-KB active-answer-count query."""
+    rows = _index_rows(db_engine, "answer", "ix_answer_kb_revoked_kp")
+    assert rows, "expected ix_answer_kb_revoked_kp on answer to exist"
+
+
 def test_duplicate_knowledge_base_name_is_rejected(migrated_schema, db_engine: Engine) -> None:
     with db_engine.begin() as conn:
         conn.execute(text("INSERT INTO knowledge_base (name) VALUES ('dup-kb')"))

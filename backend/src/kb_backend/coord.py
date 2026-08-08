@@ -48,6 +48,12 @@ _MAX_ADJUSTED_EXPONENT = 20
 # beyond it, some are and some aren't, so a bare float this large can't be
 # trusted without the original text to verify against.
 _MAX_EXACT_FLOAT_INTEGER = 2**53
+# Generous upper bound on a numeric string's raw length, checked before
+# Decimal() ever parses it — the largest legitimate value here (uint64 max)
+# is 20 characters; 100 leaves ample room for a sign, decimal point, and a
+# reasonable number of fractional digits without allowing an adversarial
+# string to force an expensive parse.
+_MAX_NUMBER_STRING_LENGTH = 100
 
 
 def _reject_if_unsafe_magnitude(key: str, value: int | float) -> None:
@@ -95,6 +101,16 @@ def _normalize_number(key: str, raw_value: Any) -> int | float:
         # float() round-trip. Decimal parses the digits exactly, so an
         # integral result converts to an exact-precision Python int instead.
         text = raw_value.strip()
+        # Bound the raw string length BEFORE constructing a Decimal at all:
+        # "1e1000000000" is blocked by the adjusted()-exponent check below,
+        # but a string like "1." + "0" * 1_000_000 has adjusted() == 0 (it's
+        # just 1.0 with excess trailing zeros) and would sail past that
+        # check — yet Decimal(text) itself has to process every digit in the
+        # string, so a tiny request body can still force an expensive parse.
+        # No legitimate number for this system needs anywhere near this many
+        # characters. Found by the Kimi review gate on PR #20.
+        if len(text) > _MAX_NUMBER_STRING_LENGTH:
+            raise CoordValueError(key, f"维度 {key} 取值类型错误，应为数值")
         try:
             decimal_value = Decimal(text)
         except InvalidOperation as exc:

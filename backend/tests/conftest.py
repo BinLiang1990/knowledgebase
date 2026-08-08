@@ -4,7 +4,7 @@ import pytest
 from alembic import command
 from alembic.config import Config as AlembicConfig
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from kb_backend.config import get_settings
@@ -44,4 +44,14 @@ def migrated_schema(alembic_cfg: AlembicConfig, db_engine: Engine):
     try:
         yield
     finally:
+        # Migration 0002 narrows answer.note (LONGTEXT -> TEXT) on its way
+        # down to base; MySQL correctly refuses that ALTER if any row still
+        # holds a note over TEXT's 65,535-byte cap. Relying on individual
+        # tests to remember to clean up their own oversized rows is a
+        # foot-gun — one forgotten cleanup breaks this teardown and cascades
+        # into every other test's own setup. Truncate unconditionally before
+        # downgrading, regardless of what any given test left behind. Found
+        # by the Kimi review gate on PR #20.
+        with db_engine.begin() as conn:
+            conn.execute(text("TRUNCATE TABLE answer"))
         command.downgrade(alembic_cfg, "base")

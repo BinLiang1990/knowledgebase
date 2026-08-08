@@ -158,6 +158,16 @@ def test_normalize_number_accepts_bare_float_at_exact_integer_boundary() -> None
     assert normalize_coord({"priority": boundary}, DIM_TYPES) == {"priority": 2**53}
 
 
+def test_normalize_number_rejects_overlong_string_before_parsing_as_decimal() -> None:
+    """Found by the Kimi review gate on PR #20: "1." + "0" * N has
+    adjusted() == 0 (it's just 1.0 with excess trailing zeros), so it sails
+    past the exponent guard — but Decimal(text) still has to process every
+    character, so a tiny request body could still force an expensive parse
+    without a length bound checked first."""
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": "1." + "0" * 1_000_000}, DIM_TYPES)
+
+
 def test_normalize_number_string_form_still_exact_beyond_bare_float_boundary() -> None:
     """The str/Decimal path is unaffected — it has the original text and can
     verify exactness, so large integers are still supported via strings."""
