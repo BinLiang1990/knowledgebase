@@ -281,13 +281,19 @@ def list_answer_groups(
     just the single best-matching one `resolve` returns. Deliberately uses
     compute_all_answer_groups(), not compute_live_groups(): the latter
     drops whole-chain-revoked groups outright, but the tree must still show
-    them (struck through) per PRD §4.4's "全部答案的分组树"."""
+    them (struck through) per PRD §4.4's "全部答案的分组树".
+
+    Deliberately does NOT special-case a soft-deleted knowledge point the
+    way resolve_knowledge_point does. That endpoint's "none" contract is for
+    third-party query consumers, where a deleted KP correctly has no answer.
+    This one backs the detail page's answer tree/current-answers view, which
+    PRD §4.7 requires to keep showing a deleted KP's full historical answers
+    ("以下仍可查看其全部历史答案") — issue #8's Codex outer-gate review found
+    the original short-circuit here (copied from the resolve endpoint
+    without re-checking whether it applied) silently emptied that view.
+    """
     kp = _get_kp_or_404(db, kb_id, kp_id)
     at = at or date.today()
-
-    if kp.status == "deleted":
-        # Same "not in query results" rule as the resolve endpoint above.
-        return envelope([])
 
     groups = compute_all_answer_groups(db, kb_id, kp_id, at)
     out = [
@@ -315,6 +321,14 @@ def update_knowledge_point(
     kb_id: int, kp_id: int, payload: KnowledgePointUpdate, db: Session = Depends(get_db)
 ) -> dict:
     kp = _get_kp_or_404(db, kb_id, kp_id)
+    if kp.status == "deleted":
+        # Consistent with create_answer/edit_answer's own guard — a
+        # soft-deleted knowledge point is read-only everywhere except the
+        # delete/restore actions themselves. The frontend detail page
+        # (issue #8) already hides the "编辑标题" button for a deleted KP;
+        # this closes the same gap at the API level so a direct PATCH can't
+        # bypass it. Kimi 终审 finding on PR #24.
+        raise BusinessError("知识点已删除，无法编辑标题", status_code=400)
 
     if payload.title != kp.title:
         _ensure_title_available(db, kb_id, payload.title, exclude_id=kp_id)

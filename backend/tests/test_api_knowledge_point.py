@@ -153,6 +153,21 @@ def test_rename_to_same_title_is_not_a_false_positive_duplicate(client: TestClie
     assert resp.status_code == 200
 
 
+def test_rename_deleted_knowledge_point_is_rejected(client: TestClient, migrated_schema) -> None:
+    """Consistent with create_answer/edit_answer's own "已删除，无法..." guard
+    (Kimi 终审 finding on PR #24) — a soft-deleted knowledge point is
+    read-only everywhere except delete/restore. Previously a direct PATCH
+    could rename a deleted KP even though the detail page's UI hides the
+    "编辑标题" button for exactly this state."""
+    kb = _create_kb(client, "kb-kp-rename-deleted")
+    kp = _create_kp(client, kb["id"], "old-title")
+    client.post(f"{_kp_base(kb['id'])}/{kp['id']}/delete", json={"delete_reason": "x"})
+
+    resp = client.patch(f"{_kp_base(kb['id'])}/{kp['id']}", json={"title": "new-title"})
+    assert resp.status_code == 400
+    assert resp.json()["code"] == 444
+
+
 def test_delete_requires_reason(client: TestClient, migrated_schema) -> None:
     kb = _create_kb(client, "kb-kp-delete-noreason")
     kp = _create_kp(client, kb["id"], "kp-no-reason")

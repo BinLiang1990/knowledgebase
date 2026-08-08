@@ -201,6 +201,16 @@ describe('KnowledgePointListPage', () => {
     expect(screen.queryByText(/租户 =/)).not.toBeInTheDocument();
   });
 
+  it('links the title and the "查看详情" op to the detail page (issue #8)', async () => {
+    renderPage();
+    await screen.findByText('kp-1');
+
+    const titleLink = screen.getByRole('link', { name: 'kp-1' });
+    expect(titleLink).toHaveAttribute('href', '/knowledge-bases/1/knowledge-points/1');
+    const detailLink = screen.getByRole('link', { name: '查看详情' });
+    expect(detailLink).toHaveAttribute('href', '/knowledge-bases/1/knowledge-points/1');
+  });
+
   it('does not fetch answer-groups for a collapsed row', async () => {
     let groupsRequested = false;
     server.use(
@@ -223,7 +233,10 @@ describe('KnowledgePointListPage', () => {
     );
     renderPage();
     await screen.findByText('kp-1');
-    await userEvent.click(screen.getByText('kp-1'));
+    // The title itself is now a Link to the detail page (issue #8) and
+    // stops click propagation, so expansion must be triggered elsewhere on
+    // the row.
+    await userEvent.click(screen.getByText('1 条答案'));
     expect(await screen.findByText(/tree content/)).toBeInTheDocument();
   });
 
@@ -250,7 +263,10 @@ describe('KnowledgePointListPage', () => {
     );
     renderPage();
     await screen.findByText('kp-1');
-    await userEvent.click(screen.getByText('kp-1'));
+    // The title itself is now a Link to the detail page (issue #8) and
+    // stops click propagation, so expansion must be triggered elsewhere on
+    // the row.
+    await userEvent.click(screen.getByText('1 条答案'));
 
     expect(await screen.findByText('已撤回，留痕保存')).toBeInTheDocument();
     expect(screen.getByText(/尚未生效/)).toBeInTheDocument();

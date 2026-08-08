@@ -2,33 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useKnowledgeBases } from '../api/knowledgeBases';
 import { useEnabledDimensions } from '../api/dimensions';
-import {
-  useCreateKnowledgePoint,
-  useDeleteKnowledgePoint,
-  useKnowledgePoints,
-  type KnowledgePoint,
-} from '../api/knowledgePoints';
+import { useCreateKnowledgePoint, useKnowledgePoints, type KnowledgePoint } from '../api/knowledgePoints';
 import { ApiError } from '../api/client';
 import { AppShell } from '../components/layout/AppShell';
 import { Modal } from '../components/ui/Modal';
 import { Pager } from '../components/ui/Pager';
 import { ConditionPicker, type Filters } from '../components/ui/ConditionPicker';
 import { KnowledgePointRow } from '../components/KnowledgePointRow';
+import { DeleteKnowledgePointModal } from '../components/DeleteKnowledgePointModal';
 import { useToast } from '../components/ui/Toast';
+import { today } from '../lib/today';
 
 const PAGE_SIZE = 6;
-
-function today(): string {
-  // toISOString() reports the UTC calendar date, which lags the local date
-  // by up to a day in timezones ahead of UTC (e.g. UTC+8 China, for the
-  // first 8 hours after local midnight) — Codex outer-gate finding on PR
-  // #23. Format from the local Date fields instead.
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 export function KnowledgePointListPage() {
   const { kbId: kbIdParam } = useParams<{ kbId: string }>();
@@ -358,73 +343,3 @@ function AddKnowledgePointModal({ kbId, onClose }: { kbId: number; onClose: () =
   );
 }
 
-function DeleteKnowledgePointModal({
-  kbId,
-  target,
-  onClose,
-}: {
-  kbId: number;
-  target: KnowledgePoint;
-  onClose: () => void;
-}) {
-  const [reason, setReason] = useState('');
-  const [error, setError] = useState('');
-  const deleteMutation = useDeleteKnowledgePoint(kbId);
-  const toast = useToast();
-
-  function submit() {
-    const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      setError('请填写删除原因。');
-      return;
-    }
-    setError('');
-    deleteMutation
-      .mutateAsync({ id: target.id, deleteReason: trimmedReason })
-      .then(() => {
-        toast.ok(`已删除「${target.title}」，可在回收站恢复`);
-        onClose();
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof ApiError ? err.message : '操作失败，请稍后重试');
-      });
-  }
-
-  return (
-    <Modal
-      title="删除知识点"
-      open
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="btn" onClick={onClose}>
-            取 消
-          </button>
-          <button type="button" className="btn danger" disabled={deleteMutation.isPending} onClick={submit}>
-            确 定 删 除
-          </button>
-        </>
-      }
-    >
-      <p style={{ fontSize: '13.5px', color: 'var(--ink-2)', marginBottom: 12 }}>
-        即将删除知识点 <b style={{ color: 'var(--ink-1)' }}>{target.title}</b>，及其全部答案。
-      </p>
-      <div className="mf">
-        <label>
-          <span className="req">*</span>删除原因
-        </label>
-        <textarea
-          rows={2}
-          placeholder="请说明删除原因，将记录在留痕中"
-          value={reason}
-          maxLength={500}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </div>
-      <div className="risk">
-        采用软删除：删除后不再出现在知识点列表与查询结果中；可在「回收站」中恢复，恢复后全部答案与历史照常可用。
-      </div>
-      {error && <p className="hint" style={{ color: 'var(--red)' }}>{error}</p>}
-    </Modal>
-  );
-}

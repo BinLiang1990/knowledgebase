@@ -240,6 +240,13 @@ input:disabled, select:disabled, textarea:disabled { background: var(--pale); co
             background: var(--blue-bg); color: var(--brand); font-size: 13px; padding: 7px 14px; border-radius: var(--r-md);
             margin-bottom: 16px; }
 
+.ans-item { padding: 16px 6px; border-bottom: 1px solid var(--line-weak); }
+.ans-item:last-child { border-bottom: none; }
+.ans-item .ai-content { font-size: 15px; font-weight: 600; color: var(--ink-1); line-height: 1.8; }
+.ans-item .ai-cond { font-size: 12.5px; color: var(--ink-5); margin-top: 7px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.ans-item .ai-cond .live { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-weight: 600; }
+.ans-item .ai-cond .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
 /* ---------------------------------------------------------------
    杂项小工具类（未来页面会用到，随基座一次性移植）
    --------------------------------------------------------------- */

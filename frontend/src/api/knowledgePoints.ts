@@ -10,10 +10,10 @@ export interface Resolved {
   answer: Answer | null;
 }
 
-// Mirrors backend/src/kb_backend/schemas/knowledge_point.py::KnowledgePointOut,
-// plus the additive `resolved` field the list endpoint attaches per row
-// (docs/specs/2026-08-08-resolve-engine-design.md §4.2).
-export interface KnowledgePoint {
+// Mirrors backend/src/kb_backend/schemas/knowledge_point.py::KnowledgePointOut
+// exactly — this is also what the single-fetch GET /{kp_id} returns (issue
+// #8), unlike the list endpoint below which additively attaches `resolved`.
+export interface KnowledgePointDetail {
   id: number;
   knowledge_base_id: number;
   title: string;
@@ -24,6 +24,12 @@ export interface KnowledgePoint {
   updated_at: string;
   deleted_at: string | null;
   delete_reason: string | null;
+}
+
+// The list endpoint's per-row shape: the plain KnowledgePointDetail plus the
+// additive `resolved` field (docs/specs/2026-08-08-resolve-engine-design.md
+// §4.2).
+export interface KnowledgePoint extends KnowledgePointDetail {
   resolved: Resolved;
 }
 
@@ -98,9 +104,49 @@ interface CreateKnowledgePointInput {
 // off useKnowledgeBases()'s cache) — both mutations must invalidate that
 // query too, not just the knowledge-points list. Codex outer-gate finding
 // on PR #23.
+// Every query this module exports nests under this same prefix
+// (['knowledge-bases', kbId, 'knowledge-points', ...]) on purpose — see
+// design doc §4.5 — so a single invalidation here reaches useKnowledgePoints,
+// useKnowledgePoint, and useAnswerGroups regardless of their differing
+// filters/kpId/at suffixes.
+function knowledgePointDataKeyPrefix(kbId: number) {
+  return ['knowledge-bases', kbId, 'knowledge-points'] as const;
+}
+
+// For mutations that only change a knowledge point's own data (writing/
+// editing an answer, renaming) — NOT the knowledge base's aggregate
+// active_knowledge_point_count, so KNOWLEDGE_BASES_KEY is deliberately left
+// alone (unlike invalidateAfterKpMutation below).
+export function invalidateKnowledgePointDataQueries(queryClient: ReturnType<typeof useQueryClient>, kbId: number) {
+  queryClient.invalidateQueries({ queryKey: knowledgePointDataKeyPrefix(kbId) });
+}
+
+// Creating/deleting a knowledge point changes the knowledge base's own
+// active_knowledge_point_count (the "知识主题" stat card reads it straight
+// off useKnowledgeBases()'s cache) — both mutations must invalidate that
+// query too, not just the knowledge-points list. Codex outer-gate finding
+// on PR #23.
 function invalidateAfterKpMutation(queryClient: ReturnType<typeof useQueryClient>, kbId: number) {
-  queryClient.invalidateQueries({ queryKey: ['knowledge-bases', kbId, 'knowledge-points'] });
+  invalidateKnowledgePointDataQueries(queryClient, kbId);
   queryClient.invalidateQueries({ queryKey: KNOWLEDGE_BASES_KEY });
+}
+
+export function useKnowledgePoint(kbId: number, kpId: number, enabled = true) {
+  return useQuery({
+    queryKey: [...knowledgePointDataKeyPrefix(kbId), kpId] as const,
+    queryFn: ({ signal }) =>
+      apiClient.get<KnowledgePointDetail>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}`, { signal }),
+    enabled,
+  });
+}
+
+export function useUpdateKnowledgePointTitle(kbId: number, kpId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (title: string) =>
+      apiClient.patch<KnowledgePointDetail>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}`, { title }),
+    onSuccess: () => invalidateKnowledgePointDataQueries(queryClient, kbId),
+  });
 }
 
 export function useCreateKnowledgePoint(kbId: number) {
