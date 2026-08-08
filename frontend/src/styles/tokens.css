@@ -1,0 +1,114 @@
+/* Design tokens + global reset, ported verbatim from
+   `UI规范-企业信息管理平台(1).md` §9 (CSS 基座). Do not invent new color
+   values outside this file — see the doc's own instruction: "任何颜色、
+   字号、圆角、阴影都必须取自本文档，不允许即兴新增色值". */
+:root {
+  /* 品牌 */
+  --brand: #2f6bff;
+  --brand-deep: #1a56f0;
+  --brand-light: #6aa9ff;
+  --brand-light2: #5a8ffb;
+  --brand-pale: #9dbdfb;
+  --grad-btn: linear-gradient(135deg, #2f6bff, #5a8ffb);
+  --grad-bar: linear-gradient(90deg, #2f6bff, #6aa9ff);
+  --grad-mark: linear-gradient(180deg, #2f6bff, #6aa9ff);
+  /* 语义 */
+  --blue: #2f6bff;
+  --blue-bd: #c9dcfc;
+  --blue-bg: #eef4ff;
+  --green: #0f9d58;
+  --green-bd: #bfe9d2;
+  --green-bg: #f2fbf6;
+  --orange: #e08600;
+  --orange-bd: #f5ddb0;
+  --orange-bg: #fdf7ea;
+  --red: #e5484d;
+  --red-bd: #f7c6c8;
+  --red-bg: #fff2f2;
+  --purple: #7a5af8;
+  --purple-bd: #e0d7fb;
+  --purple-bg: #f7f4ff;
+  --gray: #7f8ca3;
+  --gray-bd: #dde5f1;
+  --gray-bg: #f5f8fd;
+  /* 文字 */
+  --ink-1: #1f2b43;
+  --ink-2: #33415c;
+  --ink-3: #5b6b85;
+  --ink-4: #7f8ca3;
+  --ink-5: #8a97ad;
+  --ink-6: #9aa7bd;
+  --ink-7: #b6c0d2;
+  /* 背景与线 */
+  --page-bg: radial-gradient(circle at 50% 40%, #eef2f9 0%, #e3e9f4 70%, #d8e0ee 100%);
+  --surface: #fff;
+  --pale: #f5f8fd;
+  --row-hover: #fafcff;
+  --line: #edf1f8;
+  --line-weak: #f0f4fa;
+  --bd-input: #dde5f1;
+  --bd-card: #e8eef8;
+  --bd-float: #e2e9f4;
+  --rule: linear-gradient(90deg, #e4ebf7, transparent);
+  /* 圆角 */
+  --r-sm: 8px;
+  --r-md: 9px;
+  --r-lg: 12px;
+  --r-card: 14px;
+  --r-modal: 18px;
+  --r-pill: 999px;
+  /* 阴影 */
+  --sh-card: 0 4px 18px rgba(31, 66, 135, 0.05);
+  --sh-btn: 0 5px 12px rgba(47, 107, 255, 0.3);
+  --sh-float: 0 14px 38px rgba(18, 35, 68, 0.16);
+  --sh-toast: 0 10px 26px rgba(10, 25, 60, 0.3);
+  --sh-modal: 0 30px 80px rgba(10, 25, 60, 0.35);
+  /* §1.7 描述但未收进官方 §9 代码块的两个骨架阴影，随 frontend-mock/assets/style.css 一并补上 */
+  --sh-side: 2px 0 12px rgba(31, 66, 135, 0.04);
+  --sh-top: 0 2px 10px rgba(31, 66, 135, 0.06);
+  /* 动效 */
+  --t: 0.15s;
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  background: var(--page-bg);
+}
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  color: var(--ink-1);
+  font-size: 14px;
+}
+a {
+  color: var(--brand);
+  text-decoration: none;
+  cursor: pointer;
+}
+a.danger {
+  color: var(--red);
+}
+.num {
+  font-family: 'Bahnschrift', 'DIN Alternate', 'Arial Narrow', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.h-bar {
+  width: 5px;
+  border-radius: 3px;
+  background: var(--grad-mark);
+  flex: none;
+}
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cfd9ea;
+  border-radius: 3px;
+}
