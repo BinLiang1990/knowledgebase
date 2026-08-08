@@ -112,3 +112,11 @@ class AnswerOut(BaseModel):
 class ResolvedOut(BaseModel):
     status: Literal["exact", "weighted", "default", "fallback-latest", "none"]
     answer: AnswerOut | None
+
+
+class AnswerGroupOut(BaseModel):
+    coord: dict[str, Any]
+    revoked: bool
+    version_count: int
+    latest_answer: AnswerOut
+    live_answer: AnswerOut | None

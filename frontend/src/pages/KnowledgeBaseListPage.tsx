@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   useCreateKnowledgeBase,
   useKnowledgeBases,
@@ -132,7 +133,13 @@ export function KnowledgeBaseListPage() {
               !isError &&
               pageItems.map((kb) => (
                 <tr key={kb.id}>
-                  <td>{kb.name}</td>
+                  <td>
+                    {kb.status === 'active' ? (
+                      <Link to={`/knowledge-bases/${kb.id}/knowledge-points`}>{kb.name}</Link>
+                    ) : (
+                      kb.name
+                    )}
+                  </td>
                   <td>{kb.description || '—'}</td>
                   <td className="num" style={{ fontWeight: 400 }}>
                     {kb.active_knowledge_point_count}
@@ -154,6 +161,9 @@ export function KnowledgeBaseListPage() {
                     {formatDate(kb.created_at)}
                   </td>
                   <td className="op-col ops">
+                    {kb.status === 'active' && (
+                      <Link to={`/knowledge-bases/${kb.id}/knowledge-points`}>进入</Link>
+                    )}
                     <a onClick={() => setFormTarget(kb)}>编辑</a>
                     <a
                       className={kb.status === 'active' ? 'danger' : ''}

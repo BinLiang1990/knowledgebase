@@ -174,4 +174,18 @@ describe('KnowledgeBaseListPage', () => {
 
     await waitFor(() => expect(calledDeactivate).toBe(true));
   });
+
+  it('links an active knowledge base name to its knowledge-point list (issue #7 follow-up)', async () => {
+    renderWithProviders(<KnowledgeBaseListPage />);
+    const link = await screen.findByRole('link', { name: 'kb-1' });
+    expect(link).toHaveAttribute('href', '/knowledge-bases/1/knowledge-points');
+  });
+
+  it('does not link a deactivated knowledge base name — no page to enter', async () => {
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([makeKb({ status: 'deprecated' })]))));
+    renderWithProviders(<KnowledgeBaseListPage />);
+    await screen.findByText('kb-1');
+    expect(screen.queryByRole('link', { name: 'kb-1' })).not.toBeInTheDocument();
+    expect(screen.queryByText('进入')).not.toBeInTheDocument();
+  });
 });
