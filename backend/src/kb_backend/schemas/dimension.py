@@ -79,4 +79,8 @@ class DimensionUpdate(BaseModel):
 
 
 class EnabledDimensionsUpdate(BaseModel):
-    dimension_keys: list[str] = Field(default_factory=list)
+    # No default — an explicit `[]` is how "clear everything" is spelled, so
+    # an omitted field or a misspelled key name (e.g. "dimension_key") must
+    # 422 instead of silently defaulting to that same empty list and wiping
+    # every enabled dimension for the KB. Codex outer-gate finding on PR #25.
+    dimension_keys: list[str]

@@ -231,12 +231,24 @@ def set_enabled_dimensions(
             if found_status[key] != "active":
                 raise BusinessError(f"维度「{key}」已停用，无法启用", status_code=400)
 
-    # Delete + insert in the same transaction (single commit below) — a
-    # partial failure between the two must not leave this KB's enabled set
-    # silently cleared with nothing re-inserted, which would break every
-    # subsequent answer write/query for it. Design doc §4.3.
+    # Only replace the *active*-dimension portion of this KB's enabled set,
+    # not the whole table. A dimension that was enabled here and later
+    # globally deprecated keeps its join-table row on purpose (PRD §4.3 —
+    # global deactivation doesn't touch KB-level links) but disappears from
+    # _enabled_dimensions()'s INNER JOIN + status=active filter, so the
+    # admin settings UI this endpoint backs can never show it as a
+    # checkbox, let alone let the admin resubmit it. Deleting every row
+    # unconditionally would silently erase that retained link the moment
+    # anyone saves this KB's settings — reactivating the dimension later
+    # would then no longer show it enabled for this KB. Codex outer-gate
+    # finding on PR #25.
     db.execute(
-        delete(KnowledgeBaseEnabledDimension).where(KnowledgeBaseEnabledDimension.knowledge_base_id == kb_id)
+        delete(KnowledgeBaseEnabledDimension).where(
+            KnowledgeBaseEnabledDimension.knowledge_base_id == kb_id,
+            KnowledgeBaseEnabledDimension.dimension_key.in_(
+                select(DimensionDefinition.key).where(DimensionDefinition.status == "active")
+            ),
+        )
     )
     for key in keys:
         db.add(KnowledgeBaseEnabledDimension(knowledge_base_id=kb_id, dimension_key=key))

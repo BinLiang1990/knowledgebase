@@ -310,6 +310,51 @@ def test_set_enabled_dimensions_nonexistent_kb_returns_404(client: TestClient, m
     assert resp.status_code == 404
 
 
+def test_set_enabled_dimensions_omitted_field_is_rejected_not_defaulted_to_empty(
+    client: TestClient, migrated_schema
+) -> None:
+    """An explicit `[]` is how "clear everything" is spelled — an omitted
+    field or a misspelled key name must 422, not silently behave like that
+    same empty list and wipe every enabled dimension for the KB. Codex
+    outer-gate finding on PR #25."""
+    client.post("/dimensions", json={"label": "地区", "field_type": "text"})
+    kb = _create_kb(client, "kb-missing-field-dims")
+    client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["地区"]})
+
+    resp = client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={})
+    assert resp.status_code == 422
+    # And the previously-saved enabled set must be untouched by the
+    # rejected request.
+    assert len(client.get(f"/knowledge-bases/{kb['id']}/enabled-dimensions").json()["data"]) == 1
+
+
+def test_set_enabled_dimensions_preserves_link_to_a_since_deprecated_dimension(
+    client: TestClient, migrated_schema
+) -> None:
+    """A dimension enabled for this KB, then globally deprecated by an
+    unrelated admin action, disappears from _enabled_dimensions()'s
+    filtered view — the settings UI this endpoint backs can never show it
+    as a checkbox, so no resubmission can ever include it. Saving other
+    changes must not delete its retained join-table row: reactivating the
+    dimension later should make it show up as still-enabled for this KB,
+    exactly as PRD §4.3 promises for a KB-level "取消启用不影响..." case
+    applied to the deprecation side. Codex outer-gate finding on PR #25."""
+    client.post("/dimensions", json={"label": "地区", "field_type": "text"})
+    client.post("/dimensions", json={"label": "优先级", "field_type": "number"})
+    kb = _create_kb(client, "kb-preserve-deprecated-dim")
+    client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["地区", "优先级"]})
+
+    client.post("/dimensions/地区/deactivate")
+    # The admin now only sees "优先级" in the settings UI (地区 is hidden)
+    # and saves with just that — must not wipe 地区's retained link.
+    resp = client.put(f"/knowledge-bases/{kb['id']}/enabled-dimensions", json={"dimension_keys": ["优先级"]})
+    assert {row["key"] for row in resp.json()["data"]} == {"优先级"}
+
+    client.post("/dimensions/地区/activate")
+    keys_after_reactivate = {row["key"] for row in client.get(f"/knowledge-bases/{kb['id']}/enabled-dimensions").json()["data"]}
+    assert keys_after_reactivate == {"地区", "优先级"}
+
+
 def test_disabling_dimension_for_kb_does_not_affect_existing_answer_values(
     client: TestClient, migrated_schema
 ) -> None:
