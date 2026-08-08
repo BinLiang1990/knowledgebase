@@ -1,7 +1,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,7 @@ from ..envelope import BusinessError, envelope
 from ..models.dimension import DimensionDefinition, KnowledgeBaseEnabledDimension
 from ..models.knowledge_base import KnowledgeBase
 from ..models.knowledge_point import KnowledgePoint
-from ..schemas.dimension import DimensionOut
+from ..schemas.dimension import DimensionOut, EnabledDimensionsUpdate
 from ..schemas.knowledge_base import KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBaseUpdate
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-base"])
@@ -165,20 +165,13 @@ def deactivate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict
     return _set_status(db, kb_id, "deprecated")
 
 
-@router.get("/{kb_id}/enabled-dimensions")
-def list_enabled_dimensions(kb_id: int, db: Session = Depends(get_db)) -> dict:
-    # A knowledge base's own active/deprecated status does not gate this
-    # endpoint — read-only, no PRD text explicitly blocks it for a
-    # deactivated KB. See design doc §3.3 for the reasoning; this is a
-    # judgment call pending product confirmation, locked in by a test.
-    _get_or_404(db, kb_id)
-
+def _enabled_dimensions(db: Session, kb_id: int) -> list[DimensionDefinition]:
     # INNER JOIN (not outerjoin): a dimension that has been globally
     # deprecated must disappear from every KB's enabled list even though the
     # join-table row still exists (PRD §4.3). An outer join would let the
     # deprecated dimension's row survive with nulled-out columns instead of
     # being excluded.
-    rows = (
+    return (
         db.execute(
             select(DimensionDefinition)
             .join(
@@ -194,5 +187,59 @@ def list_enabled_dimensions(kb_id: int, db: Session = Depends(get_db)) -> dict:
         .scalars()
         .all()
     )
+
+
+def _enabled_dimensions_envelope(db: Session, kb_id: int) -> dict:
+    rows = _enabled_dimensions(db, kb_id)
     out = [DimensionOut.model_validate(row) for row in rows]
     return envelope([o.model_dump(mode="json") for o in out])
+
+
+@router.get("/{kb_id}/enabled-dimensions")
+def list_enabled_dimensions(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    # A knowledge base's own active/deprecated status does not gate this
+    # endpoint — read-only, no PRD text explicitly blocks it for a
+    # deactivated KB. See design doc §3.3 for the reasoning; this is a
+    # judgment call pending product confirmation, locked in by a test.
+    _get_or_404(db, kb_id)
+    return _enabled_dimensions_envelope(db, kb_id)
+
+
+@router.put("/{kb_id}/enabled-dimensions")
+def set_enabled_dimensions(
+    kb_id: int, payload: EnabledDimensionsUpdate, db: Session = Depends(get_db)
+) -> dict:
+    """Whole-set replacement, not incremental toggle — mirrors the demo's
+    checkbox-list-plus-one-save-button interaction (design doc §3.2)."""
+    _get_or_404(db, kb_id)
+
+    # Duplicate keys in the request are collapsed rather than rejected — a
+    # resubmitted/duplicated key means the same thing as sending it once.
+    # Without this, a naive bulk-insert would hit the (knowledge_base_id,
+    # dimension_key) composite primary key twice in one transaction and
+    # fail a request that should have succeeded. Design doc §4.3.
+    keys = list(dict.fromkeys(payload.dimension_keys))
+
+    if keys:
+        rows = db.execute(
+            select(DimensionDefinition.key, DimensionDefinition.status).where(DimensionDefinition.key.in_(keys))
+        ).all()
+        found_status = dict(rows)
+        for key in keys:
+            if key not in found_status:
+                raise BusinessError(f"维度「{key}」不存在", status_code=400)
+            if found_status[key] != "active":
+                raise BusinessError(f"维度「{key}」已停用，无法启用", status_code=400)
+
+    # Delete + insert in the same transaction (single commit below) — a
+    # partial failure between the two must not leave this KB's enabled set
+    # silently cleared with nothing re-inserted, which would break every
+    # subsequent answer write/query for it. Design doc §4.3.
+    db.execute(
+        delete(KnowledgeBaseEnabledDimension).where(KnowledgeBaseEnabledDimension.knowledge_base_id == kb_id)
+    )
+    for key in keys:
+        db.add(KnowledgeBaseEnabledDimension(knowledge_base_id=kb_id, dimension_key=key))
+    db.commit()
+
+    return _enabled_dimensions_envelope(db, kb_id)
