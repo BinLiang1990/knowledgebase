@@ -39,6 +39,11 @@ def _normalize_text(key: str, raw_value: Any) -> str:
 # outer-gate review on PR #20 (round 2).
 _MIN_SAFE_NUMBER = -(2**63)
 _MAX_SAFE_NUMBER = 2**64 - 1
+# log10(2**64 - 1) ≈ 19.27 → adjusted() == 19 for the largest safe integer;
+# a couple digits of slop keeps this a cheap pre-filter, not an exact bound
+# (the real bound is _MAX_SAFE_NUMBER, checked after this cheaply rules out
+# the dangerous cases).
+_MAX_ADJUSTED_EXPONENT = 20
 
 
 def _reject_if_unsafe_magnitude(key: str, value: int | float) -> None:
@@ -78,12 +83,33 @@ def _normalize_number(key: str, raw_value: Any) -> int | float:
             raise CoordValueError(key, f"维度 {key} 取值类型错误，应为数值") from exc
         if not decimal_value.is_finite():
             raise CoordValueError(key, f"维度 {key} 取值类型错误，应为数值")
+        # A compact exponential string like "1e1000000000" is finite and
+        # integral, but calling int() on it materializes a billion-digit
+        # Python int — expensive CPU/memory from a tiny request, before the
+        # magnitude check downstream ever runs. Decimal.adjusted() is the
+        # position of the most-significant digit and is cheap (no digit
+        # materialization) regardless of exponent, so bound the magnitude
+        # with it BEFORE any conversion that would actually build the
+        # number. Found by the Codex outer-gate review on PR #20 (round 3).
+        if decimal_value.adjusted() > _MAX_ADJUSTED_EXPONENT:
+            raise CoordValueError(key, f"维度 {key} 取值类型错误，应为数值")
         if decimal_value == decimal_value.to_integral_value():
             int_value = int(decimal_value)
             _reject_if_unsafe_magnitude(key, int_value)
             return int_value
         float_value = float(decimal_value)
         _reject_if_unsafe_magnitude(key, float_value)
+        # A binary float only has ~15-17 significant decimal digits; a
+        # string with more precision than that would silently collapse two
+        # genuinely different inputs onto the same float (and therefore the
+        # same coord_hash) — e.g. "1.0000000000000000000000001" and
+        # "...002" both round to 1.0. repr() of a float is the shortest
+        # string that round-trips back to that exact float (guaranteed since
+        # Python 3.1), so re-parsing it and comparing catches any case where
+        # the conversion wasn't exact. Found by the Codex outer-gate review
+        # on PR #20 (round 3).
+        if Decimal(repr(float_value)) != decimal_value:
+            raise CoordValueError(key, f"维度 {key} 数值精度超出支持范围")
         return float_value
 
     raise CoordValueError(key, f"维度 {key} 取值类型错误，应为数值")

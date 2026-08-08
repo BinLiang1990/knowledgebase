@@ -96,6 +96,52 @@ def test_normalize_number_rejects_just_above_uint64_max_boundary() -> None:
         normalize_coord({"priority": 2**64}, DIM_TYPES)
 
 
+def test_normalize_number_rejects_huge_exponential_string_cheaply() -> None:
+    """Found by the Codex outer-gate review on PR #20 (round 3): a compact
+    string like "1e1000000000" is finite and integral, so int() on it would
+    materialize a billion-digit Python int before any magnitude check ran —
+    a tiny request triggering an expensive allocation. Must reject via
+    Decimal.adjusted() before ever calling int()."""
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": "1e1000000000"}, DIM_TYPES)
+
+
+def test_normalize_number_rejects_negative_below_signed_min() -> None:
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": -(2**63) - 1}, DIM_TYPES)
+
+
+def test_normalize_number_accepts_signed_min_boundary() -> None:
+    boundary = -(2**63)
+    assert normalize_coord({"priority": boundary}, DIM_TYPES) == {"priority": boundary}
+
+
+def test_normalize_number_rejects_fractional_precision_beyond_float() -> None:
+    """Found by the Codex outer-gate review on PR #20 (round 3): a plain
+    float() conversion silently collapses distinct high-precision decimal
+    strings onto the same nearest-representable float, which would corrupt
+    coord_hash's exact-match guarantee. Reject instead of silently merging."""
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": "1.0000000000000000000000001"}, DIM_TYPES)
+
+
+def test_normalize_number_distinct_high_precision_decimals_are_both_rejected_not_merged() -> None:
+    a_raises = b_raises = False
+    try:
+        normalize_coord({"priority": "1.0000000000000000000000001"}, DIM_TYPES)
+    except CoordValueError:
+        a_raises = True
+    try:
+        normalize_coord({"priority": "1.0000000000000000000000002"}, DIM_TYPES)
+    except CoordValueError:
+        b_raises = True
+    assert a_raises and b_raises
+
+
+def test_normalize_number_accepts_ordinary_fractional_value() -> None:
+    assert normalize_coord({"priority": "1.5"}, DIM_TYPES) == {"priority": 1.5}
+
+
 def test_normalize_date_canonicalizes_iso_format() -> None:
     assert normalize_coord({"valid_from": "2026-08-08"}, DIM_TYPES) == {"valid_from": "2026-08-08"}
 
