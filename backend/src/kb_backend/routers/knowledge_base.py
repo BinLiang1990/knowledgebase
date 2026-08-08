@@ -1,7 +1,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,7 @@ from ..envelope import BusinessError, envelope
 from ..models.dimension import DimensionDefinition, KnowledgeBaseEnabledDimension
 from ..models.knowledge_base import KnowledgeBase
 from ..models.knowledge_point import KnowledgePoint
-from ..schemas.dimension import DimensionOut
+from ..schemas.dimension import DimensionOut, EnabledDimensionsUpdate
 from ..schemas.knowledge_base import KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBaseUpdate
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-base"])
@@ -165,20 +165,13 @@ def deactivate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict
     return _set_status(db, kb_id, "deprecated")
 
 
-@router.get("/{kb_id}/enabled-dimensions")
-def list_enabled_dimensions(kb_id: int, db: Session = Depends(get_db)) -> dict:
-    # A knowledge base's own active/deprecated status does not gate this
-    # endpoint — read-only, no PRD text explicitly blocks it for a
-    # deactivated KB. See design doc §3.3 for the reasoning; this is a
-    # judgment call pending product confirmation, locked in by a test.
-    _get_or_404(db, kb_id)
-
+def _enabled_dimensions(db: Session, kb_id: int) -> list[DimensionDefinition]:
     # INNER JOIN (not outerjoin): a dimension that has been globally
     # deprecated must disappear from every KB's enabled list even though the
     # join-table row still exists (PRD §4.3). An outer join would let the
     # deprecated dimension's row survive with nulled-out columns instead of
     # being excluded.
-    rows = (
+    return (
         db.execute(
             select(DimensionDefinition)
             .join(
@@ -194,5 +187,99 @@ def list_enabled_dimensions(kb_id: int, db: Session = Depends(get_db)) -> dict:
         .scalars()
         .all()
     )
+
+
+def _enabled_dimensions_envelope(db: Session, kb_id: int) -> dict:
+    rows = _enabled_dimensions(db, kb_id)
     out = [DimensionOut.model_validate(row) for row in rows]
     return envelope([o.model_dump(mode="json") for o in out])
+
+
+@router.get("/{kb_id}/enabled-dimensions")
+def list_enabled_dimensions(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    # A knowledge base's own active/deprecated status does not gate this
+    # endpoint — read-only, no PRD text explicitly blocks it for a
+    # deactivated KB. See design doc §3.3 for the reasoning; this is a
+    # judgment call pending product confirmation, locked in by a test.
+    _get_or_404(db, kb_id)
+    return _enabled_dimensions_envelope(db, kb_id)
+
+
+@router.put("/{kb_id}/enabled-dimensions")
+def set_enabled_dimensions(
+    kb_id: int, payload: EnabledDimensionsUpdate, db: Session = Depends(get_db)
+) -> dict:
+    """Whole-set replacement, not incremental toggle — mirrors the demo's
+    checkbox-list-plus-one-save-button interaction (design doc §3.2)."""
+    _get_or_404(db, kb_id)
+
+    # Resolve each requested spelling to its canonical stored `key` via a
+    # collation-aware equality lookup (dimension_definition.key uses the
+    # same case/accent-insensitive utf8mb4_0900_ai_ci as knowledge_base.name)
+    # before validating/deduping/inserting. A single batched `IN (...)`
+    # lookup can't tell which requested spelling matched which returned row
+    # once two requested values collapse onto the same DB row under that
+    # collation (e.g. "Region" and "region"), so an exact-string Python
+    # membership check against it would wrongly report an existing
+    # dimension as "不存在". Resolving one at a time also makes dedup
+    # canonical-key-based, not raw-spelling-based, and guarantees every
+    # inserted row uses the DB's own spelling rather than whatever
+    # case/accent variant the client happened to type. Codex outer-gate
+    # finding on PR #25.
+    keys: list[str] = []
+    seen: set[str] = set()
+    for requested_key in payload.dimension_keys:
+        dim = db.execute(select(DimensionDefinition).where(DimensionDefinition.key == requested_key)).scalar_one_or_none()
+        if dim is None:
+            raise BusinessError(f"维度「{requested_key}」不存在", status_code=400)
+        if dim.status != "active":
+            raise BusinessError(f"维度「{requested_key}」已停用，无法启用", status_code=400)
+        if dim.key not in seen:
+            seen.add(dim.key)
+            keys.append(dim.key)
+
+    # Only replace the *active*-dimension portion of this KB's enabled set,
+    # not the whole table. A dimension that was enabled here and later
+    # globally deprecated keeps its join-table row on purpose (PRD §4.3 —
+    # global deactivation doesn't touch KB-level links) but disappears from
+    # _enabled_dimensions()'s INNER JOIN + status=active filter, so the
+    # admin settings UI this endpoint backs can never show it as a
+    # checkbox, let alone let the admin resubmit it. Deleting every row
+    # unconditionally would silently erase that retained link the moment
+    # anyone saves this KB's settings — reactivating the dimension later
+    # would then no longer show it enabled for this KB. Codex outer-gate
+    # finding on PR #25.
+    #
+    # A dimension can be deactivated by a concurrent request between the
+    # validation loop above and this commit — Kimi 终审 finding on PR #25.
+    # PRD §4.10 explicitly defers concurrency/conflict control to P2 and
+    # this app takes no row locks anywhere else, so this doesn't add
+    # `.with_for_update()` locking here either; instead this just makes
+    # sure that race can never surface as an unhandled 500. Two outcomes:
+    # (a) the dimension had no existing link for this KB — the insert
+    # below creates one to a now-deprecated dimension, which is harmless
+    # because _enabled_dimensions()/get_enabled_dimension_types() both
+    # INNER JOIN on status=active, so that link is functionally inert
+    # until someone reactivates the dimension (identical reasoning to why
+    # "enabling a deprecated dimension" is accepted as harmless elsewhere
+    # in this design); (b) the dimension already had a link — the delete
+    # above skips it (no longer status=active) and the insert then hits
+    # that same composite primary key, which IntegrityError below turns
+    # into a clean retry-able error instead of a crash.
+    try:
+        db.execute(
+            delete(KnowledgeBaseEnabledDimension).where(
+                KnowledgeBaseEnabledDimension.knowledge_base_id == kb_id,
+                KnowledgeBaseEnabledDimension.dimension_key.in_(
+                    select(DimensionDefinition.key).where(DimensionDefinition.status == "active")
+                ),
+            )
+        )
+        for key in keys:
+            db.add(KnowledgeBaseEnabledDimension(knowledge_base_id=kb_id, dimension_key=key))
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessError("启用维度失败，请刷新后重试", status_code=400) from exc
+
+    return _enabled_dimensions_envelope(db, kb_id)
