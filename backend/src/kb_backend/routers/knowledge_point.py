@@ -544,29 +544,34 @@ def revoke_answer(
     _get_kp_or_404(db, kb_id, kp_id)
     target = _get_answer_or_404(db, kb_id, kp_id, answer_id)
 
-    if not target.revoked:
-        # Only executed the first time a chain is revoked — a repeat call
-        # is a no-op that preserves the original revoke_reason/revoked_at/
-        # revoked_by rather than overwriting them (§4.5): mirrors
-        # delete_knowledge_point's own "idempotent, first reason wins"
-        # precedent. The knowledge_point_id filter here is load-bearing,
-        # not optional — compute_coord_hash is a pure function of the
-        # normalized coord alone, so coord_hash collides across every KP
-        # that shares a coord (guaranteed for coord={}). Without this
-        # filter, revoking one KP's default-answer chain would silently
-        # revoke every KP's. Design doc §3 — found by adversarial review
-        # before this endpoint was written.
-        db.execute(
-            update(Answer)
-            .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == target.coord_hash)
-            .values(
-                revoked=True,
-                revoked_at=func.now(),
-                revoked_by="admin",
-                revoke_reason=payload.revoke_reason,
-            )
+    # The "first reason wins" idempotency guarantee (§4.5) must be enforced
+    # by the UPDATE's WHERE clause itself, not by a check-then-act `if not
+    # target.revoked` gate in Python: two concurrent requests can both read
+    # revoked=False before either commits, and without the revoked=False
+    # filter here both UPDATEs would apply, with the second commit
+    # overwriting the first's revoked_at/revoked_by/revoke_reason (Kimi
+    # 终审 finding, issue #10). The knowledge_point_id filter is separately
+    # load-bearing — compute_coord_hash is a pure function of the
+    # normalized coord alone, so coord_hash collides across every KP that
+    # shares a coord (guaranteed for coord={}). Without it, revoking one
+    # KP's default-answer chain would silently revoke every KP's. Design
+    # doc §3 — found by adversarial review before this endpoint was
+    # written.
+    db.execute(
+        update(Answer)
+        .where(
+            Answer.knowledge_point_id == kp_id,
+            Answer.coord_hash == target.coord_hash,
+            Answer.revoked.is_(False),
         )
-        db.commit()
-        db.refresh(target)
+        .values(
+            revoked=True,
+            revoked_at=func.now(),
+            revoked_by="admin",
+            revoke_reason=payload.revoke_reason,
+        )
+    )
+    db.commit()
+    db.refresh(target)
 
     return envelope(_to_answer_out(target).model_dump(mode="json"))
