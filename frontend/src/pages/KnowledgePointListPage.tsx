@@ -47,7 +47,12 @@ export function KnowledgePointListPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<KnowledgePoint | null>(null);
 
-  const at = qMode === 'day' ? qTime : today();
+  // In "最新" mode, omit `at` entirely rather than freezing today()'s value
+  // at render time: a page left open across local midnight would otherwise
+  // keep querying yesterday's date until some unrelated state change forced
+  // a rerender. Omitting it lets the backend use its own current date on
+  // every request. Codex outer-gate finding on PR #23.
+  const at = qMode === 'day' ? qTime : undefined;
   const hasFilter = Boolean(keyword) || Object.keys(filters).length > 0;
 
   const dimensionsQuery = useEnabledDimensions(kbId);

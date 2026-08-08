@@ -109,8 +109,14 @@ export function ConditionPicker({
   function commit() {
     if (!activeDim) return;
     const dim = dimensions.find((d) => d.key === activeDim);
-    if (!dim || !draft) return;
-    onFiltersChange({ ...filters, [activeDim]: toFilterValue(dim.field_type, draft) });
+    if (!dim) return;
+    // A whitespace-only text value is truthy, so it would otherwise commit
+    // and display an active-looking filter chip — the backend then trims
+    // it to "" and drops the coordinate, silently returning unfiltered
+    // results. Codex outer-gate finding on PR #23.
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onFiltersChange({ ...filters, [activeDim]: toFilterValue(dim.field_type, trimmed) });
     setOpen(false);
     setActiveDim(null);
   }

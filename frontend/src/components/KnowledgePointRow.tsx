@@ -5,7 +5,7 @@ import { AnswerGroupTree } from './AnswerGroupTree';
 interface KnowledgePointRowProps {
   kp: KnowledgePoint;
   kbId: number;
-  at: string;
+  at: string | undefined;
   qMode: 'now' | 'day';
   expanded: boolean;
   onToggleExpand: () => void;

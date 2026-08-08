@@ -34,6 +34,19 @@ describe('KnowledgePointListPage', () => {
     expect(await screen.findByText('kp-1')).toBeInTheDocument();
   });
 
+  it('omits the `at` query param in "最新" mode instead of freezing a client-computed date (issue #7 Codex fix)', async () => {
+    let sawAtParam = false;
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points`, ({ request }) => {
+        if (new URL(request.url).searchParams.has('at')) sawAtParam = true;
+        return HttpResponse.json(envelope([makeKp()]));
+      }),
+    );
+    renderPage();
+    await screen.findByText('kp-1');
+    expect(sawAtParam).toBe(false);
+  });
+
   it('shows a guard when the knowledge base does not exist', async () => {
     server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([]))));
     renderPage('/knowledge-bases/999/knowledge-points');
@@ -135,6 +148,21 @@ describe('KnowledgePointListPage', () => {
     const parsed = JSON.parse(receivedCoordParam!);
     expect(parsed).toEqual({ priority: '5' });
     expect(typeof parsed.priority).toBe('string');
+  });
+
+  it('rejects a whitespace-only text condition instead of committing an empty filter (issue #7 Codex fix)', async () => {
+    renderPage();
+    await screen.findByText('kp-1');
+    await userEvent.click(screen.getByText('+ 加一个条件'));
+    await userEvent.click(await screen.findByText('租户'));
+    const input = document.querySelector('.dd-menu input[type="text"]') as HTMLInputElement;
+    await userEvent.type(input, '   ');
+    await userEvent.click(screen.getByText('确 定'));
+
+    // A committed filter would close the dropdown and render a "租户 = ..."
+    // chip; whitespace-only input must do neither.
+    expect(input).toBeInTheDocument();
+    expect(screen.queryByText(/租户 =/)).not.toBeInTheDocument();
   });
 
   it('does not fetch answer-groups for a collapsed row', async () => {

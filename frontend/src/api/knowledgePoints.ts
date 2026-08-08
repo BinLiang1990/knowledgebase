@@ -68,15 +68,19 @@ export function useKnowledgePoints(kbId: number, filters: KnowledgePointFilters)
   });
 }
 
-export function useAnswerGroups(kbId: number, kpId: number, at: string, enabled: boolean) {
+export function useAnswerGroups(kbId: number, kpId: number, at: string | undefined, enabled: boolean) {
   return useQuery({
     // `at` is part of the key on purpose: an already-expanded row must
     // refetch when the time-travel selector changes, not silently keep
     // showing the previous `at`'s cached tree. Found during design review.
-    queryKey: ['knowledge-bases', kbId, 'knowledge-points', kpId, 'answer-groups', at],
+    // `at` is undefined for "最新" mode (see KnowledgePointListPage) so the
+    // backend's own current date is used on every request rather than a
+    // date frozen at render time — the 'now' key literal keeps that case
+    // distinct from any real calendar date.
+    queryKey: ['knowledge-bases', kbId, 'knowledge-points', kpId, 'answer-groups', at ?? 'now'],
     queryFn: ({ signal }) =>
       apiClient.get<AnswerGroup[]>(
-        `/knowledge-bases/${kbId}/knowledge-points/${kpId}/answer-groups?at=${at}`,
+        `/knowledge-bases/${kbId}/knowledge-points/${kpId}/answer-groups${at ? `?at=${at}` : ''}`,
         { signal },
       ),
     enabled,
