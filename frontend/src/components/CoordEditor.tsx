@@ -12,6 +12,17 @@ export interface CoordRow {
   locked?: FilterValue;
 }
 
+// `value` may already have lost precision by the time it gets here: a
+// number-type coord value above Number.MAX_SAFE_INTEGER is silently
+// rounded by the browser's JSON parser inside apiClient, before any of our
+// own code runs — String(value) here can't recover digits that are already
+// gone. coord.py accepts exact integers up to the uint64 range, so if such
+// a value exists and this row is left untouched while another row is
+// edited (triggering a migration), the untouched value gets resubmitted
+// already-corrupted. Known, accepted, out-of-scope-for-issue-#8 limitation
+// — design doc §4.1's second "已知、接受的偏差" note has the full reasoning
+// for why this isn't fixed here (it would require rewriting apiClient's
+// JSON parsing, not a change scoped to this component).
 export function coordRowsFromCoord(coord: Record<string, FilterValue>, dimensions: Dimension[]): CoordRow[] {
   return Object.entries(coord).map(([key, value]) => {
     const dim = dimensions.find((d) => d.key === key);
