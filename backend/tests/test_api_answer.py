@@ -401,3 +401,31 @@ def test_write_answer_content_has_no_length_limit(client: TestClient, migrated_s
     )
     assert resp.status_code == 200
     assert len(resp.json()["data"]["content"]) == 20000
+
+
+def test_write_answer_note_exceeding_text_column_limit_still_succeeds(
+    client: TestClient, migrated_schema, db_engine: Engine
+) -> None:
+    """MySQL TEXT caps at 65,535 bytes; answer.note is LONGTEXT (migration
+    0002) specifically so a note longer than that doesn't 500 at commit.
+    Found by the Codex outer-gate review on PR #20 (round 5).
+
+    Cleans up its own oversized row before returning: the shared
+    migrated_schema fixture downgrades all the way to base on teardown,
+    which passes back through migration 0002's downgrade (LONGTEXT -> TEXT)
+    — narrowing the column while a >65KB row still exists would fail that
+    ALTER and leave the database in a broken intermediate state that
+    cascades into every subsequent test's own setup.
+    """
+    kb = _create_kb(client, "kb-answer-long-note")
+    kp = _create_kp(client, kb["id"], "kp-answer-long-note")
+    long_note = "n" * 100000
+    resp = client.post(
+        _answers_url(kb["id"], kp["id"]),
+        json={"content": "x", "effective_time": "2026-08-08", "note": long_note},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["data"]["note"]) == 100000
+
+    with db_engine.begin() as conn:
+        conn.execute(text("UPDATE answer SET note = NULL WHERE id = :id"), {"id": resp.json()["data"]["id"]})

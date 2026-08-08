@@ -105,6 +105,26 @@ def test_upgrade_head_is_idempotent(migrated_schema, alembic_cfg: AlembicConfig)
     command.upgrade(alembic_cfg, "head")
 
 
+def test_answer_note_column_is_longtext(migrated_schema, db_engine: Engine) -> None:
+    """docs/PRD.md §4.5: content/note 均不设长度上限. `content` was already
+    LONGTEXT from issue #1; `note` was left as plain TEXT (65,535-byte cap)
+    until migration 0002. Found by the Codex outer-gate review on PR #20
+    (round 5)."""
+    with db_engine.connect() as conn:
+        data_type = conn.execute(
+            text(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answer' AND COLUMN_NAME = 'note'"
+            )
+        ).scalar_one()
+    assert data_type == "longtext"
+
+
+def test_downgrade_to_0001_is_reversible(migrated_schema, alembic_cfg: AlembicConfig) -> None:
+    command.downgrade(alembic_cfg, "0001")
+    command.upgrade(alembic_cfg, "head")
+
+
 def test_enabled_dimension_join_table_rejects_unknown_dimension_key(
     migrated_schema, db_engine: Engine
 ) -> None:

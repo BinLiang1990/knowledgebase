@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, CHAR, DateTime, ForeignKeyConstraint, Index, String, Text, false
+from sqlalchemy import Boolean, CHAR, DateTime, ForeignKeyConstraint, Index, String, false
 from sqlalchemy.dialects.mysql import BIGINT, JSON, LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,7 +30,7 @@ class Answer(Base):
     effective_time: Mapped[date] = mapped_column(nullable=False)
     operator: Mapped[str] = mapped_column(String(100), nullable=False, server_default="admin")
     source: Mapped[str] = mapped_column(String(100), nullable=False, server_default="人工填报")
-    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(LONGTEXT, nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
