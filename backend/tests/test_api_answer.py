@@ -336,6 +336,62 @@ def test_edit_answer_nonexistent_answer_id_returns_404(client: TestClient, migra
     assert resp.status_code == 404
 
 
+def test_write_answer_into_revoked_chain_is_rejected(
+    client: TestClient, migrated_schema, db_engine: Engine
+) -> None:
+    """Found by the Codex outer-gate review on PR #20 (round 2): writing a
+    fresh non-revoked row under an already-revoked coord_hash would silently
+    resurrect a dead chain, leaving it with mixed revocation states."""
+    kb = _create_kb(client, "kb-answer-revoked-chain")
+    kp = _create_kp(client, kb["id"], "kp-answer-revoked-chain")
+    v1 = client.post(
+        _answers_url(kb["id"], kp["id"]), json={"content": "v1", "effective_time": "2026-08-08"}
+    ).json()["data"]
+    with db_engine.begin() as conn:
+        conn.execute(text("UPDATE answer SET revoked = 1 WHERE id = :id"), {"id": v1["id"]})
+
+    resp = client.post(
+        _answers_url(kb["id"], kp["id"]), json={"content": "resurrection attempt", "effective_time": "2026-08-09"}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["code"] == 444
+
+
+def test_edit_answer_migrating_into_a_revoked_chain_is_rejected(
+    client: TestClient, migrated_schema, db_engine: Engine
+) -> None:
+    kb = _create_kb(client, "kb-edit-migrate-into-revoked")
+    _enable_dimension(db_engine, kb["id"], "tenant", "租户")
+    kp = _create_kp(client, kb["id"], "kp-edit-migrate-into-revoked")
+
+    dead = client.post(
+        _answers_url(kb["id"], kp["id"]),
+        json={"content": "dead chain", "effective_time": "2026-08-08", "coord": {"tenant": "dead"}},
+    ).json()["data"]
+    with db_engine.begin() as conn:
+        conn.execute(text("UPDATE answer SET revoked = 1 WHERE id = :id"), {"id": dead["id"]})
+
+    live = client.post(
+        _answers_url(kb["id"], kp["id"]),
+        json={"content": "live chain", "effective_time": "2026-08-08", "coord": {"tenant": "live"}},
+    ).json()["data"]
+
+    resp = client.post(
+        _edit_url(kb["id"], kp["id"], live["id"]),
+        json={
+            "content": "trying to migrate into dead chain",
+            "effective_time": "2026-08-09",
+            "coord": {"tenant": "dead"},
+            "migration_reason": "should be rejected",
+        },
+    )
+    assert resp.status_code == 400
+
+    with db_engine.connect() as conn:
+        live_row = conn.execute(text("SELECT revoked FROM answer WHERE id = :id"), {"id": live["id"]}).one()
+    assert live_row[0] == 0
+
+
 def test_write_answer_content_has_no_length_limit(client: TestClient, migrated_schema) -> None:
     kb = _create_kb(client, "kb-answer-long-content")
     kp = _create_kp(client, kb["id"], "kp-answer-long-content")

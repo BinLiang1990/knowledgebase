@@ -26,27 +26,30 @@ def _normalize_text(key: str, raw_value: Any) -> str:
     return raw_value.strip()
 
 
-# MySQL JSON's exact-integer ceiling (BIGINT UNSIGNED max). Verified
-# empirically against the real instance: beyond this, MySQL either raises
-# "Number too big to be stored in double" on INSERT, or — for magnitudes
-# past roughly 1e308 — silently demotes the value to a lossy double instead
-# of erroring. Reject before either happens. Found by the Codex outer-gate
-# review on PR #20 (originally reported as "'1e309' overflows to Infinity";
-# a Decimal-based parse doesn't actually overflow to Infinity, but the
-# underlying concern — an accepted value MySQL can't store exactly — still
-# applies at this real boundary).
-_MAX_SAFE_NUMBER_MAGNITUDE = 2**64 - 1
+# MySQL JSON's exact-integer range is asymmetric, not a plain magnitude
+# bound: it can encode a signed 64-bit integer OR an unsigned 64-bit
+# integer, never a negative value below the signed minimum. Verified
+# empirically against the real instance:
+#   -2**63              -> stored exactly (signed 64-bit min)
+#   -2**63 - 1           -> SILENTLY demoted to a lossy double, no error
+#    2**64 - 1           -> stored exactly (unsigned 64-bit max)
+#   ~1e308+               -> raises "Number too big to be stored in double"
+# A symmetric abs()-based check would wrongly let large-magnitude negative
+# values through into the silent-corruption zone. Found by the Codex
+# outer-gate review on PR #20 (round 2).
+_MIN_SAFE_NUMBER = -(2**63)
+_MAX_SAFE_NUMBER = 2**64 - 1
 
 
 def _reject_if_unsafe_magnitude(key: str, value: int | float) -> None:
     # math.isfinite() would raise OverflowError on an arbitrary-precision
-    # int far outside float range, before it ever gets to compare
-    # magnitudes — check int magnitude with plain integer comparison first.
+    # int far outside float range, before it ever gets to compare bounds —
+    # check int magnitude with plain integer comparison first.
     if isinstance(value, int):
-        if abs(value) > _MAX_SAFE_NUMBER_MAGNITUDE:
+        if value < _MIN_SAFE_NUMBER or value > _MAX_SAFE_NUMBER:
             raise CoordValueError(key, f"维度 {key} 取值类型错误，应为数值")
         return
-    if not math.isfinite(value) or abs(value) > _MAX_SAFE_NUMBER_MAGNITUDE:
+    if not math.isfinite(value) or value < _MIN_SAFE_NUMBER or value > _MAX_SAFE_NUMBER:
         raise CoordValueError(key, f"维度 {key} 取值类型错误，应为数值")
 
 

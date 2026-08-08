@@ -67,6 +67,23 @@ def _ensure_title_available(db: Session, kb_id: int, title: str, exclude_id: int
         raise BusinessError(_DUPLICATE_TITLE_MSG, status_code=400)
 
 
+def _chain_is_revoked(db: Session, kp_id: int, coord_hash: str) -> bool:
+    # Revocation is a whole-chain property (PRD §6 rule #4): every row
+    # sharing a coord_hash is revoked together, so "any row revoked" is an
+    # equivalent, cheaper check than "all rows revoked". Writing a new
+    # (non-revoked) row under an already-revoked coord_hash would otherwise
+    # silently resurrect a dead chain — no un-revoke feature exists in P0.
+    # Found by the Codex outer-gate review on PR #20 (round 2).
+    return (
+        db.execute(
+            select(Answer.id)
+            .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == coord_hash, Answer.revoked.is_(True))
+            .limit(1)
+        ).first()
+        is not None
+    )
+
+
 def _get_active_answer_count(db: Session, kp_id: int) -> int:
     return db.execute(
         select(func.count())
@@ -233,11 +250,15 @@ def create_answer(kb_id: int, kp_id: int, payload: AnswerCreate, db: Session = D
     except CoordValueError as exc:
         raise BusinessError(str(exc), status_code=400) from exc
 
+    coord_hash = compute_coord_hash(normalized)
+    if _chain_is_revoked(db, kp_id, coord_hash):
+        raise BusinessError("该条件组合已被撤回，无法直接写入", status_code=400)
+
     answer = Answer(
         knowledge_base_id=kb_id,
         knowledge_point_id=kp_id,
         coord=normalized,
-        coord_hash=compute_coord_hash(normalized),
+        coord_hash=coord_hash,
         content=payload.content,
         effective_time=payload.effective_time,
         note=payload.note,
@@ -290,6 +311,8 @@ def edit_answer(
     is_migration = new_hash != target.coord_hash
 
     if is_migration:
+        if _chain_is_revoked(db, kp_id, new_hash):
+            raise BusinessError("目标条件组合已被撤回，无法迁移到该条件", status_code=400)
         reason = (payload.migration_reason or "").strip()
         if not reason:
             raise BusinessError("变更适用条件需要填写迁移原因", status_code=400)
