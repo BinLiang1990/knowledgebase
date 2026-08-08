@@ -20,6 +20,8 @@ from ..schemas.knowledge_point import (
     AnswerEdit,
     AnswerGroupOut,
     AnswerOut,
+    AnswerPromoteToDefault,
+    AnswerRevoke,
     KnowledgePointCreate,
     KnowledgePointDeleteRequest,
     KnowledgePointOut,
@@ -476,3 +478,100 @@ def edit_answer(
     db.commit()
     db.refresh(new_answer)
     return envelope(_to_answer_out(new_answer).model_dump(mode="json"))
+
+
+def _get_answer_or_404(db: Session, kb_id: int, kp_id: int, answer_id: int) -> Answer:
+    answer = db.execute(
+        select(Answer).where(
+            Answer.id == answer_id,
+            Answer.knowledge_point_id == kp_id,
+            Answer.knowledge_base_id == kb_id,
+        )
+    ).scalar_one_or_none()
+    if answer is None:
+        raise BusinessError(_ANSWER_NOT_FOUND_MSG, status_code=404)
+    return answer
+
+
+@router.post("/{kp_id}/answers/{answer_id}/promote-to-default")
+def promote_answer_to_default(
+    kb_id: int, kp_id: int, answer_id: int, payload: AnswerPromoteToDefault, db: Session = Depends(get_db)
+) -> dict:
+    """"设为默认" (issue #10, design doc §4.2/§4.3) — copies `answer_id`'s
+    *content* into a brand-new version of the default (coord={}) chain.
+    The source answer itself is never touched. Functionally this is
+    create_answer with coord hard-coded to {} and content read server-side
+    instead of client-supplied, so it shares create_answer's own two
+    guards (deleted KP, revoked target chain) rather than inventing new
+    ones."""
+    kp = _get_kp_or_404(db, kb_id, kp_id)
+    if kp.status == "deleted":
+        raise BusinessError("知识点已删除，无法写入答案", status_code=400)
+
+    source = _get_answer_or_404(db, kb_id, kp_id, answer_id)
+
+    default_hash = compute_coord_hash({})
+    if _chain_is_revoked(db, kp_id, default_hash):
+        raise BusinessError("该条件组合已被撤回，无法直接写入", status_code=400)
+
+    promoted = Answer(
+        knowledge_base_id=kb_id,
+        knowledge_point_id=kp_id,
+        coord={},
+        coord_hash=default_hash,
+        content=source.content,
+        effective_time=payload.effective_time,
+        note=payload.note,
+        operator="admin",
+        source="人工填报",
+    )
+    db.add(promoted)
+    db.commit()
+    db.refresh(promoted)
+    return envelope(_to_answer_out(promoted).model_dump(mode="json"))
+
+
+@router.post("/{kp_id}/answers/{answer_id}/revoke")
+def revoke_answer(
+    kb_id: int, kp_id: int, answer_id: int, payload: AnswerRevoke, db: Session = Depends(get_db)
+) -> dict:
+    """撤回 (issue #10, design doc §4.1/§4.4/§4.5) — whole-chain logical
+    delete, keyed by any answer_id in that chain (mirrors edit_answer's own
+    answer_id-based targeting, not a client-supplied coord dict). Doesn't
+    gate on the knowledge point's deleted status — PRD §6 rule #8 treats KP
+    soft-delete and answer revocation as independent, unlike create/edit
+    answer's "no new content on a deleted KP" rule."""
+    _get_kp_or_404(db, kb_id, kp_id)
+    target = _get_answer_or_404(db, kb_id, kp_id, answer_id)
+
+    # The "first reason wins" idempotency guarantee (§4.5) must be enforced
+    # by the UPDATE's WHERE clause itself, not by a check-then-act `if not
+    # target.revoked` gate in Python: two concurrent requests can both read
+    # revoked=False before either commits, and without the revoked=False
+    # filter here both UPDATEs would apply, with the second commit
+    # overwriting the first's revoked_at/revoked_by/revoke_reason (Kimi
+    # 终审 finding, issue #10). The knowledge_point_id filter is separately
+    # load-bearing — compute_coord_hash is a pure function of the
+    # normalized coord alone, so coord_hash collides across every KP that
+    # shares a coord (guaranteed for coord={}). Without it, revoking one
+    # KP's default-answer chain would silently revoke every KP's. Design
+    # doc §3 — found by adversarial review before this endpoint was
+    # written.
+    db.execute(
+        update(Answer)
+        .where(
+            Answer.knowledge_point_id == kp_id,
+            Answer.coord_hash == target.coord_hash,
+            Answer.revoked.is_(False),
+        )
+        .values(
+            revoked=True,
+            revoked_at=func.now(),
+            revoked_by="admin",
+            revoke_reason=payload.revoke_reason,
+        )
+    )
+    db.commit()
+    db.refresh(target)
+
+    return envelope(_to_answer_out(target).model_dump(mode="json"))

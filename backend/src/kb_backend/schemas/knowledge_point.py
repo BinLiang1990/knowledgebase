@@ -109,6 +109,24 @@ class AnswerOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AnswerPromoteToDefault(BaseModel):
+    effective_time: date
+    note: str | None = None
+
+
+class AnswerRevoke(BaseModel):
+    # max_length=500: Answer.revoke_reason is a String(500) column, not
+    # LONGTEXT like content/note — matches KnowledgePointDeleteRequest
+    # .delete_reason and AnswerEdit.migration_reason's own cap on the same
+    # kind of field. Design doc §2 (issue #10).
+    revoke_reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("revoke_reason")
+    @classmethod
+    def _validate_reason(cls, v: str) -> str:
+        return _stripped_non_empty(v, "撤回原因")
+
+
 class ResolvedOut(BaseModel):
     status: Literal["exact", "weighted", "default", "fallback-latest", "none"]
     answer: AnswerOut | None
