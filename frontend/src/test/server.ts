@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import type { KnowledgeBase } from '../api/knowledgeBases';
 import type { Dimension } from '../api/dimensions';
 import type { Answer } from '../api/answers';
-import type { AnswerGroup, KnowledgePoint, Resolved } from '../api/knowledgePoints';
+import type { AnswerGroup, KnowledgePoint, KnowledgePointDetail, Resolved } from '../api/knowledgePoints';
 
 export const API_BASE = 'http://127.0.0.1:8000';
 
@@ -56,7 +56,7 @@ export function makeResolved(overrides: Partial<Resolved> = {}): Resolved {
   return { status: 'default', answer: makeAnswer(), ...overrides };
 }
 
-export function makeKp(overrides: Partial<KnowledgePoint> = {}): KnowledgePoint {
+export function makeKpDetail(overrides: Partial<KnowledgePointDetail> = {}): KnowledgePointDetail {
   return {
     id: 1,
     knowledge_base_id: 1,
@@ -68,9 +68,13 @@ export function makeKp(overrides: Partial<KnowledgePoint> = {}): KnowledgePoint 
     updated_at: '2026-08-08T00:00:00',
     deleted_at: null,
     delete_reason: null,
-    resolved: makeResolved(),
     ...overrides,
   };
+}
+
+export function makeKp(overrides: Partial<KnowledgePoint> = {}): KnowledgePoint {
+  const { resolved, ...detailOverrides } = overrides;
+  return { ...makeKpDetail(detailOverrides), resolved: resolved ?? makeResolved() };
 }
 
 export function makeAnswerGroup(overrides: Partial<AnswerGroup> = {}): AnswerGroup {
@@ -104,6 +108,16 @@ export const handlers = [
   ),
   http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:id/answer-groups`, () =>
     HttpResponse.json(envelope([makeAnswerGroup()])),
+  ),
+  http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:id`, () => HttpResponse.json(envelope(makeKpDetail()))),
+  http.patch(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:id`, () =>
+    HttpResponse.json(envelope(makeKpDetail())),
+  ),
+  http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers`, () =>
+    HttpResponse.json(envelope(makeAnswer({ id: 10 }))),
+  ),
+  http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers/:answerId/edit`, () =>
+    HttpResponse.json(envelope(makeAnswer({ id: 11 }))),
   ),
 ];
 

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { Dimension } from '../api/dimensions';
 import { useAnswerGroups, type KnowledgePoint } from '../api/knowledgePoints';
 import { AnswerGroupTree } from './AnswerGroupTree';
@@ -44,10 +45,17 @@ export function KnowledgePointRow({
     <div className="trow">
       <div className="trow-main" onClick={onToggleExpand}>
         <span className="arrow">{expanded ? '▾' : '▸'}</span>
-        <span style={{ fontWeight: 600, fontSize: '14.5px' }}>{kp.title}</span>
+        <Link
+          to={`/knowledge-bases/${kbId}/knowledge-points/${kp.id}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ fontWeight: 600, fontSize: '14.5px' }}
+        >
+          {kp.title}
+        </Link>
         <span className="trm-meta">{kp.active_answer_count} 条答案</span>
         <span style={{ flex: 1 }} />
         <span className="ops" onClick={(e) => e.stopPropagation()}>
+          <Link to={`/knowledge-bases/${kbId}/knowledge-points/${kp.id}`}>查看详情</Link>
           <a className="danger" onClick={onDeleteRequest}>
             删除
           </a>

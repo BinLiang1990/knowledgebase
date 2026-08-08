@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Dimension } from '../../api/dimensions';
+import { ValueInput, displayValue, toFilterValue } from './dimensionValue';
+import type { FilterValue, Filters } from './dimensionValue';
 
-export type FilterValue = string | number | boolean;
-export type Filters = Record<string, FilterValue>;
+export type { FilterValue, Filters };
 
 interface ConditionPickerProps {
   dimensions: Dimension[];
@@ -12,49 +13,6 @@ interface ConditionPickerProps {
   qTime: string;
   today: string;
   onTimeChange: (mode: 'now' | 'day', time: string) => void;
-}
-
-function displayValue(dim: Dimension | undefined, value: FilterValue): string {
-  if (dim?.field_type === 'boolean') return value ? '是' : '否';
-  return String(value);
-}
-
-// Value input per field_type — native input types do the heavy lifting for
-// number/date validity; boolean is a fixed select (see design doc §4.1 for
-// why the *committed* value still needs type conversion beyond this).
-function ValueInput({ dim, value, onChange }: { dim: Dimension; value: string; onChange: (v: string) => void }) {
-  if (dim.field_type === 'number') {
-    return <input type="number" value={value} onChange={(e) => onChange(e.target.value)} autoFocus />;
-  }
-  if (dim.field_type === 'date') {
-    return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} autoFocus />;
-  }
-  if (dim.field_type === 'boolean') {
-    return (
-      <select value={value || 'true'} onChange={(e) => onChange(e.target.value)} autoFocus>
-        <option value="true">是</option>
-        <option value="false">否</option>
-      </select>
-    );
-  }
-  return (
-    <input
-      type="text"
-      value={value}
-      placeholder="输入取值"
-      onChange={(e) => onChange(e.target.value)}
-      autoFocus
-    />
-  );
-}
-
-// coord.py's field_type-specific parsing (docs/specs/2026-08-08-kp-list-filter-ui-design.md
-// §4.1): boolean must become a real JSON boolean, not the string the
-// <select> gives us; number stays a string so the backend's Decimal-based
-// parser gets the exact digits instead of a JS-Number round-trip.
-function toFilterValue(fieldType: Dimension['field_type'], raw: string): FilterValue {
-  if (fieldType === 'boolean') return raw === 'true';
-  return raw;
 }
 
 export function ConditionPicker({
