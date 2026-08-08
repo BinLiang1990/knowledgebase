@@ -321,6 +321,14 @@ def update_knowledge_point(
     kb_id: int, kp_id: int, payload: KnowledgePointUpdate, db: Session = Depends(get_db)
 ) -> dict:
     kp = _get_kp_or_404(db, kb_id, kp_id)
+    if kp.status == "deleted":
+        # Consistent with create_answer/edit_answer's own guard — a
+        # soft-deleted knowledge point is read-only everywhere except the
+        # delete/restore actions themselves. The frontend detail page
+        # (issue #8) already hides the "编辑标题" button for a deleted KP;
+        # this closes the same gap at the API level so a direct PATCH can't
+        # bypass it. Kimi 终审 finding on PR #24.
+        raise BusinessError("知识点已删除，无法编辑标题", status_code=400)
 
     if payload.title != kp.title:
         _ensure_title_available(db, kb_id, payload.title, exclude_id=kp_id)

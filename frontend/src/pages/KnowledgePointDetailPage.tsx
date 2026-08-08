@@ -55,13 +55,13 @@ function AnswerRow({
   group,
   dimensions,
   isTop,
-  editDisabled,
+  editDisabledReason,
   onEdit,
 }: {
   group: AnswerGroup;
   dimensions: Dimension[];
   isTop: boolean;
-  editDisabled: boolean;
+  editDisabledReason: string | null;
   onEdit: () => void;
 }) {
   const live = group.live_answer!;
@@ -73,9 +73,9 @@ function AnswerRow({
         </div>
         <span className="ops" style={{ fontSize: '12.5px', whiteSpace: 'nowrap', paddingTop: 3 }}>
           <a
-            onClick={editDisabled ? undefined : onEdit}
-            style={editDisabled ? { color: 'var(--ink-6)', cursor: 'not-allowed' } : undefined}
-            title={editDisabled ? '维度加载完成后才能编辑' : undefined}
+            onClick={editDisabledReason ? undefined : onEdit}
+            style={editDisabledReason ? { color: 'var(--ink-6)', cursor: 'not-allowed' } : undefined}
+            title={editDisabledReason ?? undefined}
           >
             编辑
           </a>
@@ -223,6 +223,16 @@ export function KnowledgePointDetailPage() {
   const isDeleted = kp.status === 'deleted';
   const sorted = sortLiveGroupsByPriority(groups, filters, dimensions);
   const uniqueTop = hasUniqueTopMatch(sorted, hasFilter);
+  // A deleted KP is read-only everywhere except delete/restore — the
+  // header already hides "写一条答案"/"编辑标题"/"删除" for this state
+  // (backend rejects them too), but each row's own "编辑" link was still
+  // wired up and would 400 against edit_answer's own guard. Kimi 终审
+  // finding on PR #24.
+  const editDisabledReason = isDeleted
+    ? '该知识点已删除，不能编辑答案'
+    : !dimensionsReady
+      ? '维度加载完成后才能编辑'
+      : null;
 
   return (
     <AppShell title="知识点详情" crumb={`${kb.name} / 知识点列表 / 详情`}>
@@ -336,7 +346,7 @@ export function KnowledgePointDetailPage() {
                   group={g}
                   dimensions={dimensions}
                   isTop={uniqueTop && i === 0}
-                  editDisabled={!dimensionsReady}
+                  editDisabledReason={editDisabledReason}
                   onEdit={() =>
                     setWriteTarget({
                       answerId: g.live_answer!.id,

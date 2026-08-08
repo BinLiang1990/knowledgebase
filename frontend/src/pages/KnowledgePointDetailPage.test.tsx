@@ -103,6 +103,20 @@ describe('KnowledgePointDetailPage', () => {
     expect(screen.queryByText('删 除')).not.toBeInTheDocument();
   });
 
+  it('disables the per-answer "编辑" link for a soft-deleted knowledge point (Kimi fix on PR #24)', async () => {
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:id`, () =>
+        HttpResponse.json(envelope(makeKpDetail({ status: 'deleted', deleted_at: '2026-08-01T00:00:00', delete_reason: 'obsolete' }))),
+      ),
+    );
+    renderPage();
+    await screen.findByText(/该知识点已被/);
+    const editLink = await screen.findByText('编辑');
+    expect(editLink).toHaveAttribute('title', expect.stringContaining('已删除'));
+    await userEvent.click(editLink);
+    expect(screen.queryByRole('heading', { name: '编辑答案' })).not.toBeInTheDocument();
+  });
+
   it('edits the title and refreshes the header in place', async () => {
     let title = 'kp-1';
     server.use(
