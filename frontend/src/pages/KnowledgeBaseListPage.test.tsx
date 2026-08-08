@@ -118,6 +118,45 @@ describe('KnowledgeBaseListPage', () => {
     expect(within(dialog).queryByText(/停用后知识库列表不再显示/)).not.toBeInTheDocument();
   });
 
+  it('caps the name and description inputs at the backend column limits', async () => {
+    renderWithProviders(<KnowledgeBaseListPage />);
+    await screen.findByText('kb-1');
+
+    await userEvent.click(screen.getByText('+ 新增知识库'));
+    const dialog = (await screen.findByText('新增知识库')).closest('.modal') as HTMLElement;
+    expect(within(dialog).getByPlaceholderText('例如：产品知识库')).toHaveAttribute('maxlength', '255');
+    expect(within(dialog).getByPlaceholderText('这个知识库用来存放什么类型的知识点')).toHaveAttribute(
+      'maxlength',
+      '2000',
+    );
+  });
+
+  it('clamps the current page after a mutation shrinks the filtered result set', async () => {
+    const kbs = Array.from({ length: 9 }, (_, i) => makeKb({ id: i + 1, name: `kb-${i + 1}` }));
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope(kbs))));
+    renderWithProviders(<KnowledgeBaseListPage />);
+    await screen.findByText('kb-1');
+
+    // 9 items, page size 8 -> page 2 has exactly one item: kb-9.
+    await userEvent.click(screen.getByRole('button', { name: '2' }));
+    await screen.findByText('kb-9');
+
+    // Deactivating kb-9 removes it from the (still-mounted) page-2 view via
+    // the list refetch, which would otherwise leave `page=2` pointing past
+    // the new last page (now 1) — Codex outer-gate finding on PR #22.
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope(kbs.slice(0, 8)))));
+    await userEvent.click(screen.getByText('停用'));
+    const dialog = (await screen.findByText('停用知识库')).closest('.modal') as HTMLElement;
+    await userEvent.click(within(dialog).getByText('确 定'));
+
+    // The "第 x/y 页" text is split across sibling <b> elements, so match on
+    // the pager's combined textContent rather than a single text node.
+    await waitFor(() => {
+      const pager = document.querySelector('.pager') as HTMLElement;
+      expect(pager.textContent).toContain('第 1/1 页');
+    });
+  });
+
   it('confirming deactivate calls the deactivate endpoint and refreshes', async () => {
     let calledDeactivate = false;
     server.use(

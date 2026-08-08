@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   useCreateKnowledgeBase,
   useKnowledgeBases,
@@ -35,6 +35,15 @@ export function KnowledgeBaseListPage() {
     );
   }, [knowledgeBases, keyword]);
 
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // A mutation (edit/toggle) can shrink `filtered` out from under the page
+  // the user is currently viewing — e.g. deactivating the only match on
+  // page 2 of a search leaves page 2 empty while `page` is still 2, so the
+  // pager would show an invalid "第 2/1 页". Clamp back into range instead
+  // of leaving that stale. Found by the Codex outer-gate review on PR #22.
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function applyFilter() {
@@ -235,6 +244,13 @@ function KnowledgeBaseFormModal({
           type="text"
           placeholder="例如：产品知识库"
           value={name}
+          // Mirrors the backend's own KnowledgeBaseCreate/Update constraint
+          // (schemas/knowledge_base.py: max_length=255) — design doc §4.5
+          // says client-side limits should make a real 422 round-trip rare,
+          // since the backend's 422 message is a fixed generic string with
+          // no per-field detail. Found by the Codex outer-gate review on
+          // PR #22 (this was designed but not actually wired up).
+          maxLength={255}
           onChange={(e) => setName(e.target.value)}
         />
       </div>
@@ -244,6 +260,7 @@ function KnowledgeBaseFormModal({
           rows={2}
           placeholder="这个知识库用来存放什么类型的知识点"
           value={description}
+          maxLength={2000}
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
