@@ -36,4 +36,41 @@ describe('apiClient', () => {
     await apiClient.post('/probe', { name: 'x' });
     expect(receivedBody).toEqual({ name: 'x' });
   });
+
+  it('does not set Content-Type on a bodyless GET (avoids an unnecessary CORS preflight)', async () => {
+    let receivedContentType: string | null = null;
+    server.use(
+      http.get(`${API_BASE}/probe`, ({ request }) => {
+        receivedContentType = request.headers.get('content-type');
+        return HttpResponse.json(envelope({ ok: true }));
+      }),
+    );
+    await apiClient.get('/probe');
+    expect(receivedContentType).toBeNull();
+  });
+
+  it('sets Content-Type when a body is present', async () => {
+    let receivedContentType: string | null = null;
+    server.use(
+      http.post(`${API_BASE}/probe`, ({ request }) => {
+        receivedContentType = request.headers.get('content-type');
+        return HttpResponse.json(envelope({ ok: true }));
+      }),
+    );
+    await apiClient.post('/probe', { name: 'x' });
+    expect(receivedContentType).toContain('application/json');
+  });
+
+  it('aborts the underlying fetch when the caller aborts', async () => {
+    server.use(
+      http.get(`${API_BASE}/probe`, async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return HttpResponse.json(envelope({ ok: true }));
+      }),
+    );
+    const controller = new AbortController();
+    const promise = apiClient.get('/probe', { signal: controller.signal });
+    controller.abort();
+    await expect(promise).rejects.toThrow(ApiError);
+  });
 });

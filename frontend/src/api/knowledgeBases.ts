@@ -24,12 +24,18 @@ const KNOWLEDGE_BASES_KEY = ['knowledge-bases'] as const;
 // ones) and do search/paging in memory (design doc §5): the volume here
 // doesn't warrant a server-side filter, and demo parity calls for the same
 // client-side approach frontend-mock/kb-list.html already uses.
-function listKnowledgeBases() {
-  return apiClient.get<KnowledgeBase[]>('/knowledge-bases');
+function listKnowledgeBases(signal?: AbortSignal) {
+  return apiClient.get<KnowledgeBase[]>('/knowledge-bases', { signal });
 }
 
 export function useKnowledgeBases() {
-  return useQuery({ queryKey: KNOWLEDGE_BASES_KEY, queryFn: listKnowledgeBases });
+  return useQuery({
+    queryKey: KNOWLEDGE_BASES_KEY,
+    // Forward TanStack Query's own AbortSignal so a cancelled/superseded
+    // query (unmount, refetch) actually aborts the in-flight fetch instead
+    // of leaking it. Found by the Kimi review gate on PR #22.
+    queryFn: ({ signal }) => listKnowledgeBases(signal),
+  });
 }
 
 export function useCreateKnowledgeBase() {

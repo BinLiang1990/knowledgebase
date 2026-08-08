@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 type ToastType = 'ok' | 'err' | 'info';
 
@@ -22,11 +22,26 @@ const AUTO_DISMISS_MS = 2600;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextId = useRef(0);
+  // Tracked so unmount can clear any still-pending auto-dismiss timers
+  // instead of leaking them. Found by the Kimi review gate on PR #22.
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+
+  useEffect(
+    () => () => {
+      timers.current.forEach(clearTimeout);
+      timers.current.clear();
+    },
+    [],
+  );
 
   const push = useCallback((type: ToastType, message: string) => {
     const id = nextId.current++;
     setItems((prev) => [...prev, { id, type, message }]);
-    setTimeout(() => setItems((prev) => prev.filter((item) => item.id !== id)), AUTO_DISMISS_MS);
+    const timer = setTimeout(() => {
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      timers.current.delete(timer);
+    }, AUTO_DISMISS_MS);
+    timers.current.add(timer);
   }, []);
 
   const api: ToastApi = {
