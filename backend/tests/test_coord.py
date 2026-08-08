@@ -55,6 +55,47 @@ def test_normalize_number_rejects_unparseable_string() -> None:
         normalize_coord({"priority": "not-a-number"}, DIM_TYPES)
 
 
+def test_normalize_number_integer_valued_decimal_string_preserves_precision() -> None:
+    """Found by the Codex outer-gate review on PR #20: a plain float()
+    round-trip rounds "9007199254740993.0" down to 9007199254740992."""
+    out = normalize_coord({"priority": "9007199254740993.0"}, DIM_TYPES)
+    assert out["priority"] == 9007199254740993
+
+
+def test_normalize_number_rejects_magnitude_mysql_json_cannot_store_exactly() -> None:
+    """"1e309" parses exactly via Decimal (no Infinity involved) but is a
+    ~310-digit integer — verified empirically against the real instance that
+    MySQL's JSON type rejects a value this large outright. Found by the
+    Codex outer-gate review on PR #20 (originally reported as an Infinity
+    overflow; the real failure mode turned out to be MySQL's own JSON
+    numeric ceiling, not a Python float overflow)."""
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": "1e309"}, DIM_TYPES)
+
+
+def test_normalize_number_rejects_huge_int_without_crashing() -> None:
+    """A raw Python int far outside float range must be rejected cleanly —
+    math.isfinite() raises OverflowError on an int this large, so the
+    magnitude check must not route through it for the int branch."""
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": 10**400}, DIM_TYPES)
+
+
+def test_normalize_number_rejects_non_finite_float() -> None:
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": float("inf")}, DIM_TYPES)
+
+
+def test_normalize_number_accepts_uint64_max_boundary() -> None:
+    boundary = 2**64 - 1
+    assert normalize_coord({"priority": boundary}, DIM_TYPES) == {"priority": boundary}
+
+
+def test_normalize_number_rejects_just_above_uint64_max_boundary() -> None:
+    with pytest.raises(CoordValueError):
+        normalize_coord({"priority": 2**64}, DIM_TYPES)
+
+
 def test_normalize_date_canonicalizes_iso_format() -> None:
     assert normalize_coord({"valid_from": "2026-08-08"}, DIM_TYPES) == {"valid_from": "2026-08-08"}
 
