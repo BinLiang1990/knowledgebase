@@ -1,4 +1,6 @@
-from typing import Literal
+import json
+from datetime import date
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select, update
@@ -12,6 +14,7 @@ from ..envelope import BusinessError, envelope
 from ..models.answer import Answer
 from ..models.knowledge_base import KnowledgeBase
 from ..models.knowledge_point import KnowledgePoint
+from ..resolve import ResolveResult, compute_live_groups, resolve
 from ..schemas.knowledge_point import (
     AnswerCreate,
     AnswerEdit,
@@ -20,6 +23,7 @@ from ..schemas.knowledge_point import (
     KnowledgePointDeleteRequest,
     KnowledgePointOut,
     KnowledgePointUpdate,
+    ResolvedOut,
 )
 
 router = APIRouter(prefix="/knowledge-bases/{kb_id}/knowledge-points", tags=["knowledge-point"])
@@ -111,6 +115,33 @@ def _to_answer_out(answer: Answer) -> AnswerOut:
     return AnswerOut.model_validate(answer)
 
 
+def _to_resolved_out(result: ResolveResult) -> ResolvedOut:
+    return ResolvedOut(status=result.status, answer=_to_answer_out(result.answer) if result.answer else None)
+
+
+def _parse_query_coord(db: Session, kb_id: int, coord_param: str | None) -> dict[str, Any]:
+    """Query conditions go through the exact same normalize_coord() +
+    enabled-dimension check as write-path coord (docs/PRD.md §4.2: 精确相等
+    匹配 applies identically to both). `coord_param` is a JSON object encoded
+    as a query string, e.g. ?coord={"tenant":"acme"} — a GET request has no
+    body, and the key set varies per KB, so a flat list of query params
+    can't represent it."""
+    if coord_param is None:
+        return {}
+    try:
+        parsed = json.loads(coord_param)
+    except json.JSONDecodeError as exc:
+        raise BusinessError("coord 参数不是合法的 JSON", status_code=422) from exc
+    if not isinstance(parsed, dict):
+        raise BusinessError("coord 参数必须是一个 JSON 对象", status_code=422)
+
+    dimension_types = get_enabled_dimension_types(db, kb_id)
+    try:
+        return normalize_coord(parsed, dimension_types)
+    except CoordValueError as exc:
+        raise BusinessError(str(exc), status_code=400) from exc
+
+
 @router.post("")
 def create_knowledge_point(
     kb_id: int, payload: KnowledgePointCreate, db: Session = Depends(get_db)
@@ -153,9 +184,17 @@ def create_knowledge_point(
 def list_knowledge_points(
     kb_id: int,
     status: Literal["active", "deleted"] = Query(default="active"),
+    # max_length=255 matches knowledge_point.title's own VARCHAR(255) — an
+    # unbounded keyword fed straight into a SQL LIKE is a trivial CPU/memory
+    # DoS vector. Found by the Kimi review gate on PR #21.
+    keyword: str | None = Query(default=None, max_length=255),
+    at: date | None = Query(default=None),
+    coord: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
     _get_kb_or_404(db, kb_id)
+    at = at or date.today()
+    query_coord = _parse_query_coord(db, kb_id, coord)
 
     count_by_kp = dict(
         db.execute(
@@ -165,17 +204,68 @@ def list_knowledge_points(
         ).all()
     )
 
-    rows = (
-        db.execute(
-            select(KnowledgePoint)
-            .where(KnowledgePoint.knowledge_base_id == kb_id, KnowledgePoint.status == status)
-            .order_by(KnowledgePoint.id)
-        )
-        .scalars()
-        .all()
+    stmt = select(KnowledgePoint).where(
+        KnowledgePoint.knowledge_base_id == kb_id, KnowledgePoint.status == status
     )
-    out = [_to_kp_out(kp, count_by_kp.get(kp.id, 0)) for kp in rows]
-    return envelope([o.model_dump(mode="json") for o in out])
+    # Guard on the STRIPPED value, not the raw one: a whitespace-only
+    # keyword (e.g. "   ") is truthy but strips to "", and contains("")
+    # matches every title — silently disabling filtering instead of either
+    # filtering or erroring. Found by the Kimi review gate on PR #21.
+    stripped_keyword = keyword.strip() if keyword else ""
+    if stripped_keyword:
+        # Case-insensitive substring match, mirroring frontend-mock's
+        # kp.title.toLowerCase().includes(S.kw) — done in the query rather
+        # than in Python so it's not fetching rows we'll immediately drop.
+        # autoescape=True: without it, a literal "%" or "_" in the keyword
+        # is interpreted as a SQL LIKE wildcard instead of a literal
+        # character, diverging from JS .includes()'s literal-substring
+        # semantics. Found by the Codex outer-gate review on PR #21.
+        stmt = stmt.where(func.lower(KnowledgePoint.title).contains(stripped_keyword.lower(), autoescape=True))
+    rows = db.execute(stmt.order_by(KnowledgePoint.id)).scalars().all()
+
+    out = []
+    for kp in rows:
+        groups = compute_live_groups(db, kb_id, kp.id, at)
+        resolved = resolve(groups, query_coord)
+        # Only a non-empty query condition excludes non-matching knowledge
+        # points from the list; with no condition, every keyword-matching KP
+        # is shown regardless of its resolved status (docs/specs/
+        # 2026-08-08-resolve-engine-design.md §4.2, mirroring
+        # frontend-mock's visibleKps(): hasQ gates this, not resolved.status
+        # on its own).
+        if query_coord and resolved.status == "none":
+            continue
+        kp_out = _to_kp_out(kp, count_by_kp.get(kp.id, 0)).model_dump(mode="json")
+        kp_out["resolved"] = _to_resolved_out(resolved).model_dump(mode="json")
+        out.append(kp_out)
+    return envelope(out)
+
+
+@router.get("/{kp_id}/resolve")
+def resolve_knowledge_point(
+    kb_id: int,
+    kp_id: int,
+    at: date | None = Query(default=None),
+    coord: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    kp = _get_kp_or_404(db, kb_id, kp_id)
+    at = at or date.today()
+    query_coord = _parse_query_coord(db, kb_id, coord)
+
+    if kp.status == "deleted":
+        # PRD §4.4: a soft-deleted knowledge point must not appear in query
+        # results (its retained answers are for the recycle-bin/restore
+        # flow only, not for this externally-facing resolve endpoint).
+        # Behaves like "no answers exist" rather than 404 — this endpoint's
+        # own contract is "always 200 + a status field" for any KP that
+        # does genuinely exist. Found by the Codex outer-gate review on
+        # PR #21.
+        return envelope(_to_resolved_out(ResolveResult(status="none", answer=None)).model_dump(mode="json"))
+
+    groups = compute_live_groups(db, kb_id, kp_id, at)
+    result = resolve(groups, query_coord)
+    return envelope(_to_resolved_out(result).model_dump(mode="json"))
 
 
 @router.get("/{kp_id}")
