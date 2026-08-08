@@ -35,6 +35,16 @@ class ResolveResult:
     answer: Answer | None
 
 
+@dataclass(frozen=True)
+class AnswerGroupSummary:
+    coord: dict[str, Any]
+    coord_hash: str
+    revoked: bool
+    version_count: int
+    latest_answer: Answer
+    live_answer: Answer | None
+
+
 def _dimension_weights(db: Session, keys: set[str]) -> dict[str, int]:
     if not keys:
         return {}
@@ -92,6 +102,57 @@ def compute_live_groups(db: Session, kb_id: int, kp_id: int, at: date) -> list[L
             )
         )
     return groups
+
+
+def compute_all_answer_groups(db: Session, kb_id: int, kp_id: int, at: date) -> list[AnswerGroupSummary]:
+    """For the read-only answer-group tree (issue #7 §2) — deliberately
+    separate from `compute_live_groups`, not a wrapper around it:
+    `compute_live_groups` filters `revoked.is_(False)` at the SQL level, so
+    a whole-chain-revoked coord group (e.g. from edit_answer's migration
+    branch) never appears in its output at all. The tree view must show
+    revoked chains too (struck through), per PRD §4.4's "全部答案的分组树"
+    and frontend-mock's kpAnswerTree — so this queries every answer for the
+    knowledge point, revoked or not, effective yet or not."""
+    rows = (
+        db.execute(
+            select(Answer).where(
+                Answer.knowledge_base_id == kb_id,
+                Answer.knowledge_point_id == kp_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    by_hash: dict[str, list[Answer]] = {}
+    for row in rows:
+        by_hash.setdefault(row.coord_hash, []).append(row)
+
+    summaries = []
+    for coord_hash, versions in by_hash.items():
+        latest = max(versions, key=lambda a: (a.effective_time, a.created_at, a.id))
+        # Revocation is a whole-chain property (PRD §6 rule #4) — every row
+        # sharing a coord_hash carries the same `revoked` value, so the
+        # latest version's flag speaks for the whole chain.
+        live = next(
+            (
+                v
+                for v in sorted(versions, key=lambda a: (a.effective_time, a.created_at, a.id), reverse=True)
+                if not v.revoked and v.effective_time <= at
+            ),
+            None,
+        )
+        summaries.append(
+            AnswerGroupSummary(
+                coord=latest.coord,
+                coord_hash=coord_hash,
+                revoked=latest.revoked,
+                version_count=len(versions),
+                latest_answer=latest,
+                live_answer=live,
+            )
+        )
+    return sorted(summaries, key=lambda s: s.coord_hash)
 
 
 def _coord_compatible(group_coord: dict[str, Any], query_coord: dict[str, Any]) -> bool:

@@ -14,10 +14,11 @@ from ..envelope import BusinessError, envelope
 from ..models.answer import Answer
 from ..models.knowledge_base import KnowledgeBase
 from ..models.knowledge_point import KnowledgePoint
-from ..resolve import ResolveResult, compute_live_groups, resolve
+from ..resolve import ResolveResult, compute_all_answer_groups, compute_live_groups, resolve
 from ..schemas.knowledge_point import (
     AnswerCreate,
     AnswerEdit,
+    AnswerGroupOut,
     AnswerOut,
     KnowledgePointCreate,
     KnowledgePointDeleteRequest,
@@ -266,6 +267,40 @@ def resolve_knowledge_point(
     groups = compute_live_groups(db, kb_id, kp_id, at)
     result = resolve(groups, query_coord)
     return envelope(_to_resolved_out(result).model_dump(mode="json"))
+
+
+@router.get("/{kp_id}/answer-groups")
+def list_answer_groups(
+    kb_id: int,
+    kp_id: int,
+    at: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Read-only, all-conditions view for the expandable answer tree
+    (issue #7) — every coord group this knowledge point has ever had, not
+    just the single best-matching one `resolve` returns. Deliberately uses
+    compute_all_answer_groups(), not compute_live_groups(): the latter
+    drops whole-chain-revoked groups outright, but the tree must still show
+    them (struck through) per PRD §4.4's "全部答案的分组树"."""
+    kp = _get_kp_or_404(db, kb_id, kp_id)
+    at = at or date.today()
+
+    if kp.status == "deleted":
+        # Same "not in query results" rule as the resolve endpoint above.
+        return envelope([])
+
+    groups = compute_all_answer_groups(db, kb_id, kp_id, at)
+    out = [
+        AnswerGroupOut(
+            coord=g.coord,
+            revoked=g.revoked,
+            version_count=g.version_count,
+            latest_answer=_to_answer_out(g.latest_answer),
+            live_answer=_to_answer_out(g.live_answer) if g.live_answer else None,
+        ).model_dump(mode="json")
+        for g in groups
+    ]
+    return envelope(out)
 
 
 @router.get("/{kp_id}")
