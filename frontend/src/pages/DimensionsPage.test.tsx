@@ -94,6 +94,39 @@ describe('DimensionsPage', () => {
     expect(await screen.findByText(/已新增维度/)).toBeInTheDocument();
   });
 
+  it('clamps a typed weight of 0 to 1, not 50 (Kimi 终审 fix on PR #29)', async () => {
+    let receivedBody: unknown;
+    server.use(
+      http.post(`${API_BASE}/dimensions`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(envelope(makeAdminDimension({ key: '部门', label: '部门' })));
+      }),
+    );
+    renderPage();
+    await screen.findByText('租户');
+
+    await userEvent.click(screen.getByText('+ 新增维度'));
+    const dialog = (await screen.findByText('新增维度')).closest('.modal') as HTMLElement;
+    await userEvent.type(within(dialog).getByPlaceholderText('例如：部门 / 标签 / 复核周期'), '部门');
+    const weightInput = within(dialog).getByDisplayValue('50');
+    await userEvent.clear(weightInput);
+    await userEvent.type(weightInput, '0');
+    await userEvent.click(within(dialog).getByText('确 定'));
+
+    await screen.findByText(/已新增维度/);
+    expect(receivedBody).toMatchObject({ weight: 1 });
+  });
+
+  it('allows a name up to 255 characters when editing, unlike the 100-character create limit', async () => {
+    renderPage();
+    await screen.findByText('租户');
+
+    await userEvent.click(screen.getByText('编辑'));
+    const dialog = (await screen.findByText('编辑维度 · 租户')).closest('.modal') as HTMLElement;
+    const nameInput = within(dialog).getByDisplayValue('租户') as HTMLInputElement;
+    expect(nameInput.maxLength).toBe(255);
+  });
+
   it('disables the field type select when editing, but still shows the current value', async () => {
     renderPage();
     await screen.findByText('租户');

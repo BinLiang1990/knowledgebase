@@ -173,7 +173,14 @@ function DimensionFormModal({
     // omitted default_value key means something different from an
     // explicit null to the backend.
     const submittedDefaultValue = trimmedDefaultValue === '' ? null : trimmedDefaultValue;
-    const clampedWeight = Math.min(100, Math.max(1, parseInt(weight, 10) || 50));
+    // `parseInt(weight, 10) || 50` (ported from demo's own submitDim(),
+    // which has the identical bug) treats a genuinely-typed "0" the same
+    // as empty/non-numeric input, because 0 is falsy in JS — it silently
+    // jumps to 50 instead of clamping to 1. Parse once, fall back to 50
+    // only for a real NaN (empty/non-numeric), then clamp. Kimi 终审
+    // finding on PR #29.
+    const parsedWeight = parseInt(weight, 10);
+    const clampedWeight = Math.min(100, Math.max(1, Number.isNaN(parsedWeight) ? 50 : parsedWeight));
 
     const mutation = isEdit
       ? updateMutation.mutateAsync({
@@ -221,7 +228,17 @@ function DimensionFormModal({
         <label>
           <span className="req">*</span>维度名称
         </label>
-        <input type="text" placeholder="例如：部门 / 标签 / 复核周期" value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)} />
+        <input
+          type="text"
+          placeholder="例如：部门 / 标签 / 复核周期"
+          value={label}
+          // 100 on create (design doc §4.1 — this value also becomes `key`,
+          // a String(100) column); 255 on edit, matching DimensionUpdate.
+          // label's own max_length — key doesn't change on edit, so it's
+          // not the constraint here anymore. Kimi 终审 finding on PR #29.
+          maxLength={isEdit ? 255 : 100}
+          onChange={(e) => setLabel(e.target.value)}
+        />
         <div className="hint">
           {isEdit
             ? `key「${target.key}」创建后不可修改；字段类型「${FIELD_TYPE_LABEL[target.field_type]}」创建后不可修改。`
