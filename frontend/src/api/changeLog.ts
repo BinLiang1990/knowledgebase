@@ -1,6 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from './client';
-import { knowledgePointDataKeyPrefix } from './knowledgePoints';
+import { GLOBAL_CHANGE_LOG_KEY, knowledgePointDataKeyPrefix } from './knowledgePoints';
+
+// Re-exported for convenience — GLOBAL_CHANGE_LOG_KEY is actually defined
+// in knowledgePoints.ts (not here) to avoid a runtime circular import:
+// this module already imports knowledgePointDataKeyPrefix FROM
+// knowledgePoints.ts, so knowledgePoints.ts importing something back from
+// here would form a genuine cycle.
+export { GLOBAL_CHANGE_LOG_KEY };
 
 // Mirrors backend/src/kb_backend/schemas/change_log.py::ChangeLogEntryOut.
 export interface ChangeLogEntry {
@@ -46,8 +53,6 @@ export function useChangeLog(kbId: number, kpId: number, enabled: boolean) {
     enabled,
   });
 }
-
-export const GLOBAL_CHANGE_LOG_KEY = ['change-log'] as const;
 
 export function useGlobalChangeLog() {
   return useQuery({

@@ -1,8 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
-import { GLOBAL_CHANGE_LOG_KEY } from './changeLog';
 import type { Dimension } from './dimensions';
-import { invalidateKnowledgePointDataQueries } from './knowledgePoints';
+import { GLOBAL_CHANGE_LOG_KEY, invalidateKnowledgePointDataQueries } from './knowledgePoints';
 import type { AnswerGroup } from './knowledgePoints';
 import type { FilterValue, Filters } from '../components/ui/dimensionValue';
 
@@ -182,7 +181,7 @@ export function useCreateAnswer(kbId: number, kpId: number) {
   return useMutation({
     mutationFn: (input: CreateAnswerInput) =>
       apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers`, input),
-    onSuccess: () => invalidateKnowledgePointDataQueries(queryClient, kbId),
+    onSuccess: () => invalidateAfterAnswerMutation(queryClient, kbId),
   });
 }
 
@@ -205,7 +204,7 @@ export function useEditAnswer(kbId: number, kpId: number) {
   return useMutation({
     mutationFn: ({ answerId, ...body }: EditAnswerInput) =>
       apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers/${answerId}/edit`, body),
-    onSuccess: () => invalidateKnowledgePointDataQueries(queryClient, kbId),
+    onSuccess: () => invalidateAfterAnswerMutation(queryClient, kbId),
   });
 }
 
@@ -216,17 +215,21 @@ export function useRevokeAnswer(kbId: number, kpId: number) {
       apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers/${answerId}/revoke`, {
         revoke_reason: revokeReason,
       }),
-    onSuccess: () => {
-      // Covers answer-groups/all-answers/change-log for this KP — all three
-      // nest under the same prefix (design doc §4.5, issue #14).
-      invalidateKnowledgePointDataQueries(queryClient, kbId);
-      // The global log is an independent top-level key (not scoped under
-      // any single kbId, since it's cross-knowledge-base) — must be
-      // invalidated separately or a cached global log page keeps showing
-      // this answer's chain as still live. Design doc §4.5.
-      queryClient.invalidateQueries({ queryKey: GLOBAL_CHANGE_LOG_KEY });
-    },
+    onSuccess: () => invalidateAfterAnswerMutation(queryClient, kbId),
   });
+}
+
+// Any mutation that writes/edits/revokes an answer produces a new (or
+// changed) change-log entry, which the global /change-log page may already
+// have cached — Kimi 终审 finding on PR #30: only useRevokeAnswer was doing
+// this invalidation; create/edit were missed, leaving a cached global log
+// page showing stale entries after either. invalidateKnowledgePointDataQueries
+// covers answer-groups/all-answers/change-log for THIS kp (design doc §4.5)
+// — the global key is independent (not scoped under any kbId) and always
+// needs its own explicit invalidation regardless of which KP changed.
+function invalidateAfterAnswerMutation(queryClient: ReturnType<typeof useQueryClient>, kbId: number) {
+  invalidateKnowledgePointDataQueries(queryClient, kbId);
+  queryClient.invalidateQueries({ queryKey: GLOBAL_CHANGE_LOG_KEY });
 }
 
 // Moved here from KnowledgePointDetailPage.tsx (issue #14 design doc §5) —

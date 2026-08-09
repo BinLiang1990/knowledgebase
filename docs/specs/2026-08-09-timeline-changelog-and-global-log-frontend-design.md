@@ -147,12 +147,13 @@ export interface TimelineEntry {
   status: TimelineStatus;
 }
 
-// 按 coordGroupKey 分组，每组内部按 (effective_time, created_at, id) 降序
-// 排列（demo 的展示顺序：新的在上面），并计算每一行的标注。
+// 按 answer.coord_hash 分组（不是 coordGroupKey(a.coord)——见下方说明），每
+// 组内部按 (effective_time, created_at, id) 降序排列（demo 的展示顺序：新
+// 的在上面），并计算每一行的标注。
 export function buildTimelineGroups(answers: Answer[]): Map<string, TimelineEntry[]> {
   const byGroup = new Map<string, Answer[]>();
   for (const a of answers) {
-    const key = coordGroupKey(a.coord);
+    const key = a.coord_hash;
     (byGroup.get(key) ?? byGroup.set(key, []).get(key)!).push(a);
   }
   const result = new Map<string, TimelineEntry[]>();
@@ -179,6 +180,8 @@ function tagChain(chain: Answer[]): TimelineEntry[] {
 ```
 
 （`compareForCurrency`/`findCurrentId` 的排序键跟 `resolve.py::compute_live_groups` 完全一致：`effective_time` 主键、`created_at` 次键、`id` 兜底破平局；`findCurrentId` 只在未撤回、`effective_time <= atTime` 的候选里取最大。）
+
+**分组键用 `answer.coord_hash`，不是 `coordGroupKey(a.coord)`**——这是 Codex 外门审查在 PR #30 抓到的问题，本文档初版写的正是 `coordGroupKey`，已经据此修正。`coordGroupKey` 的 `key:value` 拼接、`|` 分隔编码对合法的文本取值不是无歧义的：`{a: "x|b:y"}` 和 `{a: "x", b: "y"}` 两个完全不同的条件组合，会被编码成同一个字符串 `"a:x|b:y"`，一旦发生这种碰撞，两条本来独立的版本链会被悄悄拼成一条，"当前版本"的计算和整条时间线的展示都会跟着错。`Answer.coord_hash` 是后端已经算好、返回的真实哈希（SHA-256，issue #4 的 `coord.py::compute_coord_hash`），直接复用它分组不需要在前端重新推导，也彻底避开这一整类编码碰撞问题。`coordGroupKey` 本身不用因此改掉——它在"当前答案" tab 里仍然只是一个 React 列表 key，用错了顶多是一次多余的重渲染，不是数据错误，跟这里"分组键直接决定数据怎么归并"的场景不是同一个风险等级，不需要一起处理。
 
 **显式函数契约：`buildTimelineGroups`/`tagChain`/`findCurrentId` 故意没有 `atTime` 参数，永远读 `today()`**——这是有意的设计，不是偷懒漏写。`resolve.py::compute_live_groups` 本身是显式带 `at: date` 参数的，实现时很容易"依葫芦画瓢"给这几个函数也加一个对称的 `atTime` 参数、再顺手接上"当前答案" tab 已有的 `qMode`/`qTime` 状态——这正是下一段要明确拒绝的那个决定，加了参数就等于偷偷做了。如果后续真的要支持"回看某天时哪个版本是当前版本"，需要显式修改这几个函数的签名、并在设计文档里重新论证，不能在实现阶段不声不响地加上。
 
@@ -230,6 +233,8 @@ type ChangeLogTableProps =
 - 全局的 `change-log`（同一条撤回记录，也会出现在全局日志里）
 
 前三者天然共享 `knowledgePointDataKeyPrefix(kbId) + kpId` 这同一个前缀（§3 里三个新 hook 的 `queryKey` 设计成这样，不是巧合），一次 `invalidateKnowledgePointDataQueries(queryClient, kbId)` 调用就全覆盖，跟 `useEditAnswer`/`useCreateAnswer` 现有的失效方式完全一致，不需要专门为撤回写一段新的失效逻辑。全局日志是独立的顶层 key（`['change-log']`，不带 `kbId` 前缀，因为它本来就是跨知识库的），必须单独一行 `invalidateQueries` ——这跟"知识库设置页"当时（issue #13）为维度全局变更单独处理跨 KB 缓存失效是同一类问题，不能因为它是"顺带"的就漏掉。
+
+**这条规则不是撤回独有的，`useCreateAnswer`/`useEditAnswer`/`useCreateKnowledgePoint`（带默认答案）/`useUpdateKnowledgePointTitle` 全部需要同样单独 invalidate 全局日志 key**——写答案、改答案会产生新的 change-log 记录；新建知识点时如果带了默认答案，同样会产生一条；重命名知识点会改变全局日志里这个知识点每一行的 `knowledge_point_title`。本设计初版只在 `useRevokeAnswer` 里加了这一行，被 Kimi 终审在 PR #30 指出遗漏了其余几个——已经统一改成一个共享的 `invalidateKnowledgePointDataAndGlobalLog`/`invalidateAfterAnswerMutation` 辅助函数，不是每个 mutation 各自记一遍"要不要顺带失效全局日志"。`useDeleteKnowledgePoint`（走 `invalidateAfterKpMutation`）严格来说不改变任何 change-log 已展示的字段，但既然它已经复用同一个辅助函数链路，一并失效并无额外成本，不需要为它单独排除。
 
 ## 5. 组件结构
 

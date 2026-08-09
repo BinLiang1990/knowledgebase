@@ -309,6 +309,30 @@ describe('KnowledgePointDetailPage', () => {
     expect(screen.getByText('已撤回')).toBeInTheDocument();
   });
 
+  it('lists timeline coord-group options in a stable, sorted order regardless of backend row order (Kimi 终审 fix on PR #30)', async () => {
+    // Backend row order for an unfiltered SELECT isn't a guaranteed
+    // contract — deliberately return the groups in the OPPOSITE order
+    // from what a sorted-by-label render should produce, so this test
+    // would fail if the page just used Map insertion order verbatim.
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers`, () =>
+        HttpResponse.json(
+          envelope([
+            makeAnswer({ id: 1, coord: { tenant: 'zzz' }, coord_hash: 'hash-z', effective_time: '2000-01-01' }),
+            makeAnswer({ id: 2, coord: { tenant: 'aaa' }, coord_hash: 'hash-a', effective_time: '2000-01-01' }),
+          ]),
+        ),
+      ),
+    );
+    renderPage();
+    await screen.findByText('kp-1');
+    await userEvent.click(screen.getByText('版本历史'));
+
+    const options = await screen.findAllByRole('option');
+    const labels = options.map((o) => o.textContent);
+    expect(labels).toEqual([...labels].sort((a, b) => (a ?? '').localeCompare(b ?? '')));
+  });
+
   it('can revoke a revocable answer from the change-log tab', async () => {
     server.use(
       http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/change-log`, () =>

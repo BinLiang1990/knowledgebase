@@ -76,7 +76,17 @@ function TimelineTab({
   }
 
   const groups = buildTimelineGroups(answers);
-  const keys = [...groups.keys()];
+  // Sorted by label, not left in Map insertion order — insertion order
+  // follows whatever order the backend's unfiltered SELECT happened to
+  // return rows in, which is not guaranteed stable across requests. An
+  // unstable selector order (and an unstable default-selected group,
+  // since keys[0] would then vary too) is a confusing UX even though it's
+  // not a data-correctness bug. Kimi 终审 finding on PR #30.
+  const keys = [...groups.keys()].sort((a, b) =>
+    describeCoord(groups.get(a)![0].answer.coord, dimensions).localeCompare(
+      describeCoord(groups.get(b)![0].answer.coord, dimensions),
+    ),
+  );
   const activeKey = selectedGroup && keys.includes(selectedGroup) ? selectedGroup : keys[0];
   const entries = groups.get(activeKey) ?? [];
 
