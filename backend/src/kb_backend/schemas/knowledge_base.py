@@ -43,3 +43,10 @@ class KnowledgeBaseOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class KnowledgeBaseStatsOut(BaseModel):
+    subject_count: int
+    active_answer_count: int
+    enabled_dimension_count: int
+    today_change_count: int
