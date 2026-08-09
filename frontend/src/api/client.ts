@@ -68,4 +68,6 @@ export const apiClient = {
     request<T>(path, { ...options, method: 'POST', body }),
   patch: <T>(path: string, body: unknown, options?: { signal?: AbortSignal }) =>
     request<T>(path, { ...options, method: 'PATCH', body }),
+  put: <T>(path: string, body: unknown, options?: { signal?: AbortSignal }) =>
+    request<T>(path, { ...options, method: 'PUT', body }),
 };

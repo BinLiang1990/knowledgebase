@@ -61,6 +61,21 @@ describe('apiClient', () => {
     expect(receivedContentType).toContain('application/json');
   });
 
+  it('put sends a JSON body via the PUT method', async () => {
+    let receivedBody: unknown;
+    let receivedMethod = '';
+    server.use(
+      http.put(`${API_BASE}/probe`, async ({ request }) => {
+        receivedMethod = request.method;
+        receivedBody = await request.json();
+        return HttpResponse.json(envelope({ ok: true }));
+      }),
+    );
+    await apiClient.put('/probe', { dimension_keys: ['tenant'] });
+    expect(receivedMethod).toBe('PUT');
+    expect(receivedBody).toEqual({ dimension_keys: ['tenant'] });
+  });
+
   it('aborts the underlying fetch when the caller aborts', async () => {
     server.use(
       http.get(`${API_BASE}/probe`, async () => {

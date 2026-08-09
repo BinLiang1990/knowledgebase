@@ -1,7 +1,7 @@
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import type { KnowledgeBase } from '../api/knowledgeBases';
-import type { Dimension } from '../api/dimensions';
+import type { AdminDimension, Dimension } from '../api/dimensions';
 import type { Answer } from '../api/answers';
 import type { AnswerGroup, KnowledgePoint, KnowledgePointDetail, Resolved } from '../api/knowledgePoints';
 
@@ -29,6 +29,10 @@ export function makeKb(overrides: Partial<KnowledgeBase> = {}): KnowledgeBase {
 
 export function makeDimension(overrides: Partial<Dimension> = {}): Dimension {
   return { key: 'tenant', label: '租户', field_type: 'text', weight: 50, ...overrides };
+}
+
+export function makeAdminDimension(overrides: Partial<AdminDimension> = {}): AdminDimension {
+  return { ...makeDimension(), default_value: null, status: 'active', answer_count: 0, ...overrides };
 }
 
 export function makeAnswer(overrides: Partial<Answer> = {}): Answer {
@@ -99,6 +103,18 @@ export const handlers = [
     HttpResponse.json(envelope(makeKb({ status: 'deprecated' }))),
   ),
   http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () => HttpResponse.json(envelope([makeDimension()]))),
+  http.put(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () => HttpResponse.json(envelope([makeDimension()]))),
+  http.get(`${API_BASE}/admin/dimensions`, () => HttpResponse.json(envelope([makeAdminDimension()]))),
+  http.post(`${API_BASE}/dimensions`, () =>
+    HttpResponse.json(envelope(makeAdminDimension({ key: 'new-dim', label: 'new-dim' }))),
+  ),
+  http.patch(`${API_BASE}/dimensions/:key`, () => HttpResponse.json(envelope(makeAdminDimension()))),
+  http.post(`${API_BASE}/dimensions/:key/activate`, () =>
+    HttpResponse.json(envelope(makeAdminDimension({ status: 'active' }))),
+  ),
+  http.post(`${API_BASE}/dimensions/:key/deactivate`, () =>
+    HttpResponse.json(envelope(makeAdminDimension({ status: 'deprecated' }))),
+  ),
   http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points`, () => HttpResponse.json(envelope([makeKp()]))),
   http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points`, () =>
     HttpResponse.json(envelope(makeKp({ id: 2, title: 'new-kp' }))),
