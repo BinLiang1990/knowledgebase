@@ -12,6 +12,7 @@ issue #13 明确要求（P1，参考 `frontend-mock/dimensions.html`、`frontend
 不做（issue 未提及，也不在这两个页面的职责范围内）：
 - demo `kb-tabs` 里的"回收站"标签——核实后，这个页面在本项目里从未被实现，backlog（issue #1–#16）里也没有任何一条追踪它，是 PRD 落地过程中的一个既有缺口，不是本 issue 的责任；本设计新增的知识库内 tab 组件只放"知识点列表"/"知识库设置"两个真实存在的标签，不放一个会 404 的"回收站"标签（跟 `Sidebar.tsx` 现有注释"只渲染真的存在的页面"这条既定原则一致）。
 - `KnowledgePointListPage` 里"在用答案"/"今日变更"两个统计卡目前显示"—"和"统计接口开发中"——issue #12 的后端统计接口已经上线，接入这两个卡片是一个真实存在的后续工作，但没有被本 issue 或任何其它已知 issue 认领，属于超出本 issue 范围的事，本设计不顺手做掉，只在这里记录、留给后续排期。
+- 维度的"默认取值提示"（`default_value`）在本设计里可以被管理员配置，但从来没有任何地方真正读它去预填答案条件的输入框——核实后，这不是本 issue 引入的回归：`frontend-mock`（`app.js` 的 `condRowsHtml`，选中维度时显式把 `value` 置成 `''`，不读 `def.default_value`）自己就从未把这个值接到答案条件编辑器里，issue #7/#8 移植出的 `CoordEditor`/`WriteAnswerModal` 也是同样的行为，且只读的 `Dimension`/`useEnabledDimensions`（issue #7 定义）本身就没有 `default_value` 这个字段——要接上，需要改这两个属于别的 issue 的组件和一个全应用共用的类型契约，超出本 issue"维度管理页+知识库设置页"这两个页面的范围。Codex 外门审查在 PR #29 第三轮指出了这一点；记录在此，不在本 issue 里顺手解决。
 
 ## 2. 页面与路由设计
 

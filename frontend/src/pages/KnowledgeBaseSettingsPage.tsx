@@ -30,14 +30,33 @@ export function KnowledgeBaseSettingsPage() {
   const [error, setError] = useState('');
   const toast = useToast();
 
-  // Seed local checkbox state from the currently-enabled set exactly once,
-  // when it first arrives — a later background refetch (e.g. right after
-  // this page's own save invalidates the query) must not clobber whatever
-  // the user has since clicked. Mirrors the "form state initialized from
-  // server data, then locally owned" pattern other forms in this codebase
-  // get for free by only mounting after their data is already loaded (they
-  // live inside a Modal opened with an already-fetched target); this page
-  // has no such modal to defer behind, so the seeding has to be explicit.
+  // React Router does not unmount/remount this component just because the
+  // :kbId route param changed to a different value (it's still the same
+  // matched route) — component-local state like checkedKeys would
+  // otherwise keep whatever the PREVIOUS knowledge base's checklist looked
+  // like, and the seeding effect below (guarded by `checkedKeys === null`)
+  // would never re-seed for the new kbId, letting the user view/submit one
+  // knowledge base's enabled set while looking at (and saving to) a
+  // different one. Not reachable via any link this app currently renders
+  // (every path to a different kbId's settings page currently goes through
+  // the knowledge-point list route first, which does unmount this
+  // component) but cheap to guard against regardless of whether a future
+  // navigation path makes it reachable. Codex outer-gate finding on PR #29
+  // (third round).
+  useEffect(() => {
+    setCheckedKeys(null);
+    setError('');
+  }, [kbId]);
+
+  // Seed local checkbox state from the currently-enabled set exactly once
+  // per kbId, when it first arrives — a later background refetch (e.g.
+  // right after this page's own save invalidates the query) must not
+  // clobber whatever the user has since clicked. Mirrors the "form state
+  // initialized from server data, then locally owned" pattern other forms
+  // in this codebase get for free by only mounting after their data is
+  // already loaded (they live inside a Modal opened with an already-
+  // fetched target); this page has no such modal to defer behind, so the
+  // seeding has to be explicit.
   useEffect(() => {
     if (checkedKeys === null && enabledDimensionsQuery.data) {
       setCheckedKeys(new Set(enabledDimensionsQuery.data.map((d) => d.key)));

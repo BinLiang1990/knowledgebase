@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes, useNavigate } from 'react-router-dom';
 import { KnowledgeBaseSettingsPage } from './KnowledgeBaseSettingsPage';
 import { renderWithProviders } from '../test/renderWithProviders';
 import {
@@ -21,6 +21,31 @@ function renderPage(initialPath = '/knowledge-bases/1/settings') {
     <Routes>
       <Route path="/knowledge-bases/:kbId/settings" element={<KnowledgeBaseSettingsPage />} />
     </Routes>,
+    { initialEntries: [initialPath] },
+  );
+}
+
+// Simulates a client-side navigation between two knowledge bases' settings
+// pages that stays on the same matched route (only :kbId changes) — the
+// scenario React Router does NOT unmount/remount the page for, unlike
+// navigating away through a different route entirely.
+function NavigateTo({ path }: { path: string }) {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(path)}>
+      go
+    </button>
+  );
+}
+
+function renderPageWithNav(targetPath: string, initialPath = '/knowledge-bases/1/settings') {
+  return renderWithProviders(
+    <>
+      <NavigateTo path={targetPath} />
+      <Routes>
+        <Route path="/knowledge-bases/:kbId/settings" element={<KnowledgeBaseSettingsPage />} />
+      </Routes>
+    </>,
     { initialEntries: [initialPath] },
   );
 }
@@ -59,6 +84,31 @@ describe('KnowledgeBaseSettingsPage', () => {
     server.use(http.get(`${API_BASE}/admin/dimensions`, () => HttpResponse.json(envelope([]))));
     renderPage();
     expect(await screen.findByText(/还没有任何启用中的全局维度/)).toBeInTheDocument();
+  });
+
+  it('re-seeds the checklist for a different knowledge base after an in-place :kbId route change (Codex outer-gate fix on PR #29, round 3)', async () => {
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases`, () =>
+        HttpResponse.json(envelope([makeKb({ id: 1 }), makeKb({ id: 2, name: 'kb-2' })])),
+      ),
+      http.get(`${API_BASE}/admin/dimensions`, () =>
+        HttpResponse.json(envelope([makeAdminDimension({ key: 'tenant', label: '租户' })])),
+      ),
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, ({ params }) =>
+        HttpResponse.json(envelope(params.kbId === '1' ? [makeDimension({ key: 'tenant', label: '租户' })] : [])),
+      ),
+    );
+    renderPageWithNav('/knowledge-bases/2/settings');
+
+    await screen.findByText('租户');
+    expect(screen.getByRole('checkbox', { name: /租户/ })).toBeChecked();
+
+    await userEvent.click(screen.getByText('go'));
+
+    // Same dimension, now for kb 2 (which has nothing enabled) — must show
+    // unchecked, not still-checked state carried over from kb 1.
+    await screen.findByText('租户');
+    expect(screen.getByRole('checkbox', { name: /租户/ })).not.toBeChecked();
   });
 
   it('shows a retryable failure state, not a permanent spinner, when the enabled-dimensions fetch fails (Codex outer-gate fix on PR #29)', async () => {
