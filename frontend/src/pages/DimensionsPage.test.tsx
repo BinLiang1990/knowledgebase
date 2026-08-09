@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DimensionsPage } from './DimensionsPage';
+import { useEnabledDimensions } from '../api/dimensions';
 import { renderWithProviders } from '../test/renderWithProviders';
 import { API_BASE, HttpResponse, envelope, errorEnvelope, http, makeAdminDimension, server } from '../test/server';
 
 function renderPage() {
   return renderWithProviders(<DimensionsPage />);
+}
+
+// Mounted alongside DimensionsPage, sharing the same QueryClient (the
+// default behavior of renderWithProviders — every render call it's given
+// gets composed into one tree, one provider), to observe whether a
+// dimension mutation actually invalidates an already-cached
+// useEnabledDimensions query for some knowledge base, the way a real app
+// would have that query mounted on a different page entirely.
+function EnabledDimensionsProbe({ kbId }: { kbId: number }) {
+  const query = useEnabledDimensions(kbId);
+  return <div data-testid="probe">{query.data?.map((d) => d.label).join(',') ?? '(loading)'}</div>;
 }
 
 describe('DimensionsPage', () => {
@@ -230,6 +242,36 @@ describe('DimensionsPage', () => {
     await userEvent.click(within(dialog).getByText('确 定'));
     await screen.findByText(/已更新维度/);
     expect(receivedBody).toMatchObject({ default_value: null });
+  });
+
+  it('invalidates an already-cached enabled-dimensions query for another knowledge base after a dimension mutation (Codex outer-gate fix on PR #29, fifth round)', async () => {
+    let fetchCount = 0;
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () => {
+        fetchCount += 1;
+        return HttpResponse.json(envelope([makeAdminDimension()]));
+      }),
+    );
+    renderWithProviders(
+      <>
+        <DimensionsPage />
+        <EnabledDimensionsProbe kbId={1} />
+      </>,
+    );
+
+    await screen.findByText('租户');
+    await waitFor(() => expect(fetchCount).toBe(1));
+
+    await userEvent.click(screen.getByText('停用'));
+    const dialog = (await screen.findByText('停用维度')).closest('.modal') as HTMLElement;
+    await userEvent.click(within(dialog).getByText('确 定'));
+    await screen.findByText('已更新维度状态');
+
+    // The mutation must invalidate the enabled-dimensions query too, not
+    // just its own admin-dimensions list — a literal ['dimensions'] key
+    // (this test's regression target) is never queried under, so
+    // invalidating it is a no-op and fetchCount would stay at 1 forever.
+    await waitFor(() => expect(fetchCount).toBe(2));
   });
 
   it('surfaces a business error from the backend on create instead of a generic message', async () => {

@@ -105,7 +105,17 @@ export function useSetDimensionStatus() // POST /dimensions/{key}/activate|deact
 export function useSetEnabledDimensions(kbId: number) // PUT /knowledge-bases/{kbId}/enabled-dimensions, body: {dimension_keys: string[]}
 ```
 
-`useCreateDimension`/`useUpdateDimension`/`useSetDimensionStatus` 三者的 `onSuccess` 都要 `invalidateQueries` 两个 query key：`ADMIN_DIMENSIONS_KEY`（管理页自己的列表，三处 `invalidateQueries` 调用和 `useAdminDimensions` 自己的 `queryKey` 必须引用同一个具名常量，不写字面量字符串——镜像 `knowledgeBases.ts::KNOWLEDGE_BASES_KEY` 这个既有先例，避免四处手写同一个字符串数组、其中一处笔误就导致缓存失效静默失败，没有任何类型检查能捕获这种漂移。对抗式审查第 3 点）和 `['dimensions']`（issue #7 写答案/查询条件用的只读列表，因为这三个操作都可能改变"哪些维度是 active"这件事，影响其它页面已经缓存的下拉选项）。`useSetEnabledDimensions` 的 `onSuccess` 只需要 invalidate `['knowledge-bases', kbId, 'enabled-dimensions']`（`useEnabledDimensions` 已经在用的 key，issue #7 定的），不影响全局维度列表本身。
+`useCreateDimension`/`useUpdateDimension`/`useSetDimensionStatus` 三者的 `onSuccess` 都要 `invalidateQueries` `ADMIN_DIMENSIONS_KEY`（管理页自己的列表，三处 `invalidateQueries` 调用和 `useAdminDimensions` 自己的 `queryKey` 必须引用同一个具名常量，不写字面量字符串——镜像 `knowledgeBases.ts::KNOWLEDGE_BASES_KEY` 这个既有先例，避免四处手写同一个字符串数组、其中一处笔误就导致缓存失效静默失败，没有任何类型检查能捕获这种漂移。对抗式审查第 3 点）。
+
+**没有第二个固定 query key 可以 invalidate**（这一点本文档初版写错了，写成了 invalidate 一个字面量 `['dimensions']`——Codex 外门审查在 PR #29 第五轮指出，这个项目里**没有任何查询**用这个 key，是一次彻头彻尾的空操作，创建/更新/停用/启用维度之后，任何页面已经缓存的 `useEnabledDimensions` 结果全部悄悄地没被刷新）：`useEnabledDimensions` 是按知识库分别缓存的（`['knowledge-bases', kbId, 'enabled-dimensions']`），全局维度改名/停用/启用/改权重会影响**任意一个**启用过这个维度的知识库，不只是管理员当下正在看哪个知识库。正确做法是用 `invalidateQueries` 的 `predicate` 按 key 前缀批量匹配，把所有形如 `['knowledge-bases', <任意 kbId>, 'enabled-dimensions']` 的已缓存查询一次性标记为失效：
+
+```ts
+queryClient.invalidateQueries({
+  predicate: (query) => query.queryKey[0] === 'knowledge-bases' && query.queryKey[2] === 'enabled-dimensions',
+});
+```
+
+`useSetEnabledDimensions` 的 `onSuccess` 不用这个批量版本——它只需要 invalidate 自己这一个知识库的 `['knowledge-bases', kbId, 'enabled-dimensions']`（`useEnabledDimensions` 已经在用的 key，issue #7 定的），因为它改的就是这一个知识库自己的启用集合，不影响其它知识库。
 
 ## 4. 关键设计决策
 

@@ -54,7 +54,22 @@ export interface DimensionUpdateInput {
 }
 
 export const ADMIN_DIMENSIONS_KEY = ['admin-dimensions'] as const;
-const DIMENSIONS_KEY = ['dimensions'] as const;
+
+// No single, fixed query key to invalidate here — useEnabledDimensions is
+// cached per knowledge base, under ['knowledge-bases', kbId,
+// 'enabled-dimensions'], and a global dimension change (rename,
+// reactivate/deactivate, weight) can affect any knowledge base that has it
+// enabled, not just whichever one the admin happens to be looking at right
+// now. An earlier version of this invalidated a literal ['dimensions'] key
+// instead — nothing in this codebase ever queries under that key, so it
+// was a complete no-op, silently leaving every already-cached
+// enabled-dimensions list stale after a create/update/activate/deactivate.
+// Codex outer-gate finding on PR #29 (fifth round).
+function invalidateAllEnabledDimensionsQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({
+    predicate: (query) => query.queryKey[0] === 'knowledge-bases' && query.queryKey[2] === 'enabled-dimensions',
+  });
+}
 
 export function useAdminDimensions() {
   return useQuery({
@@ -69,7 +84,7 @@ export function useCreateDimension() {
     mutationFn: (input: DimensionCreateInput) => apiClient.post<AdminDimension>('/dimensions', input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADMIN_DIMENSIONS_KEY });
-      queryClient.invalidateQueries({ queryKey: DIMENSIONS_KEY });
+      invalidateAllEnabledDimensionsQueries(queryClient);
     },
   });
 }
@@ -87,7 +102,7 @@ export function useUpdateDimension() {
       apiClient.patch<AdminDimension>(`/dimensions/${encodeURIComponent(key)}`, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADMIN_DIMENSIONS_KEY });
-      queryClient.invalidateQueries({ queryKey: DIMENSIONS_KEY });
+      invalidateAllEnabledDimensionsQueries(queryClient);
     },
   });
 }
@@ -101,7 +116,7 @@ export function useSetDimensionStatus() {
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADMIN_DIMENSIONS_KEY });
-      queryClient.invalidateQueries({ queryKey: DIMENSIONS_KEY });
+      invalidateAllEnabledDimensionsQueries(queryClient);
     },
   });
 }
