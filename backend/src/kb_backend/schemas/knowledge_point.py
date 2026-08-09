@@ -27,6 +27,29 @@ class KnowledgePointCreate(BaseModel):
         return _stripped_non_empty(v, "标题")
 
 
+class KnowledgePointBatchImportRequest(BaseModel):
+    # max_length=500: bounds request processing time/transaction length for
+    # this endpoint's per-item SAVEPOINT loop — does not bound total request
+    # body size (content/note have no length cap per PRD §4.5, a known,
+    # accepted residual risk carried over unchanged from the single-item
+    # endpoint). Design doc §2 (issue #11).
+    items: list[KnowledgePointCreate] = Field(min_length=1, max_length=500)
+
+
+class BatchImportItemResult(BaseModel):
+    index: int
+    status: Literal["created", "failed"]
+    title: str
+    knowledge_point_id: int | None = None
+    reason: str | None = None
+
+
+class BatchImportResult(BaseModel):
+    created_count: int
+    failed_count: int
+    results: list[BatchImportItemResult]
+
+
 class KnowledgePointUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
 
