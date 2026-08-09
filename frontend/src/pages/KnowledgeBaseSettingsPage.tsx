@@ -94,6 +94,19 @@ export function KnowledgeBaseSettingsPage() {
     }
   }, [checkedKeys, enabledDimensionsQuery.data, enabledDimensionsQuery.isFetching]);
 
+  // Computed here (not just once further down, right before it's rendered)
+  // so `save()` below can filter against it too — a dimension can be
+  // globally deactivated by someone else while this page is open, which
+  // (thanks to useSetDimensionStatus's own cache invalidation) refetches
+  // adminDimensionsQuery and drops that dimension out of this filtered
+  // list, hiding its checkbox. `checkedKeys` is independent local state
+  // that nothing automatically prunes, so without this filter, Save would
+  // still submit that now-inactive key — the backend would then reject the
+  // *entire* save ("已停用，无法启用"), and the user would have no
+  // checkbox left to uncheck to fix it, since it's no longer rendered.
+  // Codex outer-gate finding on PR #29 (sixth round).
+  const activeDimensions = (adminDimensionsQuery.data ?? []).filter((d) => d.status === 'active');
+
   function toggle(key: string) {
     setCheckedKeys((prev) => {
       const next = new Set(prev);
@@ -105,8 +118,10 @@ export function KnowledgeBaseSettingsPage() {
 
   function save() {
     setError('');
+    const activeKeys = new Set(activeDimensions.map((d) => d.key));
+    const keysToSubmit = Array.from(checkedKeys ?? []).filter((key) => activeKeys.has(key));
     saveMutation
-      .mutateAsync(Array.from(checkedKeys ?? []))
+      .mutateAsync(keysToSubmit)
       .then(() => {
         toast.ok('已保存本知识库启用的维度');
       })
@@ -173,7 +188,6 @@ export function KnowledgeBaseSettingsPage() {
   // outer-gate finding on PR #29.
   const dataLoading =
     adminDimensionsQuery.isLoading || enabledDimensionsQuery.isLoading || (checkedKeys === null && !dataIsError);
-  const activeDimensions = (adminDimensionsQuery.data ?? []).filter((d) => d.status === 'active');
 
   return (
     <AppShell title="知识库设置" crumb={`${kb.name} / 知识库设置`}>

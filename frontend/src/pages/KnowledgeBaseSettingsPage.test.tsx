@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient } from '@tanstack/react-query';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { KnowledgeBaseSettingsPage } from './KnowledgeBaseSettingsPage';
+import { ADMIN_DIMENSIONS_KEY } from '../api/dimensions';
 import { renderWithProviders } from '../test/renderWithProviders';
 import {
   API_BASE,
@@ -120,6 +121,52 @@ describe('KnowledgeBaseSettingsPage', () => {
     // Must end up unchecked once the fresh (empty) response lands, not
     // stuck on the stale cached "checked" snapshot forever.
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /租户/ })).not.toBeChecked());
+  });
+
+  it('filters out a checked key that got globally deactivated while this page was open, before submitting (Codex outer-gate fix on PR #29, round 6)', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    let tenantActive = true;
+    server.use(
+      http.get(`${API_BASE}/admin/dimensions`, () =>
+        HttpResponse.json(
+          envelope([makeAdminDimension({ key: 'tenant', label: '租户', status: tenantActive ? 'active' : 'deprecated' })]),
+        ),
+      ),
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () =>
+        HttpResponse.json(envelope([makeDimension({ key: 'tenant', label: '租户' })])),
+      ),
+    );
+    let receivedBody: unknown;
+    server.use(
+      http.put(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(envelope([]));
+      }),
+    );
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/knowledge-bases/:kbId/settings" element={<KnowledgeBaseSettingsPage />} />
+      </Routes>,
+      { initialEntries: ['/knowledge-bases/1/settings'], queryClient },
+    );
+
+    await screen.findByText('租户');
+    expect(screen.getByRole('checkbox', { name: /租户/ })).toBeChecked();
+
+    // Simulate "tenant" being deactivated elsewhere while this page stays
+    // open — the same cache invalidation useSetDimensionStatus performs
+    // for a real deactivation from the dimensions page.
+    tenantActive = false;
+    await queryClient.invalidateQueries({ queryKey: ADMIN_DIMENSIONS_KEY });
+    await waitFor(() => expect(screen.queryByText('租户')).not.toBeInTheDocument());
+
+    await userEvent.click(screen.getByText('保 存'));
+
+    // checkedKeys still (invisibly) holds "tenant", but it must be
+    // filtered out before submitting — otherwise every save would fail
+    // with "已停用，无法启用" and there'd be no checkbox left to uncheck.
+    await waitFor(() => expect(receivedBody).toEqual({ dimension_keys: [] }));
   });
 
   it('re-seeds the checklist for a different knowledge base after an in-place :kbId route change (Codex outer-gate fix on PR #29, round 3)', async () => {
