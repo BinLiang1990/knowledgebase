@@ -1,4 +1,9 @@
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session as OrmSession
+
+from kb_backend.main import app
 
 
 def _create_kb(client: TestClient, name: str) -> dict:
@@ -149,6 +154,53 @@ def test_batch_import_over_500_items_is_rejected(client: TestClient, migrated_sc
 def test_batch_import_nonexistent_kb_returns_404_and_writes_nothing(client: TestClient, migrated_schema) -> None:
     resp = client.post(_batch_url(999999), json={"items": [{"title": "kp-orphan"}]})
     assert resp.status_code == 404
+
+
+def test_batch_import_transaction_invalidating_error_aborts_whole_batch_and_commits_nothing(
+    client: TestClient, migrated_schema, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the Codex outer-gate finding on PR #27: a
+    transaction-invalidating error (e.g. a MySQL deadlock, OperationalError)
+    must not be treated as a single item's failure — it invalidates the
+    *whole* outer transaction, so any earlier items in this batch that had
+    already succeeded within the same never-committed transaction must not
+    be reported as created. The whole request must abort (500) and commit
+    nothing, rather than return a response that claims items were created
+    when the database may have already discarded them."""
+    kb = _create_kb(client, "kb-batch-deadlock")
+
+    original_begin_nested = OrmSession.begin_nested
+    call_count = {"n": 0}
+
+    def _flaky_begin_nested(self: OrmSession, *args: object, **kwargs: object) -> object:
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            raise OperationalError("statement", {}, Exception("simulated deadlock (1213)"))
+        return original_begin_nested(self, *args, **kwargs)
+
+    monkeypatch.setattr(OrmSession, "begin_nested", _flaky_begin_nested)
+
+    # This unhandled exception is genuinely caught and converted to a 500 by
+    # the app's own registered Exception handler (envelope.py's
+    # register_exception_handlers) in production. TestClient's default
+    # raise_server_exceptions=True re-raises it into the test instead of
+    # returning that response, purely to surface tracebacks during
+    # development — it is not a statement about how the app itself behaves.
+    # A second client with raise_server_exceptions=False (Starlette's own
+    # documented pattern for testing this path) lets us assert on the real
+    # response the app produces.
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+    resp = no_raise_client.post(
+        _batch_url(kb["id"]),
+        json={"items": [{"title": "before-deadlock"}, {"title": "during-deadlock"}, {"title": "after-deadlock"}]},
+    )
+
+    assert resp.status_code == 500
+    assert resp.json()["code"] == 444
+
+    monkeypatch.setattr(OrmSession, "begin_nested", original_begin_nested)
+    titles = [kp["title"] for kp in _list_kps(client, kb["id"])]
+    assert titles == []
 
 
 def test_batch_import_retry_of_same_batch_is_safe_and_reports_all_as_duplicate(

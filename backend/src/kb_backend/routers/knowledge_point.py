@@ -206,9 +206,20 @@ def batch_import_knowledge_points(
     每个 item 包在一个 SAVEPOINT (db.begin_nested()) 里；SAVEPOINT 块内部不做
     任何 try/except，让异常原样传播出去交给 begin_nested() 自己的上下文管理器
     完成 ROLLBACK TO SAVEPOINT —— 绝不能在块内手动调用 db.rollback()（那会
-    回滚最外层事务，冲掉同批次前面已经成功、还未 commit 的 item），也绝不能
-    让任何未预期的异常终止整个循环（否则前面已成功的 item 会随 session 从未
-    commit 而全部丢失）。这两点都是对抗式审查在设计阶段抓到的阻塞级问题。
+    回滚最外层事务，冲掉同批次前面已经成功、还未 commit 的 item）。这是对抗
+    式审查在设计阶段抓到的阻塞级问题。
+
+    per-item 的 except 只捕获 IntegrityError（标题重复等约束冲突——只回滚到
+    这一条自己的 SAVEPOINT，不影响外层事务）和 BusinessError（同理），刻意
+    不加一个兜底的 `except Exception`：MySQL 死锁 (`OperationalError`) 之类
+    会让整个外层事务失效的错误，绝不能被当成"这一条失败、继续下一条"处理——
+    这种错误发生时，前面已经 RELEASE SAVEPOINT 的 item 也会随外层事务一起被
+    数据库回滚，如果继续把它们当成成功写进 results，最终返回的就是一份声称
+    "已创建"、但实际数据库里根本不存在的虚假结果。让这类异常原样往外传播、
+    在到达 db.commit() 之前中断整个请求，交给项目已有的全局异常处理器
+    (envelope.register_exception_handlers 的 _unhandled_exception_handler)
+    转换成标准的 500——同一个数据库会话从未 commit，session.close() 会丢弃
+    所有未提交的写入，不会残留部分数据。Codex 外门审查在 PR #27 抓到的问题。
     """
     _get_kb_or_404(db, kb_id)
 
@@ -249,11 +260,6 @@ def batch_import_knowledge_points(
         except BusinessError as exc:
             results.append(
                 BatchImportItemResult(index=index, status="failed", title=item.title, reason=exc.message)
-            )
-            continue
-        except Exception:
-            results.append(
-                BatchImportItemResult(index=index, status="failed", title=item.title, reason="内部错误，请重试该条")
             )
             continue
 
