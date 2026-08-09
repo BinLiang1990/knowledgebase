@@ -22,6 +22,9 @@ from ..schemas.knowledge_point import (
     AnswerOut,
     AnswerPromoteToDefault,
     AnswerRevoke,
+    BatchImportItemResult,
+    BatchImportResult,
+    KnowledgePointBatchImportRequest,
     KnowledgePointCreate,
     KnowledgePointDeleteRequest,
     KnowledgePointOut,
@@ -43,6 +46,18 @@ def _raise_if_duplicate_title(exc: IntegrityError) -> None:
     if orig_args and orig_args[0] == _MYSQL_ER_DUP_ENTRY:
         raise BusinessError(_DUPLICATE_TITLE_MSG, status_code=400) from exc
     raise exc
+
+
+def _batch_item_failure_reason(exc: IntegrityError) -> str:
+    # Unlike _raise_if_duplicate_title, this never re-raises: batch-import's
+    # per-item loop (design doc §4.2, issue #11) must record any failure —
+    # duplicate title or otherwise — as a failed result and keep processing
+    # the rest of the batch, not let an unexpected IntegrityError propagate
+    # and abort the whole request.
+    orig_args = getattr(exc.orig, "args", ())
+    if orig_args and orig_args[0] == _MYSQL_ER_DUP_ENTRY:
+        return _DUPLICATE_TITLE_MSG
+    return "写入失败（未知错误）"
 
 
 def _get_kb_or_404(db: Session, kb_id: int) -> KnowledgeBase:
@@ -180,6 +195,84 @@ def create_knowledge_point(
     db.commit()
     db.refresh(kp)
     out = _to_kp_out(kp, active_answer_count)
+    return envelope(out.model_dump(mode="json"))
+
+
+@router.post("/batch-import")
+def batch_import_knowledge_points(
+    kb_id: int, payload: KnowledgePointBatchImportRequest, db: Session = Depends(get_db)
+) -> dict:
+    """批量导入 (issue #11, design doc §4.1/§4.2) — 部分成功，逐项报告结果。
+    每个 item 包在一个 SAVEPOINT (db.begin_nested()) 里；SAVEPOINT 块内部不做
+    任何 try/except，让异常原样传播出去交给 begin_nested() 自己的上下文管理器
+    完成 ROLLBACK TO SAVEPOINT —— 绝不能在块内手动调用 db.rollback()（那会
+    回滚最外层事务，冲掉同批次前面已经成功、还未 commit 的 item）。这是对抗
+    式审查在设计阶段抓到的阻塞级问题。
+
+    per-item 的 except 只捕获 IntegrityError（标题重复等约束冲突——只回滚到
+    这一条自己的 SAVEPOINT，不影响外层事务）和 BusinessError（同理），刻意
+    不加一个兜底的 `except Exception`：MySQL 死锁 (`OperationalError`) 之类
+    会让整个外层事务失效的错误，绝不能被当成"这一条失败、继续下一条"处理——
+    这种错误发生时，前面已经 RELEASE SAVEPOINT 的 item 也会随外层事务一起被
+    数据库回滚，如果继续把它们当成成功写进 results，最终返回的就是一份声称
+    "已创建"、但实际数据库里根本不存在的虚假结果。让这类异常原样往外传播、
+    在到达 db.commit() 之前中断整个请求，交给项目已有的全局异常处理器
+    (envelope.register_exception_handlers 的 _unhandled_exception_handler)
+    转换成标准的 500——同一个数据库会话从未 commit，session.close() 会丢弃
+    所有未提交的写入，不会残留部分数据。Codex 外门审查在 PR #27 抓到的问题。
+    """
+    _get_kb_or_404(db, kb_id)
+
+    results: list[BatchImportItemResult] = []
+    created_count = 0
+
+    for index, item in enumerate(payload.items):
+        try:
+            with db.begin_nested():
+                _ensure_title_available(db, kb_id, item.title)
+                kp = KnowledgePoint(knowledge_base_id=kb_id, title=item.title, status="active", operator="admin")
+                db.add(kp)
+                db.flush()
+
+                if item.default_answer is not None:
+                    empty_coord: dict = {}
+                    db.add(
+                        Answer(
+                            knowledge_base_id=kb_id,
+                            knowledge_point_id=kp.id,
+                            coord=empty_coord,
+                            coord_hash=compute_coord_hash(empty_coord),
+                            content=item.default_answer.content,
+                            effective_time=item.default_answer.effective_time,
+                            note=item.default_answer.note,
+                            operator="admin",
+                            source="人工填报",
+                        )
+                    )
+                    db.flush()
+        except IntegrityError as exc:
+            results.append(
+                BatchImportItemResult(
+                    index=index, status="failed", title=item.title, reason=_batch_item_failure_reason(exc)
+                )
+            )
+            continue
+        except BusinessError as exc:
+            results.append(
+                BatchImportItemResult(index=index, status="failed", title=item.title, reason=exc.message)
+            )
+            continue
+
+        created_count += 1
+        results.append(
+            BatchImportItemResult(index=index, status="created", title=item.title, knowledge_point_id=kp.id)
+        )
+
+    db.commit()
+
+    out = BatchImportResult(
+        created_count=created_count, failed_count=len(results) - created_count, results=results
+    )
     return envelope(out.model_dump(mode="json"))
 
 
