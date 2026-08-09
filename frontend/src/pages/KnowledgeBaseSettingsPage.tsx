@@ -113,8 +113,16 @@ export function KnowledgeBaseSettingsPage() {
     );
   }
 
-  const dataLoading = adminDimensionsQuery.isLoading || enabledDimensionsQuery.isLoading || checkedKeys === null;
   const dataIsError = adminDimensionsQuery.isError || enabledDimensionsQuery.isError;
+  // checkedKeys === null only means "still loading" while the underlying
+  // query might still succeed — once enabledDimensionsQuery has actually
+  // failed, it will never populate .data, so checkedKeys would stay null
+  // forever and this must stop being treated as a loading state; otherwise
+  // the error block below (guarded by `!dataLoading`) can never render and
+  // the page is stuck on a permanent spinner with no retry control. Codex
+  // outer-gate finding on PR #29.
+  const dataLoading =
+    adminDimensionsQuery.isLoading || enabledDimensionsQuery.isLoading || (checkedKeys === null && !dataIsError);
   const activeDimensions = (adminDimensionsQuery.data ?? []).filter((d) => d.status === 'active');
 
   return (

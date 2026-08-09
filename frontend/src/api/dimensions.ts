@@ -77,8 +77,14 @@ export function useCreateDimension() {
 export function useUpdateDimension() {
   const queryClient = useQueryClient();
   return useMutation({
+    // encodeURIComponent(key) — a dimension's key is a client-typed label
+    // verbatim (backend only rejects "/" in it, design doc §4.3), so
+    // characters like "?"/"#"/"&" are otherwise valid and would otherwise
+    // get interpreted as the start of a query string/fragment when
+    // interpolated raw into a URL path, silently targeting the wrong (or
+    // no) resource. Codex outer-gate finding on PR #29.
     mutationFn: ({ key, ...input }: DimensionUpdateInput & { key: string }) =>
-      apiClient.patch<AdminDimension>(`/dimensions/${key}`, input),
+      apiClient.patch<AdminDimension>(`/dimensions/${encodeURIComponent(key)}`, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADMIN_DIMENSIONS_KEY });
       queryClient.invalidateQueries({ queryKey: DIMENSIONS_KEY });
@@ -90,7 +96,9 @@ export function useSetDimensionStatus() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ key, status }: { key: string; status: 'active' | 'deprecated' }) =>
-      apiClient.post<AdminDimension>(`/dimensions/${key}/${status === 'active' ? 'activate' : 'deactivate'}`),
+      apiClient.post<AdminDimension>(
+        `/dimensions/${encodeURIComponent(key)}/${status === 'active' ? 'activate' : 'deactivate'}`,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADMIN_DIMENSIONS_KEY });
       queryClient.invalidateQueries({ queryKey: DIMENSIONS_KEY });

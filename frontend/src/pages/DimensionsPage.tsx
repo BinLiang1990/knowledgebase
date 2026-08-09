@@ -253,6 +253,7 @@ function DimensionFormModal({
           dim={{ key: '', label: '', weight: 0, field_type: fieldType }}
           value={defaultValue}
           onChange={setDefaultValue}
+          allowUnset
         />
         <div className="hint">仅作为「写答案」时该维度输入框的预填提示，不做强制校验。</div>
       </div>

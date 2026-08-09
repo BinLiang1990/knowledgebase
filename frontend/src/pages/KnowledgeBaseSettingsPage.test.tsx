@@ -61,6 +61,18 @@ describe('KnowledgeBaseSettingsPage', () => {
     expect(await screen.findByText(/还没有任何启用中的全局维度/)).toBeInTheDocument();
   });
 
+  it('shows a retryable failure state, not a permanent spinner, when the enabled-dimensions fetch fails (Codex outer-gate fix on PR #29)', async () => {
+    server.use(
+      http.get(`${API_BASE}/admin/dimensions`, () => HttpResponse.json(envelope([makeAdminDimension()]))),
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () =>
+        HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 }),
+      ),
+    );
+    renderPage();
+    expect(await screen.findByText(/加载失败/)).toBeInTheDocument();
+    expect(screen.queryByText(/加载中/)).not.toBeInTheDocument();
+  });
+
   it('saves the exact snapshot of checked keys at save time', async () => {
     server.use(
       http.get(`${API_BASE}/admin/dimensions`, () =>

@@ -156,6 +156,59 @@ describe('DimensionsPage', () => {
     expect(within(dialog).getByText(/7 条答案/)).toBeInTheDocument();
   });
 
+  it('URL-encodes a key containing reserved characters when editing (Codex outer-gate fix on PR #29)', async () => {
+    server.use(
+      http.get(`${API_BASE}/admin/dimensions`, () =>
+        HttpResponse.json(envelope([makeAdminDimension({ key: '税率?a', label: '税率?a' })])),
+      ),
+    );
+    let requestedPath = '';
+    server.use(
+      http.patch(`${API_BASE}/dimensions/:key`, ({ request, params }) => {
+        requestedPath = new URL(request.url).pathname;
+        expect(params.key).toBe('税率?a');
+        return HttpResponse.json(envelope(makeAdminDimension({ key: '税率?a', label: '税率?a' })));
+      }),
+    );
+    renderPage();
+    await screen.findAllByText('税率?a'); // both the key and label columns show this same string
+
+    await userEvent.click(screen.getByText('编辑'));
+    const dialog = (await screen.findByText(/编辑维度/)).closest('.modal') as HTMLElement;
+    await userEvent.click(within(dialog).getByText('确 定'));
+
+    await screen.findByText(/已更新维度/);
+    expect(requestedPath).toBe(`/dimensions/${encodeURIComponent('税率?a')}`);
+  });
+
+  it('renders "未设置" for a boolean dimension with no default value, not a misleading "是"', async () => {
+    server.use(
+      http.get(`${API_BASE}/admin/dimensions`, () =>
+        HttpResponse.json(
+          envelope([makeAdminDimension({ field_type: 'boolean', default_value: null })]),
+        ),
+      ),
+    );
+    let receivedBody: unknown;
+    server.use(
+      http.patch(`${API_BASE}/dimensions/:key`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(envelope(makeAdminDimension({ field_type: 'boolean' })));
+      }),
+    );
+    renderPage();
+    await screen.findByText('租户');
+
+    await userEvent.click(screen.getByText('编辑'));
+    const dialog = (await screen.findByText('编辑维度 · 租户')).closest('.modal') as HTMLElement;
+    const select = within(dialog).getByDisplayValue('未设置') as HTMLSelectElement;
+    expect(select.value).toBe('');
+
+    await userEvent.click(within(dialog).getByText('确 定'));
+    await screen.findByText(/已更新维度/);
+    expect(receivedBody).toMatchObject({ default_value: null });
+  });
+
   it('surfaces a business error from the backend on create instead of a generic message', async () => {
     server.use(http.post(`${API_BASE}/dimensions`, () => HttpResponse.json(errorEnvelope('维度已存在，请使用其他名称'), { status: 400 })));
     renderPage();
