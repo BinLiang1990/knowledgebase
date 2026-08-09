@@ -73,6 +73,18 @@ describe('KnowledgeBaseSettingsPage', () => {
     expect(screen.queryByText(/加载中/)).not.toBeInTheDocument();
   });
 
+  it('keeps the save button disabled on a load failure, so it cannot submit an empty set and wipe enabled dimensions (Codex outer-gate fix on PR #29, round 2)', async () => {
+    server.use(
+      http.get(`${API_BASE}/admin/dimensions`, () => HttpResponse.json(envelope([makeAdminDimension()]))),
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, () =>
+        HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 }),
+      ),
+    );
+    renderPage();
+    await screen.findByText(/加载失败/);
+    expect(screen.getByText('保 存')).toBeDisabled();
+  });
+
   it('saves the exact snapshot of checked keys at save time', async () => {
     server.use(
       http.get(`${API_BASE}/admin/dimensions`, () =>

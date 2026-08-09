@@ -92,6 +92,29 @@ describe('DimensionsPage', () => {
     expect(select).toBeDisabled();
   });
 
+  it('resets the default value hint when the field type changes on create (Codex outer-gate fix on PR #29, round 2)', async () => {
+    let receivedBody: unknown;
+    server.use(
+      http.post(`${API_BASE}/dimensions`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(envelope(makeAdminDimension({ key: '部门', label: '部门' })));
+      }),
+    );
+    renderPage();
+    await screen.findByText('租户');
+
+    await userEvent.click(screen.getByText('+ 新增维度'));
+    const dialog = (await screen.findByText('新增维度')).closest('.modal') as HTMLElement;
+    await userEvent.type(within(dialog).getByPlaceholderText('例如：部门 / 标签 / 复核周期'), '部门');
+    await userEvent.type(within(dialog).getByPlaceholderText('输入取值'), 'hello');
+
+    await userEvent.selectOptions(within(dialog).getByDisplayValue('文本'), '时间');
+    await userEvent.click(within(dialog).getByText('确 定'));
+
+    await screen.findByText(/已新增维度/);
+    expect(receivedBody).toMatchObject({ default_value: null });
+  });
+
   it('editing without touching the default value hint leaves it unchanged', async () => {
     server.use(
       http.get(`${API_BASE}/admin/dimensions`, () =>

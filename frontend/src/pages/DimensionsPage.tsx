@@ -232,7 +232,23 @@ function DimensionFormModal({
         <label>
           <span className="req">*</span>字段类型
         </label>
-        <select value={fieldType} disabled={isEdit} onChange={(e) => setFieldType(e.target.value as Dimension['field_type'])}>
+        <select
+          value={fieldType}
+          disabled={isEdit}
+          onChange={(e) => {
+            // Reset the default-value-hint state along with the type — a
+            // value typed for one type (e.g. text "hello") is generally not
+            // a valid value for another (e.g. date), but ValueInput/the
+            // backend's default_value column are both plain strings with
+            // no cross-type validation, so a stale value would otherwise
+            // submit silently even though the visible input for the new
+            // type shows empty. Codex outer-gate finding on PR #29 (second
+            // round) — only reachable on create; this <select> is disabled
+            // on edit, so field_type never actually changes there.
+            setFieldType(e.target.value as Dimension['field_type']);
+            setDefaultValue('');
+          }}
+        >
           <option value="text">文本</option>
           <option value="number">数值</option>
           <option value="date">时间</option>

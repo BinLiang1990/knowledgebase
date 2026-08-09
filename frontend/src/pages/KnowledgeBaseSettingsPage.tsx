@@ -186,7 +186,18 @@ export function KnowledgeBaseSettingsPage() {
 
         <div className="form-row" style={{ marginTop: 6 }}>
           {error && <p className="hint" style={{ color: 'var(--red)' }}>{error}</p>}
-          <button type="button" className="btn primary" disabled={dataLoading || saveMutation.isPending} onClick={save}>
+          {/* dataIsError must also disable this — dataLoading alone is false
+              once a failed fetch settles (Codex outer-gate fix on PR #29's
+              first round), and checkedKeys would still be null: clicking
+              Save in that state would submit an empty dimension_keys list
+              and silently wipe every dimension this knowledge base had
+              enabled. Codex outer-gate finding on PR #29 (second round). */}
+          <button
+            type="button"
+            className="btn primary"
+            disabled={dataLoading || dataIsError || saveMutation.isPending}
+            onClick={save}
+          >
             保 存
           </button>
         </div>
