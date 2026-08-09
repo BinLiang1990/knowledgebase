@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useKnowledgeBases } from '../api/knowledgeBases';
 import { useEnabledDimensions } from '../api/dimensions';
-import { useAnswerGroups, useKnowledgePoint } from '../api/knowledgePoints';
-import { hasUniqueTopMatch, sortLiveGroupsByPriority } from '../api/answers';
+import { useAllAnswers, useAnswerGroups, useKnowledgePoint } from '../api/knowledgePoints';
+import { coordGroupKey, describeCoord, hasUniqueTopMatch, sortLiveGroupsByPriority } from '../api/answers';
+import { useChangeLog } from '../api/changeLog';
+import { buildTimelineGroups, type TimelineStatus } from '../api/timeline';
 import type { AnswerGroup } from '../api/knowledgePoints';
 import type { Dimension } from '../api/dimensions';
 import { ApiError } from '../api/client';
 import { AppShell } from '../components/layout/AppShell';
+import { ChangeLogTable } from '../components/ChangeLogTable';
 import { ConditionPicker, type Filters } from '../components/ui/ConditionPicker';
 import { WriteAnswerModal, type ExistingAnswer } from '../components/WriteAnswerModal';
 import { EditTitleModal } from '../components/EditTitleModal';
@@ -23,32 +26,127 @@ const TABS: Array<[TabKey, string]> = [
   ['logs', '变更留痕'],
 ];
 
-// The other three tabs are P1/P2 (Issue #14/#16) — rendered as tabs (IA
-// parity with the demo, so those issues just fill in a body) but with a
-// placeholder, not hidden. Same treatment issue #7 gave unbuilt stat cards.
-const TAB_PLACEHOLDER: Record<Exclude<TabKey, 'now'>, string> = {
+// 立体全景 is still P2 (issue #16) — rendered as a tab (IA parity with the
+// demo) but with a placeholder, not hidden. Same treatment issue #7 gave
+// unbuilt stat cards. timeline/logs are filled in by this issue (#14).
+const TAB_PLACEHOLDER: Record<'tree', string> = {
   tree: '立体全景开发中，见 Issue #16',
-  timeline: '版本历史开发中，见 Issue #14',
-  logs: '变更留痕开发中，见 Issue #14',
 };
 
-function describeCoord(coord: Record<string, unknown>, dimensions: Dimension[]): string {
-  const keys = Object.keys(coord);
-  if (!keys.length) return '默认答案 · 处处适用';
-  const parts = keys
-    .sort()
-    .map((k) => `${dimensions.find((d) => d.key === k)?.label ?? k} = ${String(coord[k])}`);
-  return `适用条件：${parts.join(' 且 ')}`;
+const TIMELINE_STATUS_TAG: Record<TimelineStatus, { label: string; cls: string }> = {
+  current: { label: '当前', cls: 'blue' },
+  superseded: { label: '已被新版替代', cls: 'gray' },
+  'not-yet-effective': { label: '晚于查询时间，暂不生效', cls: 'orange' },
+  revoked: { label: '已撤回', cls: 'gray' },
+};
+
+function TimelineTab({
+  kbId,
+  kpId,
+  kbReady,
+  dimensions,
+}: {
+  kbId: number;
+  kpId: number;
+  kbReady: boolean;
+  dimensions: Dimension[];
+}) {
+  const answersQuery = useAllAnswers(kbId, kpId, kbReady);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+
+  if (answersQuery.isLoading) {
+    return (
+      <div className="empty-block">
+        <span className="spin" /> 加载中…
+      </div>
+    );
+  }
+  if (answersQuery.isError) {
+    return (
+      <div className="empty-block">
+        加载失败
+        <br />
+        <a onClick={() => answersQuery.refetch()}>重试</a>
+      </div>
+    );
+  }
+  const answers = answersQuery.data ?? [];
+  if (answers.length === 0) {
+    return <div className="empty-block">还没有任何答案</div>;
+  }
+
+  const groups = buildTimelineGroups(answers);
+  const keys = [...groups.keys()];
+  const activeKey = selectedGroup && keys.includes(selectedGroup) ? selectedGroup : keys[0];
+  const entries = groups.get(activeKey) ?? [];
+
+  return (
+    <>
+      <div className="form-row" style={{ marginBottom: 14 }}>
+        <span className="f-lbl">选择条件组合(每组条件一条独立版本链)</span>
+        <select value={activeKey} onChange={(e) => setSelectedGroup(e.target.value)}>
+          {keys.map((k) => (
+            <option key={k} value={k}>
+              {describeCoord(groups.get(k)![0].answer.coord, dimensions)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="timeline">
+        {entries.map((entry, i) => {
+          const tag = TIMELINE_STATUS_TAG[entry.status];
+          return (
+            <div className="tl-item" key={entry.answer.id}>
+              <div className="tl-dot-col">
+                <div className={`tl-dot ${entry.status === 'current' ? 'cur' : ''}`} />
+                {i < entries.length - 1 && <div className="tl-line" />}
+              </div>
+              <div className="tl-body">
+                <div className="tl-head">
+                  <span className="time num" style={{ fontWeight: 400 }}>
+                    {entry.answer.effective_time}
+                  </span>
+                  <span className={`tag ${tag.cls}`}>{tag.label}</span>
+                  <span className="field-hint">操作人：{entry.answer.operator}</span>
+                </div>
+                <div className="tl-content">{entry.answer.content}</div>
+                {entry.answer.note && (
+                  <div className="field-hint" style={{ marginTop: 4 }}>
+                    说明：{entry.answer.note}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mini-note" style={{ marginTop: 8 }}>
+        旧版本与撤回版永不删除。当前查询时间为 <span className="num">{today()}</span>。
+      </div>
+    </>
+  );
 }
 
-// A stable identity for a coord group across edits — `latest_answer.id`
-// changes every time a new version is appended to the same group, which
-// would make React treat an edited row as a brand-new element instead of
-// the same logical group (losing DOM state, remount flicker). Mirrors the
-// demo's coordKeyOf. Kimi 终审 finding on PR #24.
-export function coordGroupKey(coord: Record<string, unknown>): string {
-  const keys = Object.keys(coord).sort();
-  return keys.length ? keys.map((k) => `${k}:${String(coord[k])}`).join('|') : '(默认)';
+function LogsTab({ kbId, kpId, kbReady }: { kbId: number; kpId: number; kbReady: boolean }) {
+  const changeLogQuery = useChangeLog(kbId, kpId, kbReady);
+
+  if (changeLogQuery.isLoading) {
+    return (
+      <div className="empty-block">
+        <span className="spin" /> 加载中…
+      </div>
+    );
+  }
+  if (changeLogQuery.isError) {
+    return (
+      <div className="empty-block">
+        加载失败
+        <br />
+        <a onClick={() => changeLogQuery.refetch()}>重试</a>
+      </div>
+    );
+  }
+  return <ChangeLogTable entries={changeLogQuery.data ?? []} kbId={kbId} kpId={kpId} />;
 }
 
 function AnswerRow({
@@ -292,9 +390,12 @@ export function KnowledgePointDetailPage() {
           ))}
         </div>
 
-        {tab !== 'now' ? (
-          <div className="empty-block">{TAB_PLACEHOLDER[tab]}</div>
-        ) : (
+        {tab === 'tree' && <div className="empty-block">{TAB_PLACEHOLDER.tree}</div>}
+        {tab === 'timeline' && (
+          <TimelineTab kbId={kbId} kpId={kpId} kbReady={kbReady} dimensions={dimensions} />
+        )}
+        {tab === 'logs' && <LogsTab kbId={kbId} kpId={kpId} kbReady={kbReady} />}
+        {tab === 'now' && (
           <>
             <div className="form-row">
               {dimensionsQuery.isError ? (

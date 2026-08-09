@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import type { KnowledgeBase } from '../api/knowledgeBases';
 import type { AdminDimension, Dimension } from '../api/dimensions';
 import type { Answer } from '../api/answers';
+import type { ChangeLogEntry, GlobalChangeLogEntry } from '../api/changeLog';
 import type { AnswerGroup, KnowledgePoint, KnowledgePointDetail, Resolved } from '../api/knowledgePoints';
 
 export const API_BASE = 'http://127.0.0.1:8000';
@@ -92,6 +93,34 @@ export function makeAnswerGroup(overrides: Partial<AnswerGroup> = {}): AnswerGro
   };
 }
 
+export function makeChangeLogEntry(overrides: Partial<ChangeLogEntry> = {}): ChangeLogEntry {
+  return {
+    time: '2026-08-08T00:00:00',
+    knowledge_point_id: 1,
+    answer_id: 1,
+    operator: 'admin',
+    action: 'create',
+    coord: {},
+    before_content: null,
+    after_content: 'answer content',
+    source: '人工填报',
+    revoke_reason: null,
+    status: 'live',
+    revocable: true,
+    ...overrides,
+  };
+}
+
+export function makeGlobalChangeLogEntry(overrides: Partial<GlobalChangeLogEntry> = {}): GlobalChangeLogEntry {
+  return {
+    ...makeChangeLogEntry(),
+    knowledge_base_id: 1,
+    knowledge_base_name: 'kb-1',
+    knowledge_point_title: 'kp-1',
+    ...overrides,
+  };
+}
+
 export const handlers = [
   http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([makeKb()]))),
   http.post(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope(makeKb({ id: 2, name: 'new-kb' })))),
@@ -135,6 +164,16 @@ export const handlers = [
   http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers/:answerId/edit`, () =>
     HttpResponse.json(envelope(makeAnswer({ id: 11 }))),
   ),
+  http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers/:answerId/revoke`, () =>
+    HttpResponse.json(envelope(makeAnswer({ revoked: true }))),
+  ),
+  http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers`, () =>
+    HttpResponse.json(envelope([makeAnswer()])),
+  ),
+  http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/change-log`, () =>
+    HttpResponse.json(envelope([makeChangeLogEntry()])),
+  ),
+  http.get(`${API_BASE}/change-log`, () => HttpResponse.json(envelope([makeGlobalChangeLogEntry()]))),
 ];
 
 export { HttpResponse, envelope, errorEnvelope, http };

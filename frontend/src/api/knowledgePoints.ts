@@ -109,7 +109,12 @@ interface CreateKnowledgePointInput {
 // design doc §4.5 — so a single invalidation here reaches useKnowledgePoints,
 // useKnowledgePoint, and useAnswerGroups regardless of their differing
 // filters/kpId/at suffixes.
-function knowledgePointDataKeyPrefix(kbId: number) {
+// Exported so api/changeLog.ts and api/knowledgePoints.ts's own
+// useAllAnswers (issue #14) can nest their query keys under this same
+// prefix — a single invalidateKnowledgePointDataQueries call then covers
+// change-log/all-answers/answer-groups alike, with no separate
+// invalidation logic needed for the new hooks.
+export function knowledgePointDataKeyPrefix(kbId: number) {
   return ['knowledge-bases', kbId, 'knowledge-points'] as const;
 }
 
@@ -136,6 +141,19 @@ export function useKnowledgePoint(kbId: number, kpId: number, enabled = true) {
     queryKey: [...knowledgePointDataKeyPrefix(kbId), kpId] as const,
     queryFn: ({ signal }) =>
       apiClient.get<KnowledgePointDetail>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}`, { signal }),
+    enabled,
+  });
+}
+
+// Every version, every coord group, unfiltered (issue #14 design doc §1) —
+// the "版本历史" tab's data source. Deliberately NOT the same query
+// useAnswerGroups uses (that one is grouped/summarized server-side); see
+// design doc §4.1 for why the timeline needs raw per-version rows instead.
+export function useAllAnswers(kbId: number, kpId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: [...knowledgePointDataKeyPrefix(kbId), kpId, 'answers'] as const,
+    queryFn: ({ signal }) =>
+      apiClient.get<Answer[]>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers`, { signal }),
     enabled,
   });
 }

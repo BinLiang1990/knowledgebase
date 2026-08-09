@@ -1,6 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { coordValueEquals, diffCoord, hasUniqueTopMatch, sortLiveGroupsByPriority } from './answers';
+import { coordGroupKey, coordValueEquals, describeCoord, diffCoord, hasUniqueTopMatch, sortLiveGroupsByPriority } from './answers';
 import { makeAnswer, makeAnswerGroup, makeDimension } from '../test/server';
+
+describe('coordGroupKey', () => {
+  it('stays the same across an edit that only changes the answer id (Kimi fix on PR #24)', () => {
+    // Using latest_answer.id as the React key would treat every edit as a
+    // brand-new row, since a new version means a new answer id.
+    expect(coordGroupKey({ tenant: 'acme' })).toBe(coordGroupKey({ tenant: 'acme' }));
+  });
+
+  it('differs for genuinely different coords', () => {
+    expect(coordGroupKey({ tenant: 'acme' })).not.toBe(coordGroupKey({ tenant: 'other' }));
+    expect(coordGroupKey({})).not.toBe(coordGroupKey({ tenant: 'acme' }));
+  });
+
+  it('is stable regardless of key insertion order', () => {
+    expect(coordGroupKey({ a: '1', b: '2' })).toBe(coordGroupKey({ b: '2', a: '1' }));
+  });
+});
+
+describe('describeCoord', () => {
+  it('describes the default (empty) coord', () => {
+    expect(describeCoord({}, [])).toBe('默认答案 · 处处适用');
+  });
+
+  it('describes a single condition using the dimension label', () => {
+    const dims = [makeDimension({ key: 'tenant', label: '租户' })];
+    expect(describeCoord({ tenant: 'acme' }, dims)).toBe('适用条件：租户 = acme');
+  });
+
+  it('falls back to the raw key when the dimension is unknown (e.g. deprecated)', () => {
+    expect(describeCoord({ ghost: 'x' }, [])).toBe('适用条件：ghost = x');
+  });
+});
 
 describe('sortLiveGroupsByPriority', () => {
   it('drops groups with no live answer', () => {

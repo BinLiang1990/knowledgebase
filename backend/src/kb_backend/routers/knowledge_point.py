@@ -434,6 +434,33 @@ def get_change_log(kb_id: int, kp_id: int, db: Session = Depends(get_db)) -> dic
     return envelope(out)
 
 
+@router.get("/{kp_id}/answers")
+def list_all_answers(kb_id: int, kp_id: int, db: Session = Depends(get_db)) -> dict:
+    """知识点全部原始答案 (issue #14) — every version, every coord group,
+    unfiltered (not revoked-only, not effective-as-of-today-only). Exists
+    for the frontend's "版本历史" tab, which needs to compute its own
+    current/superseded/not-yet-effective/revoked tagging per coord group
+    using the real effective_time-based rule (mirrors resolve.py, see
+    design doc §4.2) — that tagging is NOT the same thing get_change_log's
+    own `status` field encodes (design doc §4.1: change-log's status
+    reflects write-order supersession, not effective-time supersession,
+    and only marks the chronologically-last version of a revoked chain as
+    "revoked" rather than every row in it). Reuses AnswerOut verbatim — no
+    new schema — and the exact same unfiltered query
+    compute_all_answer_groups already runs before it reduces rows to
+    per-coord summaries (resolve.py); this just skips that reduction."""
+    _get_kp_or_404(db, kb_id, kp_id)
+    answers = (
+        db.execute(
+            select(Answer).where(Answer.knowledge_base_id == kb_id, Answer.knowledge_point_id == kp_id)
+        )
+        .scalars()
+        .all()
+    )
+    out = [_to_answer_out(a).model_dump(mode="json") for a in answers]
+    return envelope(out)
+
+
 @router.patch("/{kp_id}")
 def update_knowledge_point(
     kb_id: int, kp_id: int, payload: KnowledgePointUpdate, db: Session = Depends(get_db)

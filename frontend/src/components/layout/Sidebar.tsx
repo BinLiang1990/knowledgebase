@@ -1,9 +1,8 @@
 import { NavLink } from 'react-router-dom';
 
 // Design doc §4.2 (issue #6): only render nav items whose page actually
-// exists yet — 操作日志 still lands in issue #14. Adding it now as a dead
-// link would be worse than omitting it; the spec/demo define no "disabled
-// nav item" style to fall back on. 维度管理 is filled in by issue #13.
+// exists yet. 维度管理 (issue #13) and 操作日志 (issue #14) are both filled
+// in now — every item PRD/demo's global nav lists is present.
 export function Sidebar() {
   return (
     <aside className="side">
@@ -21,6 +20,9 @@ export function Sidebar() {
         </NavLink>
         <NavLink to="/dimensions" className={({ isActive }) => `side-item${isActive ? ' sel' : ''}`}>
           <span className="ic">▤</span>维度管理
+        </NavLink>
+        <NavLink to="/change-log" className={({ isActive }) => `side-item${isActive ? ' sel' : ''}`}>
+          <span className="ic">⟲</span>操作日志
         </NavLink>
       </nav>
       <div className="side-foot">

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
+import { GLOBAL_CHANGE_LOG_KEY } from './changeLog';
 import type { Dimension } from './dimensions';
 import { invalidateKnowledgePointDataQueries } from './knowledgePoints';
 import type { AnswerGroup } from './knowledgePoints';
@@ -206,4 +207,48 @@ export function useEditAnswer(kbId: number, kpId: number) {
       apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers/${answerId}/edit`, body),
     onSuccess: () => invalidateKnowledgePointDataQueries(queryClient, kbId),
   });
+}
+
+export function useRevokeAnswer(kbId: number, kpId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ answerId, revokeReason }: { answerId: number; revokeReason: string }) =>
+      apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers/${answerId}/revoke`, {
+        revoke_reason: revokeReason,
+      }),
+    onSuccess: () => {
+      // Covers answer-groups/all-answers/change-log for this KP — all three
+      // nest under the same prefix (design doc §4.5, issue #14).
+      invalidateKnowledgePointDataQueries(queryClient, kbId);
+      // The global log is an independent top-level key (not scoped under
+      // any single kbId, since it's cross-knowledge-base) — must be
+      // invalidated separately or a cached global log page keeps showing
+      // this answer's chain as still live. Design doc §4.5.
+      queryClient.invalidateQueries({ queryKey: GLOBAL_CHANGE_LOG_KEY });
+    },
+  });
+}
+
+// Moved here from KnowledgePointDetailPage.tsx (issue #14 design doc §5) —
+// api/timeline.ts needs coordGroupKey too, and api/ importing from pages/
+// would invert this codebase's existing one-way layering (pages/ imports
+// api/, never the reverse). describeCoord moved alongside it for the same
+// reason, even though only pages/ currently uses it.
+export function describeCoord(coord: Record<string, unknown>, dimensions: Dimension[]): string {
+  const keys = Object.keys(coord);
+  if (!keys.length) return '默认答案 · 处处适用';
+  const parts = keys
+    .sort()
+    .map((k) => `${dimensions.find((d) => d.key === k)?.label ?? k} = ${String(coord[k])}`);
+  return `适用条件：${parts.join(' 且 ')}`;
+}
+
+// A stable identity for a coord group across edits — `latest_answer.id`
+// changes every time a new version is appended to the same group, which
+// would make React treat an edited row as a brand-new element instead of
+// the same logical group (losing DOM state, remount flicker). Mirrors the
+// demo's coordKeyOf. Kimi 终审 finding on PR #24.
+export function coordGroupKey(coord: Record<string, unknown>): string {
+  const keys = Object.keys(coord).sort();
+  return keys.length ? keys.map((k) => `${k}:${String(coord[k])}`).join('|') : '(默认)';
 }
