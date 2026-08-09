@@ -5,6 +5,7 @@ import { useEnabledDimensions } from '../api/dimensions';
 import { useCreateKnowledgePoint, useKnowledgePoints, type KnowledgePoint } from '../api/knowledgePoints';
 import { ApiError } from '../api/client';
 import { AppShell } from '../components/layout/AppShell';
+import { KbTabs } from '../components/layout/KbTabs';
 import { Modal } from '../components/ui/Modal';
 import { Pager } from '../components/ui/Pager';
 import { ConditionPicker, type Filters } from '../components/ui/ConditionPicker';
@@ -85,6 +86,11 @@ export function KnowledgePointListPage() {
   if (kbLoading) {
     return (
       <AppShell title="知识点列表" crumb="知识库列表 / 知识点列表">
+        {/* Number.isFinite guard — a malformed :kbId (e.g. non-numeric,
+            NaN) must not render tab links pointing at
+            /knowledge-bases/NaN/... while still in a loading/error state.
+            Kimi 终审 finding on PR #29. */}
+        {Number.isFinite(kbId) && <KbTabs kbId={kbId} active="kp-list" />}
         <div className="card">
           <div className="empty-block">
             <span className="spin" /> 加载中…
@@ -101,6 +107,7 @@ export function KnowledgePointListPage() {
     // user nothing to retry.
     return (
       <AppShell title="知识点列表" crumb="知识库列表 / 知识点列表">
+        {Number.isFinite(kbId) && <KbTabs kbId={kbId} active="kp-list" />}
         <div className="card">
           <div className="empty-block">
             加载知识库失败，请稍后重试
@@ -115,6 +122,10 @@ export function KnowledgePointListPage() {
   }
 
   if (!kb || kb.status !== 'active') {
+    // No KbTabs here — mirrors frontend-mock/kb-settings.html's own
+    // "!kb || kb.status !== 'active'" guard, which likewise skips
+    // renderKbTabs: an invalid/deactivated knowledge base has no
+    // "settings" to switch to (design doc §2.1, issue #13).
     return (
       <AppShell title="知识点列表" crumb="知识库列表 / 知识点列表">
         <div className="card">
@@ -134,6 +145,7 @@ export function KnowledgePointListPage() {
 
   return (
     <AppShell title="知识点列表" crumb={`${kb.name} / 知识点列表`}>
+      <KbTabs kbId={kbId} active="kp-list" />
       <div className="stat-grid">
         <div className="stat">
           <div className="lbl">知识主题</div>

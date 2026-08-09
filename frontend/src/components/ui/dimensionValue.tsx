@@ -20,10 +20,23 @@ export function ValueInput({
   dim,
   value,
   onChange,
+  allowUnset = false,
 }: {
   dim: Dimension;
   value: string;
   onChange: (v: string) => void;
+  // Every existing caller (ConditionPicker's filters, CoordEditor's coord
+  // values) only ever renders this for a field that's already been added
+  // to the filter/coord — there is no "unset" state to represent there, so
+  // the boolean branch has always been able to default an empty value to
+  // "是"/true. issue #13's "默认取值提示" is optional and genuinely can be
+  // unset — silently defaulting the *displayed* selection to "是" while the
+  // underlying state (and what actually gets submitted) stays empty/null
+  // would show the user one value and save a different one. allowUnset
+  // adds a real "未设置" option and stops coercing an empty value to
+  // "true" for display, without changing behavior for any existing caller
+  // that omits it. Codex outer-gate finding on PR #29.
+  allowUnset?: boolean;
 }) {
   if (dim.field_type === 'number') {
     return <input type="number" value={value} onChange={(e) => onChange(e.target.value)} autoFocus />;
@@ -33,7 +46,8 @@ export function ValueInput({
   }
   if (dim.field_type === 'boolean') {
     return (
-      <select value={value || 'true'} onChange={(e) => onChange(e.target.value)} autoFocus>
+      <select value={allowUnset ? value : value || 'true'} onChange={(e) => onChange(e.target.value)} autoFocus>
+        {allowUnset && <option value="">未设置</option>}
         <option value="true">是</option>
         <option value="false">否</option>
       </select>

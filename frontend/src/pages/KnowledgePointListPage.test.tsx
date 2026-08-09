@@ -359,4 +359,36 @@ describe('KnowledgePointListPage', () => {
     expect(await screen.findByText(/加载知识库失败/)).toBeInTheDocument();
     expect(screen.queryByText(/没有指定有效的知识库/)).not.toBeInTheDocument();
   });
+
+  it('renders KbTabs with the kp-list tab active on a normal load (issue #13)', async () => {
+    const { container } = renderPage();
+    await screen.findByText('kp-1');
+    const tabs = container.querySelector('.kb-tabs') as HTMLElement;
+    expect(within(tabs).getByText('知识点列表')).toHaveClass('active');
+    expect(within(tabs).getByText('知识库设置')).not.toHaveClass('active');
+  });
+
+  it('still renders KbTabs when the knowledge-base fetch fails (design doc §2.1: no reason to hide it)', async () => {
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 })));
+    const { container } = renderPage();
+    await screen.findByText(/加载知识库失败/);
+    expect(container.querySelector('.kb-tabs')).not.toBeNull();
+  });
+
+  it('does not render KbTabs for a malformed (non-numeric) :kbId while the knowledge-base fetch is still failing/loading (Kimi 终审 fix on PR #29)', async () => {
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 })));
+    const { container } = renderPage('/knowledge-bases/abc/knowledge-points');
+    await screen.findByText(/加载知识库失败/);
+    // Must not render tab links pointing at /knowledge-bases/NaN/... —
+    // rendering nothing is safer than a broken link while the id itself
+    // is malformed.
+    expect(container.querySelector('.kb-tabs')).toBeNull();
+  });
+
+  it('does not render KbTabs for an invalid knowledge base, mirroring the demo (design doc §2.1)', async () => {
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([]))));
+    const { container } = renderPage('/knowledge-bases/999/knowledge-points');
+    await screen.findByText(/没有指定有效的知识库/);
+    expect(container.querySelector('.kb-tabs')).toBeNull();
+  });
 });
