@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient } from '@tanstack/react-query';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { KnowledgeBaseSettingsPage } from './KnowledgeBaseSettingsPage';
 import { renderWithProviders } from '../test/renderWithProviders';
@@ -84,6 +85,41 @@ describe('KnowledgeBaseSettingsPage', () => {
     server.use(http.get(`${API_BASE}/admin/dimensions`, () => HttpResponse.json(envelope([]))));
     renderPage();
     expect(await screen.findByText(/还没有任何启用中的全局维度/)).toBeInTheDocument();
+  });
+
+  it('seeds from the fresh refetch, not a stale cached snapshot, on remount (Codex outer-gate fix on PR #29, round 4)', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    // Simulate "visited this page earlier in the session, left, and the
+    // enabled set changed elsewhere (e.g. the dimension got deactivated)
+    // before coming back" — TanStack Query still holds this stale entry
+    // and returns it instantly on the next render, before the background
+    // refetch this same render triggers has resolved.
+    queryClient.setQueryData(
+      ['knowledge-bases', 1, 'enabled-dimensions'],
+      [makeDimension({ key: 'tenant', label: '租户' })],
+    );
+
+    server.use(
+      http.get(`${API_BASE}/admin/dimensions`, () =>
+        HttpResponse.json(envelope([makeAdminDimension({ key: 'tenant', label: '租户' })])),
+      ),
+      http.get(`${API_BASE}/knowledge-bases/:kbId/enabled-dimensions`, async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return HttpResponse.json(envelope([])); // fresh: no longer enabled
+      }),
+    );
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/knowledge-bases/:kbId/settings" element={<KnowledgeBaseSettingsPage />} />
+      </Routes>,
+      { initialEntries: ['/knowledge-bases/1/settings'], queryClient },
+    );
+
+    await screen.findByText('租户');
+    // Must end up unchecked once the fresh (empty) response lands, not
+    // stuck on the stale cached "checked" snapshot forever.
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /租户/ })).not.toBeChecked());
   });
 
   it('re-seeds the checklist for a different knowledge base after an in-place :kbId route change (Codex outer-gate fix on PR #29, round 3)', async () => {

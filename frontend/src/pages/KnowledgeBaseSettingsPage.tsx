@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useKnowledgeBases } from '../api/knowledgeBases';
 import { useAdminDimensions, useEnabledDimensions, useSetEnabledDimensions, type Dimension } from '../api/dimensions';
@@ -30,6 +30,11 @@ export function KnowledgeBaseSettingsPage() {
   const [error, setError] = useState('');
   const toast = useToast();
 
+  // Tracks whether a fetch cycle for the CURRENT kbId has actually started
+  // — see the seeding effect below for why this can't just be
+  // `!enabledDimensionsQuery.isFetching`.
+  const hasFetchedOnceRef = useRef(false);
+
   // React Router does not unmount/remount this component just because the
   // :kbId route param changed to a different value (it's still the same
   // matched route) — component-local state like checkedKeys would
@@ -46,22 +51,48 @@ export function KnowledgeBaseSettingsPage() {
   useEffect(() => {
     setCheckedKeys(null);
     setError('');
+    hasFetchedOnceRef.current = false;
   }, [kbId]);
 
-  // Seed local checkbox state from the currently-enabled set exactly once
-  // per kbId, when it first arrives — a later background refetch (e.g.
-  // right after this page's own save invalidates the query) must not
-  // clobber whatever the user has since clicked. Mirrors the "form state
-  // initialized from server data, then locally owned" pattern other forms
-  // in this codebase get for free by only mounting after their data is
-  // already loaded (they live inside a Modal opened with an already-
-  // fetched target); this page has no such modal to defer behind, so the
-  // seeding has to be explicit.
+  // Record every isFetching transition so the seeding effect below can
+  // tell "a fetch for the current kbId has genuinely completed" apart from
+  // "this query happens to read !isFetching on the very render before its
+  // own background refetch has even been dispatched" — empirically, on a
+  // remount with an existing (stale) cache entry, TanStack Query's first
+  // render(s) after mount report `isFetching: false` with the OLD cached
+  // data still in `data`, and only flip to `isFetching: true` a render or
+  // two later once the actual refetch is under way. Gating the seed on
+  // `!isFetching` alone (an earlier attempt at this same fix) seeded from
+  // that stale snapshot before the refetch ever started, and — because the
+  // seeding effect only ever runs while checkedKeys is null — permanently
+  // ignored the fresh result that arrived afterward.
   useEffect(() => {
-    if (checkedKeys === null && enabledDimensionsQuery.data) {
+    if (enabledDimensionsQuery.isFetching) {
+      hasFetchedOnceRef.current = true;
+    }
+  }, [enabledDimensionsQuery.isFetching]);
+
+  // Seed local checkbox state from the currently-enabled set exactly once
+  // per kbId, once a fetch for that kbId has actually started and
+  // completed — a later background refetch (e.g. right after this page's
+  // own save invalidates the query) must not clobber whatever the user has
+  // since clicked. Mirrors the "form state initialized from server data,
+  // then locally owned" pattern other forms in this codebase get for free
+  // by only mounting after their data is already loaded (they live inside
+  // a Modal opened with an already-fetched target); this page has no such
+  // modal to defer behind, so the seeding has to be explicit. Codex
+  // outer-gate finding on PR #29 (fourth round, see hasFetchedOnceRef above
+  // for why a simpler `!isFetching` check isn't sufficient on its own).
+  useEffect(() => {
+    if (
+      checkedKeys === null &&
+      enabledDimensionsQuery.data &&
+      !enabledDimensionsQuery.isFetching &&
+      hasFetchedOnceRef.current
+    ) {
       setCheckedKeys(new Set(enabledDimensionsQuery.data.map((d) => d.key)));
     }
-  }, [checkedKeys, enabledDimensionsQuery.data]);
+  }, [checkedKeys, enabledDimensionsQuery.data, enabledDimensionsQuery.isFetching]);
 
   function toggle(key: string) {
     setCheckedKeys((prev) => {
