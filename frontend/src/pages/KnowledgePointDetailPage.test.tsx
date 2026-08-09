@@ -296,6 +296,26 @@ describe('KnowledgePointDetailPage', () => {
           ]),
         ),
       ),
+      // "current" now comes from the server's own live_answer (Kimi round
+      // 2 fix on PR #30, timeline.ts), not a client-side date comparison —
+      // this must match id 1 above (hash-default) for it to render "当前".
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answer-groups`, () =>
+        HttpResponse.json(
+          envelope([
+            makeAnswerGroup({
+              coord: {},
+              latest_answer: makeAnswer({ id: 1, coord: {}, coord_hash: 'hash-default' }),
+              live_answer: makeAnswer({ id: 1, coord: {}, coord_hash: 'hash-default' }),
+            }),
+            makeAnswerGroup({
+              coord: { tenant: 'acme' },
+              revoked: true,
+              latest_answer: makeAnswer({ id: 2, coord: { tenant: 'acme' }, coord_hash: 'hash-acme', revoked: true }),
+              live_answer: null,
+            }),
+          ]),
+        ),
+      ),
     );
     renderPage();
     await screen.findByText('kp-1');

@@ -1,5 +1,4 @@
 import type { Answer } from './answers';
-import { today } from '../lib/today';
 
 export type TimelineStatus = 'current' | 'superseded' | 'not-yet-effective' | 'revoked';
 
@@ -21,7 +20,20 @@ export interface TimelineEntry {
 // a React list key elsewhere — a wrong key there is a display glitch, not
 // data corruption — this fix is scoped to the one place a collision
 // actually corrupts data.) Codex outer-gate finding on PR #30.
-export function buildTimelineGroups(answers: Answer[]): Map<string, TimelineEntry[]> {
+//
+// `currentAnswerIdByHash` supplies, per coord_hash, the id of the answer
+// the SERVER currently considers live (or null if none is) — the same
+// live_answer the "当前答案" tab's own useAnswerGroups(at=undefined) query
+// already computes. Threading that through instead of recomputing
+// "current" from a client-side today() closes a real disagreement window:
+// a browser and the API server can be in different timezones (or just
+// briefly clock-skewed), so a client-local date comparison can pick a
+// different "current" version than the server did for the very same
+// group, right around a day boundary. Kimi 终审 round 2 finding on PR #30.
+export function buildTimelineGroups(
+  answers: Answer[],
+  currentAnswerIdByHash: Map<string, number | null>,
+): Map<string, TimelineEntry[]> {
   const byGroup = new Map<string, Answer[]>();
   for (const a of answers) {
     const key = a.coord_hash;
@@ -31,7 +43,7 @@ export function buildTimelineGroups(answers: Answer[]): Map<string, TimelineEntr
   }
   const result = new Map<string, TimelineEntry[]>();
   for (const [key, chain] of byGroup) {
-    result.set(key, tagChain(chain));
+    result.set(key, tagChain(chain, currentAnswerIdByHash.get(key) ?? null));
   }
   return result;
 }
@@ -51,29 +63,30 @@ function compareForCurrency(a: Answer, b: Answer): number {
   return b.id - a.id;
 }
 
-// `sortedDesc` is already ordered by the exact tie-break tuple above, so
-// the first non-revoked, already-effective entry in iteration order IS the
-// maximum among all such entries — one pass suffices.
-function findCurrentId(sortedDesc: Answer[], atTime: string): number | undefined {
-  return sortedDesc.find((a) => !a.revoked && a.effective_time <= atTime)?.id;
-}
-
-// Deliberately no `atTime` parameter — this always reads today(). If a
-// future feature needs "what was current as of some other date", that
-// requires explicitly adding the parameter here (and to callers), not
-// quietly wiring in the existing qMode/qTime state from the "当前答案" tab.
-// Design doc §4.2, issue #14.
-function tagChain(chain: Answer[]): TimelineEntry[] {
+// `currentId` is the server's own live_answer id for this group (or null
+// if the server considers none of them live) — never derived from a
+// client-side "now". Everything else follows from where that id lands in
+// `sorted`, which is ordered by the exact same tie-break tuple resolve.py
+// uses: compute_live_groups picks the max of (effective_time, created_at,
+// id) among already-effective, non-revoked rows, so any non-revoked row
+// sorting BEFORE the current one must have an effective_time later than
+// "now" (otherwise the server would have preferred it instead) — i.e.
+// not-yet-effective — and any row sorting AFTER it must have an
+// effective_time no later than the current row's, i.e. already effective
+// in the past — i.e. superseded. When currentId is null (no live answer
+// for this group at all — wholly revoked, or every version is still in
+// the future) every non-revoked row falls under "sorts before an absent
+// current", so they're all correctly tagged not-yet-effective.
+function tagChain(chain: Answer[], currentId: number | null): TimelineEntry[] {
   const sorted = [...chain].sort(compareForCurrency);
-  const atTime = today();
-  const currentId = findCurrentId(sorted, atTime);
-  return sorted.map((answer) => ({
+  const currentIndex = currentId === null ? -1 : sorted.findIndex((a) => a.id === currentId);
+  return sorted.map((answer, index) => ({
     answer,
     status: answer.revoked
       ? 'revoked'
-      : answer.id === currentId
+      : index === currentIndex
         ? 'current'
-        : answer.effective_time > atTime
+        : currentIndex === -1 || index < currentIndex
           ? 'not-yet-effective'
           : 'superseded',
   }));

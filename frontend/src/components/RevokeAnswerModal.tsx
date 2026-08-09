@@ -75,8 +75,8 @@ export function RevokeAnswerModal({
         <label>
           <span className="req">*</span>撤回原因
         </label>
-        <input
-          type="text"
+        <textarea
+          rows={2}
           placeholder="必填，写入留痕"
           value={reason}
           maxLength={500}

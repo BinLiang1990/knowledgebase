@@ -52,21 +52,39 @@ function TimelineTab({
   dimensions: Dimension[];
 }) {
   const answersQuery = useAllAnswers(kbId, kpId, kbReady);
+  // Deliberately independent of the "当前答案" tab's own qMode/qTime (design
+  // doc §4.2: this tab never time-travels) — always at=undefined, so the
+  // backend always resolves against ITS OWN today(). When the other tab is
+  // also in "最新" mode this shares the exact same query-cache entry (same
+  // key), so there's no extra request in the common case; it only becomes
+  // a genuinely separate fetch once the other tab is switched to "回看某
+  // 天". Its live_answer per coord_hash is the server-authoritative source
+  // buildTimelineGroups uses for "current" — see timeline.ts for why this
+  // replaces the previous client-side today() comparison. Kimi 终审 round
+  // 2 finding on PR #30.
+  const currentGroupsQuery = useAnswerGroups(kbId, kpId, undefined, kbReady);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
-  if (answersQuery.isLoading) {
+  if (answersQuery.isLoading || currentGroupsQuery.isLoading) {
     return (
       <div className="empty-block">
         <span className="spin" /> 加载中…
       </div>
     );
   }
-  if (answersQuery.isError) {
+  if (answersQuery.isError || currentGroupsQuery.isError) {
     return (
       <div className="empty-block">
         加载失败
         <br />
-        <a onClick={() => answersQuery.refetch()}>重试</a>
+        <a
+          onClick={() => {
+            void answersQuery.refetch();
+            void currentGroupsQuery.refetch();
+          }}
+        >
+          重试
+        </a>
       </div>
     );
   }
@@ -75,7 +93,10 @@ function TimelineTab({
     return <div className="empty-block">还没有任何答案</div>;
   }
 
-  const groups = buildTimelineGroups(answers);
+  const currentAnswerIdByHash = new Map(
+    (currentGroupsQuery.data ?? []).map((g) => [g.latest_answer.coord_hash, g.live_answer?.id ?? null]),
+  );
+  const groups = buildTimelineGroups(answers, currentAnswerIdByHash);
   // Sorted by label, not left in Map insertion order — insertion order
   // follows whatever order the backend's unfiltered SELECT happened to
   // return rows in, which is not guaranteed stable across requests. An
@@ -131,7 +152,7 @@ function TimelineTab({
         })}
       </div>
       <div className="mini-note" style={{ marginTop: 8 }}>
-        旧版本与撤回版永不删除。当前查询时间为 <span className="num">{today()}</span>。
+        旧版本与撤回版永不删除。"当前"版本与"当前答案"tab 保持一致，以服务器当前时间为准。
       </div>
     </>
   );

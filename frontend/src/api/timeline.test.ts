@@ -3,7 +3,11 @@ import { buildTimelineGroups } from './timeline';
 import { makeAnswer } from '../test/server';
 
 // Safely-distant past/future dates so these tests don't depend on the real
-// "today" at run time.
+// "today" at run time. Note effective_time only matters here as the
+// primary key of the sort/tie-break tuple (compareForCurrency) — since
+// Kimi round 2 on PR #30, "current" itself comes from the
+// currentAnswerIdByHash map (standing in for the server's live_answer),
+// never from comparing effective_time against a client-side today().
 const PAST_1 = '2000-01-01';
 const PAST_2 = '2000-06-01';
 const FUTURE = '2099-01-01';
@@ -16,9 +20,16 @@ const FUTURE = '2099-01-01';
 const HASH_A = 'hash-a';
 const HASH_B = 'hash-b';
 
+function currentMap(entries: Array<[string, number | null]>): Map<string, number | null> {
+  return new Map(entries);
+}
+
 describe('buildTimelineGroups', () => {
-  it('tags a single unrevoked version as current', () => {
-    const groups = buildTimelineGroups([makeAnswer({ id: 1, effective_time: PAST_1, coord_hash: HASH_A })]);
+  it('tags the server-reported live answer as current', () => {
+    const groups = buildTimelineGroups(
+      [makeAnswer({ id: 1, effective_time: PAST_1, coord_hash: HASH_A })],
+      currentMap([[HASH_A, 1]]),
+    );
     const entries = groups.get(HASH_A)!;
     expect(entries).toHaveLength(1);
     expect(entries[0].status).toBe('current');
@@ -28,10 +39,11 @@ describe('buildTimelineGroups', () => {
     // v1 written first with the later effective_time (PAST_2); v2 written
     // second but backfilled with an EARLIER effective_time (PAST_1). By
     // resolve.py's real rule, v1 (later effective_time) is current — the
-    // demo's simpler write-order logic would get this wrong.
+    // demo's simpler write-order logic would get this wrong. The server
+    // (standing in via currentMap) agrees v1 is live.
     const v1 = makeAnswer({ id: 1, effective_time: PAST_2, created_at: '2026-01-01T00:00:00', coord_hash: HASH_A });
     const v2 = makeAnswer({ id: 2, effective_time: PAST_1, created_at: '2026-01-02T00:00:00', coord_hash: HASH_A });
-    const groups = buildTimelineGroups([v1, v2]);
+    const groups = buildTimelineGroups([v1, v2], currentMap([[HASH_A, 1]]));
     const entries = groups.get(HASH_A)!;
     const byId = new Map(entries.map((e) => [e.answer.id, e.status]));
     expect(byId.get(1)).toBe('current');
@@ -42,29 +54,49 @@ describe('buildTimelineGroups', () => {
     // Regression for design doc §4.1: a whole-chain revoke sets
     // revoked=true on every row (backend batch UPDATE) — this must NOT be
     // collapsed the way get_change_log's own `status` field is (which only
-    // marks the chronologically-last version as "revoked").
+    // marks the chronologically-last version as "revoked"). A wholly
+    // revoked chain has no live_answer at all, so the server reports null.
     const v1 = makeAnswer({ id: 1, effective_time: PAST_1, created_at: '2026-01-01T00:00:00', revoked: true, coord_hash: HASH_A });
     const v2 = makeAnswer({ id: 2, effective_time: PAST_2, created_at: '2026-01-02T00:00:00', revoked: true, coord_hash: HASH_A });
-    const groups = buildTimelineGroups([v1, v2]);
+    const groups = buildTimelineGroups([v1, v2], currentMap([[HASH_A, null]]));
     const entries = groups.get(HASH_A)!;
     expect(entries.every((e) => e.status === 'revoked')).toBe(true);
   });
 
-  it('tags a future-effective version as not-yet-effective, not current', () => {
+  it('tags a version the server did not pick as live as not-yet-effective, not current', () => {
     const past = makeAnswer({ id: 1, effective_time: PAST_1, created_at: '2026-01-01T00:00:00', coord_hash: HASH_A });
     const future = makeAnswer({ id: 2, effective_time: FUTURE, created_at: '2026-01-02T00:00:00', coord_hash: HASH_A });
-    const groups = buildTimelineGroups([past, future]);
+    const groups = buildTimelineGroups([past, future], currentMap([[HASH_A, 1]]));
     const entries = groups.get(HASH_A)!;
     const byId = new Map(entries.map((e) => [e.answer.id, e.status]));
     expect(byId.get(1)).toBe('current');
     expect(byId.get(2)).toBe('not-yet-effective');
   });
 
+  it('tags every non-revoked row as not-yet-effective when the server reports no live answer at all', () => {
+    // Regression for Kimi round 2 on PR #30: when currentAnswerIdByHash has
+    // no live id for a group (every version still in the future, from the
+    // server's own point of view), nothing should be misreported as
+    // "superseded" — there was never a "current" for any of them to
+    // supersede.
+    const v1 = makeAnswer({ id: 1, effective_time: PAST_1, created_at: '2026-01-01T00:00:00', coord_hash: HASH_A });
+    const v2 = makeAnswer({ id: 2, effective_time: FUTURE, created_at: '2026-01-02T00:00:00', coord_hash: HASH_A });
+    const groups = buildTimelineGroups([v1, v2], currentMap([[HASH_A, null]]));
+    const entries = groups.get(HASH_A)!;
+    expect(entries.every((e) => e.status === 'not-yet-effective')).toBe(true);
+  });
+
   it('groups multiple coord groups independently, keyed by coord_hash', () => {
-    const groups = buildTimelineGroups([
-      makeAnswer({ id: 1, coord: {}, effective_time: PAST_1, coord_hash: HASH_A }),
-      makeAnswer({ id: 2, coord: { tenant: 'acme' }, effective_time: PAST_1, coord_hash: HASH_B }),
-    ]);
+    const groups = buildTimelineGroups(
+      [
+        makeAnswer({ id: 1, coord: {}, effective_time: PAST_1, coord_hash: HASH_A }),
+        makeAnswer({ id: 2, coord: { tenant: 'acme' }, effective_time: PAST_1, coord_hash: HASH_B }),
+      ],
+      currentMap([
+        [HASH_A, 1],
+        [HASH_B, 2],
+      ]),
+    );
     expect(groups.size).toBe(2);
     expect(groups.get(HASH_A)).toHaveLength(1);
     expect(groups.get(HASH_B)).toHaveLength(1);
@@ -80,7 +112,13 @@ describe('buildTimelineGroups', () => {
     // characters the coord's own text values contain.
     const a = makeAnswer({ id: 1, coord: { a: 'x|b:y' }, effective_time: PAST_1, coord_hash: HASH_A });
     const b = makeAnswer({ id: 2, coord: { a: 'x', b: 'y' }, effective_time: PAST_1, coord_hash: HASH_B });
-    const groups = buildTimelineGroups([a, b]);
+    const groups = buildTimelineGroups(
+      [a, b],
+      currentMap([
+        [HASH_A, 1],
+        [HASH_B, 2],
+      ]),
+    );
     expect(groups.size).toBe(2);
     expect(groups.get(HASH_A)).toHaveLength(1);
     expect(groups.get(HASH_B)).toHaveLength(1);
@@ -89,7 +127,7 @@ describe('buildTimelineGroups', () => {
   it('breaks a same-effective_time tie by created_at, matching resolve.py (not the demo\'s simpler comparison)', () => {
     const older = makeAnswer({ id: 1, effective_time: PAST_1, created_at: '2026-01-01T00:00:00', coord_hash: HASH_A });
     const newer = makeAnswer({ id: 2, effective_time: PAST_1, created_at: '2026-01-02T00:00:00', coord_hash: HASH_A });
-    const groups = buildTimelineGroups([older, newer]);
+    const groups = buildTimelineGroups([older, newer], currentMap([[HASH_A, 2]]));
     const entries = groups.get(HASH_A)!;
     const byId = new Map(entries.map((e) => [e.answer.id, e.status]));
     expect(byId.get(2)).toBe('current');
