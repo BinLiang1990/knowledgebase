@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from kb_backend.config import get_settings
 from kb_backend.db import get_db
 from kb_backend.envelope import BusinessError, envelope, register_exception_handlers
+from kb_backend.routers.audit_log import router as audit_log_router
 from kb_backend.routers.dimension import router as dimension_router
 from kb_backend.routers.knowledge_base import router as knowledge_base_router
 from kb_backend.routers.knowledge_point import router as knowledge_point_router
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(knowledge_base_router)
 app.include_router(dimension_router)
 app.include_router(knowledge_point_router)
+app.include_router(audit_log_router)
 
 
 @app.get("/health")

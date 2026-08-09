@@ -7,6 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..change_log import build_change_log
 from ..coord import CoordValueError, compute_coord_hash, normalize_coord
 from ..db import get_db
 from ..dimensions import get_enabled_dimension_types
@@ -15,6 +16,7 @@ from ..models.answer import Answer
 from ..models.knowledge_base import KnowledgeBase
 from ..models.knowledge_point import KnowledgePoint
 from ..resolve import ResolveResult, compute_all_answer_groups, compute_live_groups, resolve
+from ..schemas.change_log import ChangeLogEntryOut
 from ..schemas.knowledge_point import (
     AnswerCreate,
     AnswerEdit,
@@ -409,6 +411,27 @@ def get_knowledge_point(kb_id: int, kp_id: int, db: Session = Depends(get_db)) -
     kp = _get_kp_or_404(db, kb_id, kp_id)
     count = _get_active_answer_count(db, kp_id)
     return envelope(_to_kp_out(kp, count).model_dump(mode="json"))
+
+
+@router.get("/{kp_id}/change-log")
+def get_change_log(kb_id: int, kp_id: int, db: Session = Depends(get_db)) -> dict:
+    """变更留痕 (issue #12, design doc §4.1) — this knowledge point's whole
+    answer history reduced to a write-order timeline. Deliberately does NOT
+    special-case a soft-deleted knowledge point the way create_answer/
+    edit_answer do — this is a read-only audit view, not a "write new
+    content" operation, so a deleted KP's history remains fully visible
+    (mirrors list_answer_groups' own precedent)."""
+    _get_kp_or_404(db, kb_id, kp_id)
+    answers = (
+        db.execute(
+            select(Answer).where(Answer.knowledge_base_id == kb_id, Answer.knowledge_point_id == kp_id)
+        )
+        .scalars()
+        .all()
+    )
+    entries = build_change_log(list(answers))
+    out = [ChangeLogEntryOut.model_validate(e).model_dump(mode="json") for e in entries]
+    return envelope(out)
 
 
 @router.patch("/{kp_id}")

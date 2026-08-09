@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -6,12 +7,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..dimensions import get_enabled_dimension_types
 from ..envelope import BusinessError, envelope
+from ..models.answer import Answer
 from ..models.dimension import DimensionDefinition, KnowledgeBaseEnabledDimension
 from ..models.knowledge_base import KnowledgeBase
 from ..models.knowledge_point import KnowledgePoint
 from ..schemas.dimension import DimensionOut, EnabledDimensionsUpdate
-from ..schemas.knowledge_base import KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBaseUpdate
+from ..schemas.knowledge_base import (
+    KnowledgeBaseCreate,
+    KnowledgeBaseOut,
+    KnowledgeBaseStatsOut,
+    KnowledgeBaseUpdate,
+)
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-base"])
 
@@ -283,3 +291,67 @@ def set_enabled_dimensions(
         raise BusinessError("启用维度失败，请刷新后重试", status_code=400) from exc
 
     return _enabled_dimensions_envelope(db, kb_id)
+
+
+@router.get("/{kb_id}/stats")
+def get_knowledge_base_stats(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    """知识库统计卡 (issue #12, design doc §4.5) — matches frontend-mock's
+    computeKbStats exactly: subject_count/active_answer_count/
+    today_change_count are all scoped to knowledge points that are
+    currently active (status == "active"). A soft-deleted knowledge
+    point's un-revoked answers do not count as "在用" even though
+    Answer.revoked is still False on them — the KP's own deleted status is
+    what excludes them, not anything on the Answer row itself. This is a
+    deliberately different scope from get_change_log/the global /change-log
+    endpoint, which show history regardless of KP/KB status (design doc
+    §4.4) — stats answer "what is true right now", the log answers "what
+    happened", and a knowledge point being deleted changes the first
+    answer without erasing the second."""
+    _get_or_404(db, kb_id)
+
+    subject_count = _get_active_point_count(db, kb_id)
+
+    active_answer_count = db.execute(
+        select(func.count())
+        .select_from(Answer)
+        .join(KnowledgePoint, Answer.knowledge_point_id == KnowledgePoint.id)
+        .where(
+            Answer.knowledge_base_id == kb_id,
+            Answer.revoked.is_(False),
+            KnowledgePoint.status == "active",
+        )
+    ).scalar_one()
+
+    enabled_dimension_count = len(get_enabled_dimension_types(db, kb_id))
+
+    # Range comparison (>= today, < tomorrow), not DATE(created_at) — the
+    # latter can't use an index on created_at even if one existed later,
+    # and there's no reason to foreclose that option now. v1 assumes the
+    # app server and the database server share the same timezone (no
+    # explicit conversion is done anywhere else in this codebase either);
+    # if they diverge in a real deployment, "today" could be off by the
+    # difference near midnight — a known, accepted residual risk (design
+    # doc §4.5), not something this endpoint tries to solve.
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    today_change_count = db.execute(
+        select(func.count())
+        .select_from(Answer)
+        .join(KnowledgePoint, Answer.knowledge_point_id == KnowledgePoint.id)
+        .where(
+            Answer.knowledge_base_id == kb_id,
+            KnowledgePoint.status == "active",
+            (
+                ((Answer.created_at >= today) & (Answer.created_at < tomorrow))
+                | ((Answer.revoked_at >= today) & (Answer.revoked_at < tomorrow))
+            ),
+        )
+    ).scalar_one()
+
+    out = KnowledgeBaseStatsOut(
+        subject_count=subject_count,
+        active_answer_count=active_answer_count,
+        enabled_dimension_count=enabled_dimension_count,
+        today_change_count=today_change_count,
+    )
+    return envelope(out.model_dump(mode="json"))
