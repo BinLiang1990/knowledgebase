@@ -284,10 +284,11 @@ describe('KnowledgePointDetailPage', () => {
       http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers`, () =>
         HttpResponse.json(
           envelope([
-            makeAnswer({ id: 1, coord: {}, content: 'default version', effective_time: '2000-01-01' }),
+            makeAnswer({ id: 1, coord: {}, coord_hash: 'hash-default', content: 'default version', effective_time: '2000-01-01' }),
             makeAnswer({
               id: 2,
               coord: { tenant: 'acme' },
+              coord_hash: 'hash-acme',
               content: 'acme version',
               effective_time: '2000-01-01',
               revoked: true,

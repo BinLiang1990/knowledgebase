@@ -1,5 +1,4 @@
 import type { Answer } from './answers';
-import { coordGroupKey } from './answers';
 import { today } from '../lib/today';
 
 export type TimelineStatus = 'current' | 'superseded' | 'not-yet-effective' | 'revoked';
@@ -9,18 +8,23 @@ export interface TimelineEntry {
   status: TimelineStatus;
 }
 
-// Groups by coordGroupKey and tags each version within its group. Not the
-// same computation as get_change_log's own `status` field — see design doc
-// §4.1 (issue #14): a whole-chain revoke marks EVERY row here as "revoked"
-// (matching demo's tabTimeline), not just the chronologically-last one the
-// way change-log's write-order-based status does; and "current" here is
-// resolve.py's effective_time-based rule, not change-log's created_at
-// write-order rule. These genuinely answer different questions, so this
-// is a dedicated function, not a reinterpretation of change-log's output.
+// Groups by the server-computed coord_hash, NOT coordGroupKey(a.coord) —
+// coordGroupKey's `key:value` + `|`-joined string encoding is ambiguous for
+// any legal text value that itself contains ":" or "|": {a: "x|b:y"} and
+// {a: "x", b: "y"} both serialize to the identical string "a:x|b:y". That
+// collision would silently splice two unrelated coordinate chains'
+// versions into one timeline, corrupting both the displayed history and
+// the "current version" computation. coord_hash is the real SHA-256-based
+// hash the backend already computes and returns on every Answer — reusing
+// it sidesteps the whole class of encoding-collision bugs coordGroupKey is
+// exposed to. (coordGroupKey itself is left as-is for its existing use as
+// a React list key elsewhere — a wrong key there is a display glitch, not
+// data corruption — this fix is scoped to the one place a collision
+// actually corrupts data.) Codex outer-gate finding on PR #30.
 export function buildTimelineGroups(answers: Answer[]): Map<string, TimelineEntry[]> {
   const byGroup = new Map<string, Answer[]>();
   for (const a of answers) {
-    const key = coordGroupKey(a.coord);
+    const key = a.coord_hash;
     const list = byGroup.get(key);
     if (list) list.push(a);
     else byGroup.set(key, [a]);
