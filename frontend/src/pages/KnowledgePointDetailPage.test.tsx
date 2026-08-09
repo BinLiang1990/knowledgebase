@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
-import { KnowledgePointDetailPage, coordGroupKey } from './KnowledgePointDetailPage';
+import { KnowledgePointDetailPage } from './KnowledgePointDetailPage';
 import { renderWithProviders } from '../test/renderWithProviders';
 import {
   API_BASE,
@@ -11,6 +11,7 @@ import {
   http,
   makeAnswer,
   makeAnswerGroup,
+  makeChangeLogEntry,
   makeDimension,
   makeKb,
   makeKpDetail,
@@ -25,23 +26,6 @@ function renderPage(initialPath = '/knowledge-bases/1/knowledge-points/1') {
     { initialEntries: [initialPath] },
   );
 }
-
-describe('coordGroupKey', () => {
-  it('stays the same across an edit that only changes the answer id (Kimi fix on PR #24)', () => {
-    // Using latest_answer.id as the React key would treat every edit as a
-    // brand-new row, since a new version means a new answer id.
-    expect(coordGroupKey({ tenant: 'acme' })).toBe(coordGroupKey({ tenant: 'acme' }));
-  });
-
-  it('differs for genuinely different coords', () => {
-    expect(coordGroupKey({ tenant: 'acme' })).not.toBe(coordGroupKey({ tenant: 'other' }));
-    expect(coordGroupKey({})).not.toBe(coordGroupKey({ tenant: 'acme' }));
-  });
-
-  it('is stable regardless of key insertion order', () => {
-    expect(coordGroupKey({ a: '1', b: '2' })).toBe(coordGroupKey({ b: '2', a: '1' }));
-  });
-});
 
 describe('KnowledgePointDetailPage', () => {
   it('renders the header: title, id, active answer count, created info, status tag', async () => {
@@ -274,18 +258,125 @@ describe('KnowledgePointDetailPage', () => {
     await waitFor(() => expect(seenAtParams.some((p) => p !== null)).toBe(true));
   });
 
-  it('renders the other three tabs as in-development placeholders', async () => {
+  it('renders the still-unbuilt tab as an in-development placeholder', async () => {
     renderPage();
     await screen.findByText('kp-1');
 
     await userEvent.click(screen.getByText('立体全景'));
     expect(await screen.findByText(/立体全景开发中/)).toBeInTheDocument();
+  });
+
+  it('renders real content (not a placeholder) for the timeline and logs tabs (issue #14)', async () => {
+    renderPage();
+    await screen.findByText('kp-1');
 
     await userEvent.click(screen.getByText('版本历史'));
-    expect(await screen.findByText(/版本历史开发中/)).toBeInTheDocument();
+    expect(await screen.findByText('answer content')).toBeInTheDocument();
+    expect(screen.queryByText(/版本历史开发中/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByText('变更留痕'));
-    expect(await screen.findByText(/变更留痕开发中/)).toBeInTheDocument();
+    expect(await screen.findByText('写答案')).toBeInTheDocument();
+    expect(screen.queryByText(/变更留痕开发中/)).not.toBeInTheDocument();
+  });
+
+  it('lets the timeline tab switch between coord groups, and shows a status tag per version (issue #14)', async () => {
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers`, () =>
+        HttpResponse.json(
+          envelope([
+            makeAnswer({ id: 1, coord: {}, coord_hash: 'hash-default', content: 'default version', effective_time: '2000-01-01' }),
+            makeAnswer({
+              id: 2,
+              coord: { tenant: 'acme' },
+              coord_hash: 'hash-acme',
+              content: 'acme version',
+              effective_time: '2000-01-01',
+              revoked: true,
+            }),
+          ]),
+        ),
+      ),
+      // "current" now comes from the server's own live_answer (Kimi round
+      // 2 fix on PR #30, timeline.ts), not a client-side date comparison —
+      // this must match id 1 above (hash-default) for it to render "当前".
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answer-groups`, () =>
+        HttpResponse.json(
+          envelope([
+            makeAnswerGroup({
+              coord: {},
+              latest_answer: makeAnswer({ id: 1, coord: {}, coord_hash: 'hash-default' }),
+              live_answer: makeAnswer({ id: 1, coord: {}, coord_hash: 'hash-default' }),
+            }),
+            makeAnswerGroup({
+              coord: { tenant: 'acme' },
+              revoked: true,
+              latest_answer: makeAnswer({ id: 2, coord: { tenant: 'acme' }, coord_hash: 'hash-acme', revoked: true }),
+              live_answer: null,
+            }),
+          ]),
+        ),
+      ),
+    );
+    renderPage();
+    await screen.findByText('kp-1');
+    await userEvent.click(screen.getByText('版本历史'));
+
+    expect(await screen.findByText('default version')).toBeInTheDocument();
+    expect(screen.getByText('当前')).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByRole('combobox'), '适用条件：租户 = acme');
+    expect(await screen.findByText('acme version')).toBeInTheDocument();
+    expect(screen.getByText('已撤回')).toBeInTheDocument();
+  });
+
+  it('lists timeline coord-group options in a stable, sorted order regardless of backend row order (Kimi 终审 fix on PR #30)', async () => {
+    // Backend row order for an unfiltered SELECT isn't a guaranteed
+    // contract — deliberately return the groups in the OPPOSITE order
+    // from what a sorted-by-label render should produce, so this test
+    // would fail if the page just used Map insertion order verbatim.
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers`, () =>
+        HttpResponse.json(
+          envelope([
+            makeAnswer({ id: 1, coord: { tenant: 'zzz' }, coord_hash: 'hash-z', effective_time: '2000-01-01' }),
+            makeAnswer({ id: 2, coord: { tenant: 'aaa' }, coord_hash: 'hash-a', effective_time: '2000-01-01' }),
+          ]),
+        ),
+      ),
+    );
+    renderPage();
+    await screen.findByText('kp-1');
+    await userEvent.click(screen.getByText('版本历史'));
+
+    const options = await screen.findAllByRole('option');
+    const labels = options.map((o) => o.textContent);
+    expect(labels).toEqual([...labels].sort((a, b) => (a ?? '').localeCompare(b ?? '')));
+  });
+
+  it('can revoke a revocable answer from the change-log tab', async () => {
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/change-log`, () =>
+        HttpResponse.json(envelope([makeChangeLogEntry({ answer_id: 77, revocable: true, after_content: 'revocable content' })])),
+      ),
+    );
+    let requestedPath = '';
+    server.use(
+      http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers/:answerId/revoke`, ({ request }) => {
+        requestedPath = new URL(request.url).pathname;
+        return HttpResponse.json(envelope(makeAnswer({ id: 77, revoked: true })));
+      }),
+    );
+    renderPage();
+    await screen.findByText('kp-1');
+    await userEvent.click(screen.getByText('变更留痕'));
+    await userEvent.click(await screen.findByText('撤回'));
+
+    const dialog = (await screen.findByText('撤回答案')).closest('.modal') as HTMLElement;
+    await userEvent.type(within(dialog).getByPlaceholderText('必填，写入留痕'), '测试撤回');
+    await userEvent.click(within(dialog).getByText('确 认 撤 回'));
+
+    await screen.findByText('已撤回该条件下的答案');
+    expect(requestedPath).toBe('/knowledge-bases/1/knowledge-points/1/answers/77/revoke');
   });
 
   it('refreshes active_answer_count after creating an answer (invalidation reaches the single-KP fetch)', async () => {

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 import type { Dimension } from './dimensions';
-import { invalidateKnowledgePointDataQueries } from './knowledgePoints';
+import { GLOBAL_CHANGE_LOG_KEY, invalidateKnowledgePointDataQueries } from './knowledgePoints';
 import type { AnswerGroup } from './knowledgePoints';
 import type { FilterValue, Filters } from '../components/ui/dimensionValue';
 
@@ -181,7 +181,7 @@ export function useCreateAnswer(kbId: number, kpId: number) {
   return useMutation({
     mutationFn: (input: CreateAnswerInput) =>
       apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers`, input),
-    onSuccess: () => invalidateKnowledgePointDataQueries(queryClient, kbId),
+    onSuccess: () => invalidateAfterAnswerMutation(queryClient, kbId),
   });
 }
 
@@ -204,6 +204,54 @@ export function useEditAnswer(kbId: number, kpId: number) {
   return useMutation({
     mutationFn: ({ answerId, ...body }: EditAnswerInput) =>
       apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers/${answerId}/edit`, body),
-    onSuccess: () => invalidateKnowledgePointDataQueries(queryClient, kbId),
+    onSuccess: () => invalidateAfterAnswerMutation(queryClient, kbId),
   });
+}
+
+export function useRevokeAnswer(kbId: number, kpId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ answerId, revokeReason }: { answerId: number; revokeReason: string }) =>
+      apiClient.post<Answer>(`/knowledge-bases/${kbId}/knowledge-points/${kpId}/answers/${answerId}/revoke`, {
+        revoke_reason: revokeReason,
+      }),
+    onSuccess: () => invalidateAfterAnswerMutation(queryClient, kbId),
+  });
+}
+
+// Any mutation that writes/edits/revokes an answer produces a new (or
+// changed) change-log entry, which the global /change-log page may already
+// have cached — Kimi 终审 finding on PR #30: only useRevokeAnswer was doing
+// this invalidation; create/edit were missed, leaving a cached global log
+// page showing stale entries after either. invalidateKnowledgePointDataQueries
+// covers answer-groups/all-answers/change-log for THIS kp (design doc §4.5)
+// — the global key is independent (not scoped under any kbId) and always
+// needs its own explicit invalidation regardless of which KP changed.
+function invalidateAfterAnswerMutation(queryClient: ReturnType<typeof useQueryClient>, kbId: number) {
+  invalidateKnowledgePointDataQueries(queryClient, kbId);
+  queryClient.invalidateQueries({ queryKey: GLOBAL_CHANGE_LOG_KEY });
+}
+
+// Moved here from KnowledgePointDetailPage.tsx (issue #14 design doc §5) —
+// api/timeline.ts needs coordGroupKey too, and api/ importing from pages/
+// would invert this codebase's existing one-way layering (pages/ imports
+// api/, never the reverse). describeCoord moved alongside it for the same
+// reason, even though only pages/ currently uses it.
+export function describeCoord(coord: Record<string, unknown>, dimensions: Dimension[]): string {
+  const keys = Object.keys(coord);
+  if (!keys.length) return '默认答案 · 处处适用';
+  const parts = keys
+    .sort()
+    .map((k) => `${dimensions.find((d) => d.key === k)?.label ?? k} = ${String(coord[k])}`);
+  return `适用条件：${parts.join(' 且 ')}`;
+}
+
+// A stable identity for a coord group across edits — `latest_answer.id`
+// changes every time a new version is appended to the same group, which
+// would make React treat an edited row as a brand-new element instead of
+// the same logical group (losing DOM state, remount flicker). Mirrors the
+// demo's coordKeyOf. Kimi 终审 finding on PR #24.
+export function coordGroupKey(coord: Record<string, unknown>): string {
+  const keys = Object.keys(coord).sort();
+  return keys.length ? keys.map((k) => `${k}:${String(coord[k])}`).join('|') : '(默认)';
 }
