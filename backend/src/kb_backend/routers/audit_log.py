@@ -35,6 +35,15 @@ def get_global_change_log(db: Session = Depends(get_db)) -> dict:
     ondelete="RESTRICT" FK plus the absence of any physical-delete
     endpoint for KnowledgePoint/KnowledgeBase means that can't actually
     happen today.
+
+    No pagination — deliberate, not an oversight (Kimi 终审 flagged the
+    unbounded response on PR #28): every other list endpoint in this
+    codebase (list_knowledge_points, list_dimensions, list_answer_groups)
+    is equally unpaginated, and PRD §4.10 explicitly defers large-scale
+    query performance work to P2, not blocking P0/P1 delivery. Introducing
+    a pagination convention that exists nowhere else in this API, for one
+    endpoint, ahead of any known frontend need for it, is scope beyond
+    this issue — see design doc §4.6 for the full reasoning.
     """
     answers = db.execute(select(Answer)).scalars().all()
     entries = build_change_log(list(answers))
@@ -48,7 +57,16 @@ def get_global_change_log(db: Session = Depends(get_db)) -> dict:
 
     out = []
     for entry in entries:
-        kp_title, kb_id, kb_name = kp_lookup[entry.knowledge_point_id]
+        # .get(), not kp_lookup[...] — a bracket lookup would raise KeyError
+        # on exactly the orphan case the LEFT JOIN above is meant to guard
+        # against, defeating the whole point of choosing LEFT over INNER.
+        # Skip a genuinely orphaned row rather than 500ing the entire
+        # global log over one unreachable-in-practice row. Kimi 终审
+        # finding on PR #28.
+        lookup = kp_lookup.get(entry.knowledge_point_id)
+        if lookup is None:
+            continue
+        kp_title, kb_id, kb_name = lookup
         row = GlobalChangeLogEntryOut(
             **ChangeLogEntryOut.model_validate(entry).model_dump(),
             knowledge_base_id=kb_id,
