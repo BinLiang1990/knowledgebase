@@ -66,6 +66,16 @@ export function KnowledgeBaseSettingsPage() {
   // that stale snapshot before the refetch ever started, and — because the
   // seeding effect only ever runs while checkedKeys is null — permanently
   // ignored the fresh result that arrived afterward.
+  //
+  // This relies on the query's staleTime staying at the default 0 (never
+  // configured otherwise in this codebase's createQueryClient) — that's
+  // what guarantees every mount actually triggers a background refetch,
+  // so isFetching is guaranteed to become true at least once. If a future
+  // change raised staleTime for this or a shared default, an
+  // already-fresh cache entry could skip straight past `isFetching: true`
+  // and hasFetchedOnceRef would never flip, leaving checkedKeys stuck at
+  // null. Noted here (Kimi 终审 comment on PR #29) rather than building a
+  // more defensive mechanism now for a change that hasn't happened.
   useEffect(() => {
     if (enabledDimensionsQuery.isFetching) {
       hasFetchedOnceRef.current = true;
@@ -133,7 +143,11 @@ export function KnowledgeBaseSettingsPage() {
   if (kbLoading) {
     return (
       <AppShell title="知识库设置" crumb="知识库列表 / 知识库设置">
-        <KbTabs kbId={kbId} active="settings" />
+        {/* Number.isFinite guard — a malformed :kbId (e.g. non-numeric,
+            NaN) must not render tab links pointing at
+            /knowledge-bases/NaN/... while still in a loading/error state.
+            Kimi 终审 finding on PR #29. */}
+        {Number.isFinite(kbId) && <KbTabs kbId={kbId} active="settings" />}
         <div className="card">
           <div className="empty-block">
             <span className="spin" /> 加载中…
@@ -146,7 +160,7 @@ export function KnowledgeBaseSettingsPage() {
   if (kbIsError) {
     return (
       <AppShell title="知识库设置" crumb="知识库列表 / 知识库设置">
-        <KbTabs kbId={kbId} active="settings" />
+        {Number.isFinite(kbId) && <KbTabs kbId={kbId} active="settings" />}
         <div className="card">
           <div className="empty-block">
             加载知识库失败，请稍后重试

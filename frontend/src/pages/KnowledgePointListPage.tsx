@@ -86,7 +86,11 @@ export function KnowledgePointListPage() {
   if (kbLoading) {
     return (
       <AppShell title="知识点列表" crumb="知识库列表 / 知识点列表">
-        <KbTabs kbId={kbId} active="kp-list" />
+        {/* Number.isFinite guard — a malformed :kbId (e.g. non-numeric,
+            NaN) must not render tab links pointing at
+            /knowledge-bases/NaN/... while still in a loading/error state.
+            Kimi 终审 finding on PR #29. */}
+        {Number.isFinite(kbId) && <KbTabs kbId={kbId} active="kp-list" />}
         <div className="card">
           <div className="empty-block">
             <span className="spin" /> 加载中…
@@ -103,7 +107,7 @@ export function KnowledgePointListPage() {
     // user nothing to retry.
     return (
       <AppShell title="知识点列表" crumb="知识库列表 / 知识点列表">
-        <KbTabs kbId={kbId} active="kp-list" />
+        {Number.isFinite(kbId) && <KbTabs kbId={kbId} active="kp-list" />}
         <div className="card">
           <div className="empty-block">
             加载知识库失败，请稍后重试

@@ -88,6 +88,13 @@ describe('KnowledgeBaseSettingsPage', () => {
     expect(await screen.findByText(/还没有任何启用中的全局维度/)).toBeInTheDocument();
   });
 
+  it('does not render KbTabs for a malformed (non-numeric) :kbId while the knowledge-base fetch is still loading/failing (Kimi 终审 fix on PR #29)', async () => {
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 })));
+    const { container } = renderPage('/knowledge-bases/abc/settings');
+    await screen.findByText(/加载知识库失败/);
+    expect(container.querySelector('.kb-tabs')).toBeNull();
+  });
+
   it('seeds from the fresh refetch, not a stale cached snapshot, on remount (Codex outer-gate fix on PR #29, round 4)', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     // Simulate "visited this page earlier in the session, left, and the

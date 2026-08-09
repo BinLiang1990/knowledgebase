@@ -375,6 +375,16 @@ describe('KnowledgePointListPage', () => {
     expect(container.querySelector('.kb-tabs')).not.toBeNull();
   });
 
+  it('does not render KbTabs for a malformed (non-numeric) :kbId while the knowledge-base fetch is still failing/loading (Kimi 终审 fix on PR #29)', async () => {
+    server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(errorEnvelope('数据库异常'), { status: 500 })));
+    const { container } = renderPage('/knowledge-bases/abc/knowledge-points');
+    await screen.findByText(/加载知识库失败/);
+    // Must not render tab links pointing at /knowledge-bases/NaN/... —
+    // rendering nothing is safer than a broken link while the id itself
+    // is malformed.
+    expect(container.querySelector('.kb-tabs')).toBeNull();
+  });
+
   it('does not render KbTabs for an invalid knowledge base, mirroring the demo (design doc §2.1)', async () => {
     server.use(http.get(`${API_BASE}/knowledge-bases`, () => HttpResponse.json(envelope([]))));
     const { container } = renderPage('/knowledge-bases/999/knowledge-points');
