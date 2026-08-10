@@ -25,6 +25,9 @@ curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
 
 # 如果服务器到 docker.io 很慢/超时，配个国内镜像加速器
+# （注意：registry-mirrors 只对 docker.io 生效，加速不了 ghcr.io 等其他仓库，
+#   所以 Dockerfile 的基础镜像特意选了 Docker Hub 的官方 python 镜像，
+#   不要改回 ghcr.io/astral-sh/uv——国内服务器拉 ghcr.io 经常 TLS 握手超时）
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<'EOF'
 {
