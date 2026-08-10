@@ -24,21 +24,30 @@ CentOS 服务器上跑，不存在"从 Windows 搬 `.venv` 过去装不上"的�
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
 
-# 如果服务器到 docker.io 很慢/超时，配个国内镜像加速器
-# （注意：registry-mirrors 只对 docker.io 生效，加速不了 ghcr.io 等其他仓库，
-#   所以 Dockerfile 的基础镜像特意选了 Docker Hub 的官方 python 镜像，
-#   不要改回 ghcr.io/astral-sh/uv——国内服务器拉 ghcr.io 经常 TLS 握手超时）
-mkdir -p /etc/docker
-cat > /etc/docker/daemon.json <<'EOF'
-{
-  "registry-mirrors": ["https://registry.cn-hangzhou.aliyuncs.com"]
-}
-EOF
-systemctl restart docker
-
 # 新版 Docker 自带 `docker compose`(v2插件)子命令，无需单独装 docker-compose；
 # 用 `docker compose version` 确认一下能用即可。
 ```
+
+> **不需要配 `/etc/docker/daemon.json` 的 `registry-mirrors`。** 2024 年起国内大部分
+> 共享 Docker Hub 镜像加速器（包括曾经能用的 `registry.cn-hangzhou.aliyuncs.com` 通
+> 用加速）陆续被收紧/下线，拉 `docker.io` 上的官方镜像经常直接 `403 Forbidden`，配
+> registry-mirror 也救不回来。`Dockerfile` 里已经把基础镜像换成直连
+> `docker.m.daocloud.io`（DaoCloud 托管的 docker.io 官方镜像镜像拷贝），不依赖
+> registry-mirror 转发。build 前建议先手动验证一下这个域名在你的服务器上能不能拉通：
+>
+> ```bash
+> docker pull docker.m.daocloud.io/library/python:3.10-slim-bookworm
+> ```
+>
+> 如果这条也失败（镜像服务的可用性会变化），换成下面任一方案，改的地方都只是
+> `Dockerfile` 第一行的 `FROM`：
+> - 换一家同样托管了 docker.io 镜像拷贝的厂商，如
+>   `ccr.ccs.tencentyun.com/library/python:3.10-slim-bookworm`；
+> - 去阿里云容器镜像服务控制台（<https://cr.console.aliyun.com> → 镜像工具 → 镜像加
+>   速器）领一个你账号专属的加速地址（形如 `https://xxxxxxxx.mirror.aliyuncs.com`，
+>   不是本文之前用过的那个共享地址），配进 `/etc/docker/daemon.json` 的
+>   `registry-mirrors` 后 `systemctl restart docker`，`FROM` 保持写
+>   `python:3.10-slim-bookworm` 不用改。
 
 ## 二、部署代码（首次）
 
