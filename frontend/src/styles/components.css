@@ -14,7 +14,7 @@
   display: flex; flex-direction: column;
 }
 .side-logo { height: 64px; display: flex; align-items: center; gap: 10px; padding: 0 20px; flex: none; }
-.side-logo .h-bar { height: 36px; }
+.side-logo-mark { width: 36px; height: 36px; flex: none; }
 .side-logo .name { font-size: 15px; font-weight: 700; color: var(--ink-1); line-height: 1.3; }
 .side-logo .name small { display: block; font-size: 10px; font-weight: 400; letter-spacing: 2.5px; color: var(--ink-6); }
 

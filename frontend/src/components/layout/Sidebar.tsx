@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import logo from '../../assets/logo.png';
 
 // Design doc §4.2 (issue #6): only render nav items whose page actually
 // exists yet. 维度管理 (issue #13) and 操作日志 (issue #14) are both filled
@@ -7,7 +8,7 @@ export function Sidebar() {
   return (
     <aside className="side">
       <div className="side-logo">
-        <span className="h-bar" />
+        <img src={logo} alt="" className="side-logo-mark" />
         <span className="name">
           知识库管理
           <small>KNOWLEDGE BASE ADMIN</small>
