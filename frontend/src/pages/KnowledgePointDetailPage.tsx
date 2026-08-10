@@ -15,6 +15,7 @@ import { ConditionPicker, type Filters } from '../components/ui/ConditionPicker'
 import { WriteAnswerModal, type ExistingAnswer } from '../components/WriteAnswerModal';
 import { EditTitleModal } from '../components/EditTitleModal';
 import { DeleteKnowledgePointModal } from '../components/DeleteKnowledgePointModal';
+import { RevokeAnswerModal } from '../components/RevokeAnswerModal';
 import { today } from '../lib/today';
 
 type TabKey = 'now' | 'tree' | 'timeline' | 'logs';
@@ -186,12 +187,14 @@ function AnswerRow({
   isTop,
   editDisabledReason,
   onEdit,
+  onRevoke,
 }: {
   group: AnswerGroup;
   dimensions: Dimension[];
   isTop: boolean;
   editDisabledReason: string | null;
   onEdit: () => void;
+  onRevoke: () => void;
 }) {
   const live = group.live_answer!;
   return (
@@ -207,6 +210,15 @@ function AnswerRow({
             title={editDisabledReason ?? undefined}
           >
             编辑
+          </a>
+          {/* Deliberately not gated on editDisabledReason (which includes
+              "KP 已删除"): revoke_answer's own backend guard doesn't check
+              the knowledge point's deleted status either — PRD §6 rule #8
+              treats KP soft-delete and answer revocation as independent
+              operations, unlike edit (which edit_answer does reject for a
+              deleted KP). */}
+          <a className="danger" onClick={onRevoke}>
+            撤回
           </a>
         </span>
       </div>
@@ -242,6 +254,7 @@ export function KnowledgePointDetailPage() {
   const [writeTarget, setWriteTarget] = useState<'create' | ExistingAnswer | null>(null);
   const [editTitleOpen, setEditTitleOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<{ answerId: number; content: string } | null>(null);
 
   const at = qMode === 'day' ? qTime : undefined;
   const hasFilter = Object.keys(filters).length > 0;
@@ -488,6 +501,7 @@ export function KnowledgePointDetailPage() {
                       note: g.live_answer!.note,
                     })
                   }
+                  onRevoke={() => setRevokeTarget({ answerId: g.live_answer!.id, content: g.live_answer!.content })}
                 />
               ))}
           </>
@@ -507,6 +521,15 @@ export function KnowledgePointDetailPage() {
         <EditTitleModal kbId={kbId} kpId={kpId} currentTitle={kp.title} onClose={() => setEditTitleOpen(false)} />
       )}
       {deleteOpen && <DeleteKnowledgePointModal kbId={kbId} target={kp} onClose={() => setDeleteOpen(false)} />}
+      {revokeTarget && (
+        <RevokeAnswerModal
+          kbId={kbId}
+          kpId={kpId}
+          answerId={revokeTarget.answerId}
+          content={revokeTarget.content}
+          onClose={() => setRevokeTarget(null)}
+        />
+      )}
     </AppShell>
   );
 }

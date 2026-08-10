@@ -36,14 +36,6 @@ function Leaf({ group, labelNode }: { group: AnswerGroup; labelNode?: ReactNode 
     '· '
   );
 
-  if (group.revoked) {
-    return (
-      <div className="tnode" style={{ cursor: 'default', color: 'var(--ink-6)' }}>
-        {arrow}
-        <s>{group.latest_answer.content}</s> <span className="cnt">已撤回，留痕保存</span>
-      </div>
-    );
-  }
   if (!group.live_answer) {
     // Not yet effective at the selected time — distinct from revoked (see
     // design doc §2): the demo conflates the two, this is a deliberate
@@ -76,7 +68,13 @@ function Leaf({ group, labelNode }: { group: AnswerGroup; labelNode?: ReactNode 
 }
 
 export function AnswerGroupTree({ groups, dimensions }: AnswerGroupTreeProps) {
-  if (!groups.length) {
+  // Already-revoked chains are excluded from this read-only overview: the
+  // knowledge-points list is where operators check what's currently live,
+  // not an audit trail. The change log / version history pages remain the
+  // place to see revoked history.
+  const liveGroups = groups.filter((g) => !g.revoked);
+
+  if (!liveGroups.length) {
     return (
       <div className="kids">
         <div className="mini-note" style={{ padding: '8px 0' }}>
@@ -86,10 +84,10 @@ export function AnswerGroupTree({ groups, dimensions }: AnswerGroupTreeProps) {
     );
   }
 
-  const defaultGroups = groups.filter((g) => Object.keys(g.coord).length === 0);
+  const defaultGroups = liveGroups.filter((g) => Object.keys(g.coord).length === 0);
   const singleByKey = new Map<string, AnswerGroup[]>();
   const multiGroups: AnswerGroup[] = [];
-  for (const g of groups) {
+  for (const g of liveGroups) {
     const keys = Object.keys(g.coord);
     if (keys.length === 1) {
       const key = keys[0];

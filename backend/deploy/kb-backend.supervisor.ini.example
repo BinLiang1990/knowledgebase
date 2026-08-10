@@ -1,0 +1,17 @@
+# 复制到服务器的 /etc/supervisord.d/kb-backend.ini，按需改路径/用户/端口后
+# `supervisorctl reread && supervisorctl update`。
+#
+# command 直接指向 .venv 里的 uvicorn 二进制 —— 它的 shebang 已经绑定了
+# uv sync 产出的那个隔离 Python 解释器+依赖，supervisor 进程本身不需要认识
+# uv、不需要激活任何 venv，天然和系统 Python 隔离。
+[program:kb-backend]
+directory=/opt/kb-backend/backend
+command=/opt/kb-backend/backend/.venv/bin/uvicorn kb_backend.main:app --host 0.0.0.0 --port 8000 --workers 2
+autostart=true
+autorestart=true
+startsecs=3
+stopasgroup=true
+killasgroup=true
+user=deploy
+stdout_logfile=/var/log/kb-backend/stdout.log
+stderr_logfile=/var/log/kb-backend/stderr.log

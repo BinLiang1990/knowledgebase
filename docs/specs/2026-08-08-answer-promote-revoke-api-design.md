@@ -6,7 +6,9 @@ issue #10 明确要求（P1，PRD §4.5/§6 规则 #3/#4/§8）：
 - 设为默认：把某条答案内容写成默认答案(coord={})版本链的新版本，原答案不变
 - 撤回：对某个条件组合的整条版本链做逻辑删除，必须填写撤回原因
 
-不做：批量导入（issue #11）；"撤回的撤回"（PRD §8 明确列为 v1 不做——没有把已撤回条件组合恢复回撤回前状态的接口，本设计里也不会因为"看起来对称"而加一个）。
+不做：批量导入（issue #11）。
+
+> **2026-08-10 修订**：本节原本还列了"撤回的撤回"作为不做项（当时 PRD §8 把它列为 v1 明确不做）。用户实测发现"往一个已撤回的条件组合写新答案被 400 拒绝"不符合预期，要求放开——现在往任何已撤回的链写入新版本（新建/编辑/迁移进来/设为默认目标）都会把整条链复活为未撤回状态，不再是一个需要"联系我方人工处理"的终态。详见 `docs/specs/2026-08-08-knowledge-point-answer-api-design.md` 的同名修订章节；本设计文档下面 §4.3 提到的"目标（默认链）若已被撤回，同样 400 拒绝"已不再成立，改为成功并复活该链。
 
 依赖 issue #4（答案的写入/编辑接口、`Answer` 模型、`coord.py`）——不需要新 migration，`Answer` 表已有 `revoked`/`revoked_at`/`revoked_by`/`revoke_reason` 全部字段（issue #1 建表时就留好了）。
 
@@ -21,7 +23,7 @@ issue #10 明确要求（P1，PRD §4.5/§6 规则 #3/#4/§8）：
 
 ## 3. 数据来源（不新增 migration，不新增业务表）
 
-复用 issue #4 已有的一切：`Answer` 模型全部字段、`coord.py::compute_coord_hash`、`knowledge_point.py` 里已有的 `_get_kp_or_404`、`_chain_is_revoked`、`_ANSWER_NOT_FOUND_MSG`。`edit_answer` 的迁移分支已经写过一次"整条链批量撤回"的 SQL，本次撤回端点直接复用同一个写法，不是重新发明——**必须逐字复用，包括 `knowledge_point_id` 这个过滤条件**：
+复用 issue #4 已有的一切：`Answer` 模型全部字段、`coord.py::compute_coord_hash`、`knowledge_point.py` 里已有的 `_get_kp_or_404`、`_ANSWER_NOT_FOUND_MSG`（`_chain_is_revoked` 本身已在 2026-08-10 修订里被 `_revive_chain_if_revoked` 取代并删除，见 §1 顶部的修订说明）。`edit_answer` 的迁移分支已经写过一次"整条链批量撤回"的 SQL，本次撤回端点直接复用同一个写法，不是重新发明——**必须逐字复用，包括 `knowledge_point_id` 这个过滤条件**：
 
 ```python
 db.execute(
@@ -57,7 +59,7 @@ PRD 原文："把**当前这条答案**的内容，写成默认答案版本链�
 
 不单独建一个"设为默认"的专用写路径——它和 `create_answer` 唯一的区别就是 `content` 从哪儿来（客户端传 vs 从源答案抄）、`coord` 固定是 `{}`。所以复用 `create_answer` 已经有的两条校验：
 - 知识点已删除 → 拒绝（"知识点已删除，无法写入答案"，跟 `create_answer`/`edit_answer` 一致——这是一次"写新内容"的操作，不是撤回那种清理性操作，见 §4.4 的对比）
-- 默认答案链本身已被整体撤回 → 拒绝（`_chain_is_revoked(db, kp_id, compute_coord_hash({}))`），跟直接调用 `create_answer(coord={})` 会被拒绝的场景完全对齐，不能靠"设为默认"这条侧门绕过"不能往已撤回的链里写"的规则
+- 默认答案链本身已被整体撤回 → 不再拒绝（2026-08-10 修订）：`_revive_chain_if_revoked(db, kp_id, compute_coord_hash({}))` 先把该链复活，再正常写入，跟直接调用 `create_answer(coord={})` 的行为完全对齐
 
 源答案本身是否已经被撤回，不做限制——"设为默认"抄的是**内容**（一段文本），不是把源答案链本身复活；抄一条曾经正确、后来被撤回的答案的文字说法，不违反任何 PRD 规则。这是本设计的一个判断，PRD 没有明确写要不要限制，此处放开。
 

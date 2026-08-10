@@ -231,7 +231,15 @@ function resolveAnswer(kbId, kpId, Q, atTime) {
 
   const candidates = groups.filter(g => coordCompatible(g.coord, Q));
   if (!candidates.length) return { status: "none", groups };
-  candidates.sort((a, b) => b.spec - a.spec || b.weight - a.weight || b.live.time.localeCompare(a.live.time));
+  // A candidate fully explained by what was queried (none of its own
+  // dimensions go unasked) outranks one that also pins a dimension the
+  // query never specified, regardless of spec — e.g. a plain 人员=Eden
+  // match beats a 人员=Eden 且 场景=... rule when 场景 wasn't queried.
+  const coveredByQuery = (coord) =>
+    Object.keys(coord).filter(k => coord[k] !== undefined && coord[k] !== "").every(k => qKeys.includes(k));
+  candidates.sort((a, b) =>
+    Number(coveredByQuery(b.coord)) - Number(coveredByQuery(a.coord)) ||
+    b.spec - a.spec || b.weight - a.weight || b.live.time.localeCompare(a.live.time));
   const top = candidates[0];
   const exact = top.spec === qKeys.length && Object.keys(top.coord).every(k => String(top.coord[k]) === String(Q[k]));
   return { status: exact ? "exact" : "weighted", ...top, groups, candidates };

@@ -240,7 +240,7 @@ describe('KnowledgePointListPage', () => {
     expect(await screen.findByText(/tree content/)).toBeInTheDocument();
   });
 
-  it('renders a revoked answer group struck through, distinct from a not-yet-effective one', async () => {
+  it('hides a revoked answer group from the tree, but still shows a not-yet-effective one', async () => {
     server.use(
       http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:id/answer-groups`, () =>
         HttpResponse.json(
@@ -268,8 +268,9 @@ describe('KnowledgePointListPage', () => {
     // the row.
     await userEvent.click(screen.getByText('1 条答案'));
 
-    expect(await screen.findByText('已撤回，留痕保存')).toBeInTheDocument();
-    expect(screen.getByText(/尚未生效/)).toBeInTheDocument();
+    expect(await screen.findByText(/尚未生效/)).toBeInTheDocument();
+    expect(screen.queryByText('revoked content')).not.toBeInTheDocument();
+    expect(screen.queryByText('已撤回，留痕保存')).not.toBeInTheDocument();
   });
 
   it('creates a knowledge point and refreshes the list', async () => {

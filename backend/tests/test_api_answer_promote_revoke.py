@@ -118,7 +118,11 @@ def test_promote_to_default_rejects_when_knowledge_point_is_deleted(client: Test
     assert resp.status_code == 400
 
 
-def test_promote_to_default_rejects_when_default_chain_is_revoked(client: TestClient, migrated_schema) -> None:
+def test_promote_to_default_revives_an_already_revoked_default_chain(
+    client: TestClient, migrated_schema, db_engine: Engine
+) -> None:
+    """2026-08-10 revision: revocation is no longer a terminal state —
+    promoting into a revoked default chain succeeds and un-revokes it."""
     kb = _create_kb(client, "kb-promote-revoked-default")
     kp = _create_kp(client, kb["id"], "kp-1")
     default_answer = _write_answer(client, kb["id"], kp["id"], "default content", "2026-08-01")
@@ -126,7 +130,12 @@ def test_promote_to_default_rejects_when_default_chain_is_revoked(client: TestCl
     client.post(_revoke_url(kb["id"], kp["id"], default_answer["id"]), json={"revoke_reason": "x"})
 
     resp = client.post(_promote_url(kb["id"], kp["id"], other_source["id"]), json={"effective_time": "2026-08-05"})
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["data"]["revoked"] is False
+
+    with db_engine.connect() as conn:
+        row = conn.execute(text("SELECT revoked FROM answer WHERE id = :id"), {"id": default_answer["id"]}).one()
+    assert row[0] == 0
 
 
 def test_promote_to_default_source_not_found_returns_404(client: TestClient, migrated_schema) -> None:

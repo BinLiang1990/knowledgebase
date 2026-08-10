@@ -101,6 +101,46 @@ describe('KnowledgePointDetailPage', () => {
     expect(screen.queryByRole('heading', { name: '编辑答案' })).not.toBeInTheDocument();
   });
 
+  it('revokes the live answer from the 当前答案 tab', async () => {
+    let requestedPath = '';
+    let requestedBody: unknown = null;
+    server.use(
+      http.post(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:kpId/answers/:answerId/revoke`, async ({ request }) => {
+        requestedPath = new URL(request.url).pathname;
+        requestedBody = await request.json();
+        return HttpResponse.json(envelope(makeAnswer({ id: 1, revoked: true })));
+      }),
+    );
+    renderPage();
+    await screen.findByText('answer content');
+    await userEvent.click(screen.getByText('撤回'));
+
+    const dialog = (await screen.findByText('撤回答案')).closest('.modal') as HTMLElement;
+    await userEvent.type(within(dialog).getByPlaceholderText('必填，写入留痕'), '录入错误');
+    await userEvent.click(within(dialog).getByText('确 认 撤 回'));
+
+    await screen.findByText('已撤回该条件下的答案');
+    expect(requestedPath).toBe('/knowledge-bases/1/knowledge-points/1/answers/1/revoke');
+    expect(requestedBody).toEqual({ revoke_reason: '录入错误' });
+  });
+
+  it('keeps the per-answer "撤回" link enabled for a soft-deleted knowledge point, unlike "编辑" (PRD §6 rule #8)', async () => {
+    // revoke_answer's own backend guard doesn't reject a deleted KP (unlike
+    // edit_answer), so the UI must not disable it either — see the comment
+    // on AnswerRow's 撤回 link in KnowledgePointDetailPage.tsx.
+    server.use(
+      http.get(`${API_BASE}/knowledge-bases/:kbId/knowledge-points/:id`, () =>
+        HttpResponse.json(envelope(makeKpDetail({ status: 'deleted', deleted_at: '2026-08-01T00:00:00', delete_reason: 'obsolete' }))),
+      ),
+    );
+    renderPage();
+    await screen.findByText(/该知识点已被/);
+    const revokeLink = await screen.findByText('撤回');
+    expect(revokeLink).not.toHaveAttribute('title');
+    await userEvent.click(revokeLink);
+    expect(await screen.findByText('撤回答案')).toBeInTheDocument();
+  });
+
   it('edits the title and refreshes the header in place', async () => {
     let title = 'kp-1';
     server.use(

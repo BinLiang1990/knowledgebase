@@ -318,20 +318,33 @@ def test_edit_answer_via_older_non_latest_version_id_still_migrates_whole_chain(
     assert all(r[0] == 0 for r in rows)
 
 
-def test_edit_revoked_answer_is_rejected(client: TestClient, migrated_schema, db_engine: Engine) -> None:
+def test_edit_revoked_answer_revives_the_chain(client: TestClient, migrated_schema, db_engine: Engine) -> None:
+    """2026-08-10 revision: revocation is no longer a terminal state —
+    editing an answer whose chain was revoked writes a new version and
+    un-revokes the whole chain, rather than being rejected."""
     kb = _create_kb(client, "kb-edit-revoked")
     kp = _create_kp(client, kb["id"], "kp-edit-revoked")
     v1 = client.post(
         _answers_url(kb["id"], kp["id"]), json={"content": "v1", "effective_time": "2026-08-08"}
     ).json()["data"]
     with db_engine.begin() as conn:
-        conn.execute(text("UPDATE answer SET revoked = 1 WHERE id = :id"), {"id": v1["id"]})
+        conn.execute(
+            text("UPDATE answer SET revoked = 1, revoke_reason = 'old reason' WHERE id = :id"), {"id": v1["id"]}
+        )
 
     resp = client.post(
         _edit_url(kb["id"], kp["id"], v1["id"]),
         json={"content": "v2", "effective_time": "2026-08-09"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["data"]["revoked"] is False
+
+    with db_engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT revoked, revoke_reason FROM answer WHERE knowledge_point_id = :kp"), {"kp": kp["id"]}
+        ).all()
+    assert all(row[0] == 0 for row in rows)
+    assert all(row[1] is None for row in rows)
 
 
 def test_edit_answer_explicit_null_coord_is_rejected_with_422(client: TestClient, migrated_schema) -> None:
@@ -358,12 +371,14 @@ def test_edit_answer_nonexistent_answer_id_returns_404(client: TestClient, migra
     assert resp.status_code == 404
 
 
-def test_write_answer_into_revoked_chain_is_rejected(
+def test_write_answer_into_revoked_chain_revives_it(
     client: TestClient, migrated_schema, db_engine: Engine
 ) -> None:
-    """Found by the Codex outer-gate review on PR #20 (round 2): writing a
-    fresh non-revoked row under an already-revoked coord_hash would silently
-    resurrect a dead chain, leaving it with mixed revocation states."""
+    """2026-08-10 revision: revocation is no longer a terminal state — a
+    fresh write under an already-revoked coord_hash now un-revokes every
+    row in that chain (not just the new one), keeping the "whole chain
+    shares one revoked value" invariant intact rather than leaving a
+    mixed-state chain."""
     kb = _create_kb(client, "kb-answer-revoked-chain")
     kp = _create_kp(client, kb["id"], "kp-answer-revoked-chain")
     v1 = client.post(
@@ -373,13 +388,19 @@ def test_write_answer_into_revoked_chain_is_rejected(
         conn.execute(text("UPDATE answer SET revoked = 1 WHERE id = :id"), {"id": v1["id"]})
 
     resp = client.post(
-        _answers_url(kb["id"], kp["id"]), json={"content": "resurrection attempt", "effective_time": "2026-08-09"}
+        _answers_url(kb["id"], kp["id"]), json={"content": "revival", "effective_time": "2026-08-09"}
     )
-    assert resp.status_code == 400
-    assert resp.json()["code"] == 444
+    assert resp.status_code == 200
+    assert resp.json()["data"]["revoked"] is False
+
+    with db_engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT revoked FROM answer WHERE knowledge_point_id = :kp"), {"kp": kp["id"]}
+        ).all()
+    assert all(row[0] == 0 for row in rows)
 
 
-def test_edit_answer_migrating_into_a_revoked_chain_is_rejected(
+def test_edit_answer_migrating_into_a_revoked_chain_revives_it(
     client: TestClient, migrated_schema, db_engine: Engine
 ) -> None:
     kb = _create_kb(client, "kb-edit-migrate-into-revoked")
@@ -401,17 +422,62 @@ def test_edit_answer_migrating_into_a_revoked_chain_is_rejected(
     resp = client.post(
         _edit_url(kb["id"], kp["id"], live["id"]),
         json={
-            "content": "trying to migrate into dead chain",
+            "content": "migrating into dead chain",
             "effective_time": "2026-08-09",
             "coord": {"tenant": "dead"},
-            "migration_reason": "should be rejected",
+            "migration_reason": "reviving the dead chain on purpose",
         },
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["data"]["revoked"] is False
 
     with db_engine.connect() as conn:
+        # The migrated-away-from chain (tenant=live) is still revoked, same
+        # as before this revision — only the *target* of a migration gets
+        # revived, not the source being migrated out of.
         live_row = conn.execute(text("SELECT revoked FROM answer WHERE id = :id"), {"id": live["id"]}).one()
-    assert live_row[0] == 0
+        dead_row = conn.execute(text("SELECT revoked FROM answer WHERE id = :id"), {"id": dead["id"]}).one()
+    assert live_row[0] == 1
+    assert dead_row[0] == 0
+
+
+def test_edit_answer_migrating_away_from_an_already_revoked_chain_keeps_its_original_revoke_metadata(
+    client: TestClient, migrated_schema, db_engine: Engine
+) -> None:
+    """Editing a revoked answer is now allowed, but if that edit is also a
+    migration (coord changed), the old chain's own revoke UPDATE must not
+    re-stamp a chain that was already revoked — that would clobber the
+    real revoked_at/revoked_by/revoke_reason with this migration's,
+    destroying the actual revocation history."""
+    kb = _create_kb(client, "kb-edit-migrate-from-already-revoked")
+    _enable_dimension(db_engine, kb["id"], "tenant", "租户")
+    kp = _create_kp(client, kb["id"], "kp-edit-migrate-from-already-revoked")
+
+    v1 = client.post(
+        _answers_url(kb["id"], kp["id"]),
+        json={"content": "v1", "effective_time": "2026-08-08", "coord": {"tenant": "a"}},
+    ).json()["data"]
+    client.post(f"{_answers_url(kb['id'], kp['id'])}/{v1['id']}/revoke", json={"revoke_reason": "original reason"})
+
+    resp = client.post(
+        _edit_url(kb["id"], kp["id"], v1["id"]),
+        json={
+            "content": "migrated from a revoked chain",
+            "effective_time": "2026-08-09",
+            "coord": {"tenant": "b"},
+            "migration_reason": "should not overwrite the original revoke reason",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["revoked"] is False
+
+    with db_engine.connect() as conn:
+        old_row = conn.execute(
+            text("SELECT revoked, revoke_reason, revoked_at FROM answer WHERE id = :id"), {"id": v1["id"]}
+        ).one()
+    assert old_row[0] == 1
+    assert old_row[1] == "original reason"
+    assert old_row[2] is not None
 
 
 def test_write_answer_content_has_no_length_limit(client: TestClient, migrated_schema) -> None:

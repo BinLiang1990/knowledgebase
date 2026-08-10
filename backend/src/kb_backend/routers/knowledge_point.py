@@ -91,20 +91,19 @@ def _ensure_title_available(db: Session, kb_id: int, title: str, exclude_id: int
         raise BusinessError(_DUPLICATE_TITLE_MSG, status_code=400)
 
 
-def _chain_is_revoked(db: Session, kp_id: int, coord_hash: str) -> bool:
-    # Revocation is a whole-chain property (PRD §6 rule #4): every row
-    # sharing a coord_hash is revoked together, so "any row revoked" is an
-    # equivalent, cheaper check than "all rows revoked". Writing a new
-    # (non-revoked) row under an already-revoked coord_hash would otherwise
-    # silently resurrect a dead chain — no un-revoke feature exists in P0.
-    # Found by the Codex outer-gate review on PR #20 (round 2).
-    return (
-        db.execute(
-            select(Answer.id)
-            .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == coord_hash, Answer.revoked.is_(True))
-            .limit(1)
-        ).first()
-        is not None
+def _revive_chain_if_revoked(db: Session, kp_id: int, coord_hash: str) -> None:
+    """2026-08-10 revision: writing a new version into a coord chain is now
+    allowed even if that chain was previously revoked — revocation is no
+    longer a terminal state (supersedes the P0 decision recorded in
+    docs/specs/2026-08-08-knowledge-point-answer-api-design.md §"写一条答案"
+    and PRD §8's old "撤回的撤回" non-goal). Clearing every row's `revoked`
+    flag chain-wide, rather than just inserting a fresh non-revoked row,
+    keeps the "whole chain shares one revoked value" invariant (PRD §6 rule
+    #4) intact instead of producing a half-revoked chain."""
+    db.execute(
+        update(Answer)
+        .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == coord_hash, Answer.revoked.is_(True))
+        .values(revoked=False, revoked_at=None, revoked_by=None, revoke_reason=None)
     )
 
 
@@ -535,8 +534,7 @@ def create_answer(kb_id: int, kp_id: int, payload: AnswerCreate, db: Session = D
         raise BusinessError(str(exc), status_code=400) from exc
 
     coord_hash = compute_coord_hash(normalized)
-    if _chain_is_revoked(db, kp_id, coord_hash):
-        raise BusinessError("该条件组合已被撤回，无法直接写入", status_code=400)
+    _revive_chain_if_revoked(db, kp_id, coord_hash)
 
     answer = Answer(
         knowledge_base_id=kb_id,
@@ -572,8 +570,6 @@ def edit_answer(
     ).scalar_one_or_none()
     if target is None:
         raise BusinessError(_ANSWER_NOT_FOUND_MSG, status_code=404)
-    if target.revoked:
-        raise BusinessError("该条件组合已被撤回，无法编辑", status_code=400)
 
     fields_set = payload.model_fields_set
     if "coord" in fields_set:
@@ -595,16 +591,26 @@ def edit_answer(
     is_migration = new_hash != target.coord_hash
 
     if is_migration:
-        if _chain_is_revoked(db, kp_id, new_hash):
-            raise BusinessError("目标条件组合已被撤回，无法迁移到该条件", status_code=400)
         reason = (payload.migration_reason or "").strip()
         if not reason:
             raise BusinessError("变更适用条件需要填写迁移原因", status_code=400)
         db.execute(
             update(Answer)
-            .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == target.coord_hash)
+            .where(
+                Answer.knowledge_point_id == kp_id,
+                Answer.coord_hash == target.coord_hash,
+                # Only stamp fresh revoke metadata over a chain that wasn't
+                # already revoked — target's own chain may already be
+                # revoked now that editing a revoked answer is allowed, and
+                # re-running this UPDATE unconditionally would clobber the
+                # original revoked_at/revoked_by/revoke_reason with this
+                # migration's, losing the real revocation history.
+                Answer.revoked.is_(False),
+            )
             .values(revoked=True, revoked_at=func.now(), revoked_by="admin", revoke_reason=reason)
         )
+
+    _revive_chain_if_revoked(db, kp_id, new_hash)
 
     new_answer = Answer(
         knowledge_base_id=kb_id,
@@ -644,9 +650,9 @@ def promote_answer_to_default(
     *content* into a brand-new version of the default (coord={}) chain.
     The source answer itself is never touched. Functionally this is
     create_answer with coord hard-coded to {} and content read server-side
-    instead of client-supplied, so it shares create_answer's own two
-    guards (deleted KP, revoked target chain) rather than inventing new
-    ones."""
+    instead of client-supplied, so it shares create_answer's own guards
+    (deleted KP; reviving the default chain if it was revoked) rather than
+    inventing new ones."""
     kp = _get_kp_or_404(db, kb_id, kp_id)
     if kp.status == "deleted":
         raise BusinessError("知识点已删除，无法写入答案", status_code=400)
@@ -654,8 +660,7 @@ def promote_answer_to_default(
     source = _get_answer_or_404(db, kb_id, kp_id, answer_id)
 
     default_hash = compute_coord_hash({})
-    if _chain_is_revoked(db, kp_id, default_hash):
-        raise BusinessError("该条件组合已被撤回，无法直接写入", status_code=400)
+    _revive_chain_if_revoked(db, kp_id, default_hash)
 
     promoted = Answer(
         knowledge_base_id=kb_id,

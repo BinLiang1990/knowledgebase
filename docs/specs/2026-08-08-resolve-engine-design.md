@@ -34,6 +34,14 @@
 
 分组里某个 key 对应的维度即使后来被全局停用(`status=deprecated`),排序时依然使用该维度**当前**的 `weight` 值参与计算——停用不影响历史答案的可查性和可排序性(§6 规则 #7),`weight` 字段本身是可修改的,查询时永远读取维度定义表的最新值,不做历史快照。
 
+### 2.4 2026-08-10 修订：查询覆盖度优先于 spec 绝对值
+
+用户实测发现反直觉行为：查询只钉了"人员=Eden"一个维度，命中结果却是一条要求"人员=Eden ∧ 场景=科技场景"的组合条件答案（因为其 `spec=2 > 1`），而不是完全对应用户所问维度的"人员=Eden→水果"。本文档 §2.2 第 3 点当时把这个行为记录为"容易被误'修复'掉"，是基于"这是 PRD 字面要求、demo 也这么写"——但反过来验证过用户的产品意图后，确认 PRD 这条排序规则本身就是需要修的，不是一个该被保护的既有设计。
+
+修正后的排序键从 `(spec, weight, effective_time, created_at, id)` 变为 `(covered, spec, weight, effective_time, created_at, id)`，其中 `covered = 该组自己的维度 key 集合 ⊆ Q 的 key 集合`（即该组不依赖任何 Q 未指定的维度）。`covered=True` 的候选整体排在 `covered=False` 之前，档内再按原有 `spec/weight/...` 排序。`§2.2` 第 3 点原文已同步更新，`§5.1` 单测新增一条锁定这个场景（`test_resolve_query_covered_candidate_beats_higher_spec_candidate_needing_unasked_dimension`）。`§2.2` 第 3 点举的"候选组的 coord 与 Q 完全不重叠但仍被判定为兼容"这个例子本身不受影响——那种情况下没有任何候选 `covered=True`，所有候选都落在同一档，行为和之前一致。
+
+`frontend-mock/assets/app.js` 的 `resolveAnswer()` 同步打了相同的补丁（`coveredByQuery` 排序键），因为用户看到的截图直接来自这个 demo 页面，只改后端不改 demo 会让线上演示继续展示旧行为。
+
 ## 3. 共享解析模块 `kb_backend/resolve.py`
 
 ```

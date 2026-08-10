@@ -106,6 +106,22 @@ def test_resolve_tie_break_uses_id_when_everything_else_ties() -> None:
     assert result_reversed.answer.content == "second"
 
 
+def test_resolve_query_covered_candidate_beats_higher_spec_candidate_needing_unasked_dimension() -> None:
+    """A combo rule that also pins a dimension the query never asked about
+    (e.g. 场景) must not outrank a lower-spec rule that's fully explained by
+    what was actually queried (e.g. 人员=Eden alone) — reported by the user
+    as counter-intuitive after seeing 组合条件 win over a plain 人员 match."""
+    person_only = _group(
+        {"person": "Eden"}, spec=1, weight=50, effective_time="2026-08-05", created_at="2026-08-05T00:00:00", content="fruit"
+    )
+    combo_with_unasked_dimension = _group(
+        {"person": "Eden", "scene": "tech"}, spec=2, weight=100, effective_time="2026-08-05", created_at="2026-08-05T00:00:00", content="apple-is-a-company"
+    )
+    result = resolve([person_only, combo_with_unasked_dimension], {"person": "Eden"})
+    assert result.status == "exact"
+    assert result.answer.content == "fruit"
+
+
 def test_resolve_tie_break_uses_created_at_when_spec_weight_and_effective_time_all_equal() -> None:
     """This specific 4th-level tie-break is a new decision (not literally in
     the PRD or the demo, which only breaks ties via incidental JS Map

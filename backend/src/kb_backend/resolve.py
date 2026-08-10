@@ -191,9 +191,17 @@ def resolve(groups: list[LiveGroup], query_coord: dict[str, Any]) -> ResolveResu
     if not candidates:
         return ResolveResult(status="none", answer=None)
 
+    # A candidate whose coord keys are all covered by the query (nothing it
+    # needs was left unspecified) outranks one that depends on a dimension
+    # the query never pinned, regardless of spec — a group asking for
+    # `场景` the user didn't filter on isn't "more specific", it's just
+    # unverified on that axis. Only when no covered candidate exists do we
+    # fall back to the old spec-first ordering among candidates that reach
+    # beyond what the query asked.
     top = max(
         candidates,
         key=lambda g: (
+            set(g.coord).issubset(query_coord),
             g.spec,
             g.weight,
             g.live_answer.effective_time,
