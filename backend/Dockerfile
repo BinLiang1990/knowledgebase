@@ -17,9 +17,13 @@ RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple uv
 
 WORKDIR /app
 
+# UV_INDEX_URL 只影响 `uv sync`/`uv pip` 装项目依赖走的源，跟上面装 uv 本身用的
+# `-i` 是两件事——漏配这个的话，uv sync 会去连默认的 pypi.org，国内服务器上
+# fastapi/sqlalchemy/uvloop 这些包会慢到像卡住。
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON=python3.10
+    UV_PYTHON=python3.10 \
+    UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 
 # 先只拷依赖清单再 uv sync，代码改动不会让这一层缓存失效，重复 build 更快。
 COPY pyproject.toml uv.lock ./
