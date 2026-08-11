@@ -4,9 +4,12 @@
 # command 直接指向 .venv 里的 uvicorn 二进制 —— 它的 shebang 已经绑定了
 # uv sync 产出的那个隔离 Python 解释器+依赖，supervisor 进程本身不需要认识
 # uv、不需要激活任何 venv，天然和系统 Python 隔离。
+#
+# --host 绑 127.0.0.1，不绑 0.0.0.0：对外入口是同一台机器上 nginx 的 /kb-api
+# 反代（见 运维.md「挂在 /kb-api 子路径下」一节），8000 端口不需要对公网暴露。
 [program:kb-backend]
 directory=/opt/kb-backend/backend
-command=/opt/kb-backend/backend/.venv/bin/uvicorn kb_backend.main:app --host 0.0.0.0 --port 8000 --workers 2
+command=/opt/kb-backend/backend/.venv/bin/uvicorn kb_backend.main:app --host 127.0.0.1 --port 8000 --workers 2
 autostart=true
 autorestart=true
 startsecs=3

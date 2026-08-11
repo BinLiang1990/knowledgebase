@@ -114,3 +114,39 @@ docker compose -f deploy/docker-compose.yml up -d
 
 两条路径最终跑起来的都是同一份代码、同一个 `uvicorn kb_backend.main:app`、同一份 `.env`
 格式，选哪个纯粹看服务器上更习惯用哪套工具链；不需要两个都部署。
+
+## 六、挂在 `/kb-api` 子路径下（platform-enterprise.yicall.com）
+
+正式环境不是直接把 8000 端口暴露给公网，而是跟前端共用同一台服务器上的 nginx，走
+`https://platform-enterprise.yicall.com/kb-api/...` 这个子路径进来。nginx 那边（网关自
+己维护，不在这个仓库里）现有的配置大致是：
+
+```nginx
+location /kb-api {
+    client_max_body_size 50m;
+    proxy_set_header Host $proxy_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_pass  http://127.0.0.1:8000/;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 1200;
+}
+```
+
+**关键点：`location /kb-api` 配 `proxy_pass http://127.0.0.1:8000/`（带尾部 `/`），nginx
+会把请求路径里匹配到的 `/kb-api` 前缀原样剥掉再转发**——比如浏览器请求
+`/kb-api/health`，backend 实际收到的是 `/health`。所以：
+
+- **后端代码不需要知道 `/kb-api` 这个前缀的存在**，路由该怎么写还是怎么写（`/health`、
+  `/knowledge-bases` 等），不需要挂 FastAPI 的 `root_path` 或者给路由加前缀。
+- `docker-compose.yml` 的端口映射已经改成 `127.0.0.1:8000:8000`——只监听本机，不再对公
+  网暴露 8000。因为公开入口现在是 nginx 的 443/80，8000 只需要给同一台机器上的 nginx
+  连，不需要（也不应该）再让公网直接访问；如果阿里云安全组之前为了调试开了 8000 的公网
+  入站规则，这次可以顺手收掉。
+- **CORS 基本不再是问题**：浏览器发请求判断"是不是跨域"看的是 scheme+host+port（不看路
+  径），前端跑在 `https://platform-enterprise.yicall.com/kb-web/...`、接口打到
+  `https://platform-enterprise.yicall.com/kb-api/...`，两者 origin 完全一样，浏览器根本
+  不会当成跨域请求，不会带 CORS 预检。`backend/.env.example` 里仍然把这个域名加进了
+  `CORS_ALLOWED_ORIGINS`，纯粹是给"直连后端调试"这种绕开网关的场景留个后路，正式流量走
+  网关不依赖这条配置。
