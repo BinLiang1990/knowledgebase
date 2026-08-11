@@ -122,21 +122,26 @@ docker compose -f deploy/docker-compose.yml up -d
 己维护，不在这个仓库里）现有的配置大致是：
 
 ```nginx
-location /kb-api {
+location /kb-api/ {
     client_max_body_size 50m;
     proxy_set_header Host $proxy_host;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Upgrade-Insecure-Requests 1;
     proxy_pass  http://127.0.0.1:8000/;
     proxy_connect_timeout 5s;
     proxy_read_timeout 1200;
 }
 ```
 
-**关键点：`location /kb-api` 配 `proxy_pass http://127.0.0.1:8000/`（带尾部 `/`），nginx
-会把请求路径里匹配到的 `/kb-api` 前缀原样剥掉再转发**——比如浏览器请求
-`/kb-api/health`，backend 实际收到的是 `/health`。所以：
+**关键点：`location /kb-api/` 和 `proxy_pass http://127.0.0.1:8000/` 两边都要带尾部
+`/`，nginx 才会把请求路径里匹配到的 `/kb-api` 前缀原样剥掉再转发**——比如浏览器请求
+`/kb-api/health`，backend 实际收到的是 `/health`。两边不对称（比如 `location /kb-api`
+少了尾部斜杠）会拼出双斜杠 `//health`，backend 路由匹配不上直接 404，现象是"网关返回
+404 但看起来像是 backend 自己 404 的格式"——因为确实是 backend 生成的 404
+（`envelope.py` 里 `CODE_ERROR = 444` 那个格式），只是路径本身没对上，不是没转发到。所
+以：
 
 - **后端代码不需要知道 `/kb-api` 这个前缀的存在**，路由该怎么写还是怎么写（`/health`、
   `/knowledge-bases` 等），不需要挂 FastAPI 的 `root_path` 或者给路由加前缀。
