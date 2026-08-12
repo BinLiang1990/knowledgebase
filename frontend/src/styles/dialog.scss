@@ -1,0 +1,61 @@
+// 通用弹窗骨架（前端开发规范 §9.4）：全部业务弹窗统一 class="app-dialog"，
+// 视觉对齐《UI规范-企业信息管理平台》§3.10——圆角 18px、头部竖蓝条 + 标题、
+// 主体独立滚动、底部按钮右对齐。同一个 class 的全局样式只允许定义在这里一次。
+.el-dialog.app-dialog {
+  border-radius: var(--r-modal);
+  box-shadow: var(--sh-modal);
+  padding: 0;
+  max-width: 96vw;
+
+  .el-dialog__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--line);
+    margin-right: 0;
+
+    // UI规范 §3.10 的头部竖蓝条
+    &::before {
+      content: '';
+      width: 4px;
+      height: 18px;
+      border-radius: 2px;
+      background: var(--brand);
+      flex: none;
+    }
+
+    .el-dialog__title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--ink-1);
+    }
+  }
+
+  .el-dialog__headerbtn {
+    top: 14px;
+    right: 16px;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--r-md);
+    background: var(--pale);
+
+    .el-dialog__close {
+      color: var(--ink-3);
+    }
+  }
+
+  .el-dialog__body {
+    padding: 20px 24px;
+    max-height: 62vh;
+    overflow-y: auto;
+  }
+
+  .el-dialog__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 24px;
+    border-top: 1px solid var(--line);
+  }
+}

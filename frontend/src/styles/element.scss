@@ -1,0 +1,37 @@
+// Element Plus 主题调优（前端开发规范 §9.2 第三层）：按组件分节，
+// 色值全部引用《UI规范-企业信息管理平台》的 tokens，不新增色值。
+@use 'sass:color';
+
+// ---------------------------------------------------------------
+// 全局色板：用 UI 规范品牌色覆盖 Element Plus CSS 变量
+// ---------------------------------------------------------------
+:root {
+  --el-color-primary: #{$color-primary};
+  --el-color-primary-dark-2: #{$color-primary-deep};
+  --el-color-primary-light-3: #{color.mix(#fff, $color-primary, 30%)};
+  --el-color-primary-light-5: #{color.mix(#fff, $color-primary, 50%)};
+  --el-color-primary-light-7: #{color.mix(#fff, $color-primary, 70%)};
+  --el-color-primary-light-8: #{color.mix(#fff, $color-primary, 80%)};
+  --el-color-primary-light-9: #{color.mix(#fff, $color-primary, 90%)};
+  --el-color-success: #{$color-success};
+  --el-color-warning: #{$color-warning};
+  --el-color-danger: #{$color-danger};
+  --el-color-error: #{$color-danger};
+  --el-color-info: #{$color-info};
+  --el-font-family: #{$font-family-base};
+  --el-border-radius-base: 9px; // UI规范 --r-md
+  --el-text-color-primary: #1f2b43; // --ink-1
+  --el-text-color-regular: #33415c; // --ink-2
+}
+
+// ---------------------------------------------------------------
+// el-pagination：贴合 UI规范 §3.12 的分页条位置（表格下方右对齐）
+// ---------------------------------------------------------------
+.el-pagination.pager {
+  justify-content: flex-end;
+  margin-top: 14px;
+
+  .el-pagination__total {
+    color: var(--ink-4);
+  }
+}

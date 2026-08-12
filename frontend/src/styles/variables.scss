@@ -1,0 +1,15 @@
+// 只放 SCSS 变量（vite additionalData 自动注入，业务文件直接用 $ 变量）。
+// 色值取自《UI规范-企业信息管理平台》§9——「任何颜色、字号、圆角、阴影都必须
+// 取自本文档，不允许即兴新增色值」。运行时 CSS 变量（--brand 等）在 index.scss
+// 的 :root 里定义；这里的 SCSS 变量供 element.scss 等编译期取用。
+
+$color-primary: #2f6bff;
+$color-primary-deep: #1a56f0;
+$color-primary-light: #6aa9ff;
+$color-success: #0f9d58;
+$color-warning: #e08600;
+$color-danger: #e5484d;
+$color-info: #7f8ca3;
+
+$font-family-base: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+$font-family-num: 'Bahnschrift', 'DIN Alternate', 'Arial Narrow', sans-serif;

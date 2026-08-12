@@ -1,0 +1,43 @@
+/**
+ * 知识库管理（对接契约见 docs/PRD.md §4.10；字段镜像
+ * backend/src/kb_backend/schemas/knowledge_base.py::KnowledgeBaseOut）。
+ */
+import { request } from '@/utils/request'
+
+export interface KnowledgeBase {
+  id: number
+  name: string
+  description: string | null
+  status: 'active' | 'deprecated'
+  active_knowledge_point_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface KnowledgeBaseInput {
+  name: string
+  description?: string
+}
+
+/**
+ * 知识库全量列表——该接口没有关键词/分页参数，搜索与分页在前端内存中做
+ * （设计文档 §5）：数据量撑不起服务端过滤，且与 demo 的客户端做法对齐。
+ */
+export function listKnowledgeBases() {
+  return request.get<KnowledgeBase[]>('/knowledge-bases')
+}
+
+/** 新增知识库 */
+export function createKnowledgeBase(input: KnowledgeBaseInput) {
+  return request.post<KnowledgeBase>('/knowledge-bases', input)
+}
+
+/** 编辑知识库名称/描述 */
+export function updateKnowledgeBase(id: number, input: KnowledgeBaseInput) {
+  return request.patch<KnowledgeBase>(`/knowledge-bases/${id}`, input)
+}
+
+/** 启用/停用知识库 */
+export function setKnowledgeBaseStatus(id: number, status: 'active' | 'deprecated') {
+  return request.post<KnowledgeBase>(`/knowledge-bases/${id}/${status === 'active' ? 'activate' : 'deactivate'}`)
+}

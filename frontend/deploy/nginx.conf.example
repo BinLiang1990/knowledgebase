@@ -4,9 +4,9 @@
 # 如果服务器上 nginx 已经跑着别的站点，server_name 别再写 "_"（通配）——会跟已有的
 # 通配 server 冲突，改成实际域名或者服务器 IP。
 #
-# 注意：这份配置对应的是 vite.config.ts 里 `base: '/'`（根路径）的构建产物。如果
-# 部署到子路径（下面「子路径部署」那段），必须先把 `base` 改成对应的子路径再
-# build，两者要对应上，见 运维.md 「为什么」一节。
+# 前端已迁移为 hash 路由 + 相对 base（见 运维.md「三、路由与部署路径」）：
+# - 不再需要 try_files 回退——客户端路由在 # 后面，刷新/直链请求的永远是 index.html；
+# - 同一份 dist 可以挂根路径也可以挂任意子路径（alias），不需要按路径重新 build。
 server {
     listen 80;
     server_name _;
@@ -14,28 +14,22 @@ server {
     root /opt/kb-frontend/dist;
     index index.html;
 
-    # react-router-dom 走的是客户端路由（如 /knowledge-bases/1），这些路径在
-    # nginx 眼里并不是真实文件，找不到就要落回 index.html 交给前端路由处理，
-    # 否则刷新页面或直接访问二级路径会直接 404。
     location / {
-        try_files $uri $uri/ /index.html;
+    }
+
+    # 接口反向代理：前端请求同域的 /kb-api/...，剥前缀转发给后端
+    # （proxy_pass 末尾的斜杠就是"剥前缀"；端口按实际后端改）
+    location /kb-api/ {
+        proxy_pass http://127.0.0.1:7071/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
     }
 }
 
 # 子路径部署（当前正式环境 platform-enterprise.yicall.com 实际用的是这种）：
-# 前端跟别的应用共用同一个 server/域名，挂在 /kb-web 下面，不是独立域名的根路径。
-#
-# 对应 vite.config.ts 里 `base: mode === 'production' ? '/kb-web/' : '/'`——
-# build 产物里的 <script src>/<link href> 都会带 /kb-web/ 前缀，跟这里的 alias
-# 对上，否则浏览器请求 /assets/xxx.js（少了 /kb-web 前缀）会落到这个 location
-# 之外，直接 404（现象就是"资源有问题"）。
+# 前端跟别的应用共用同一个 server/域名，挂在 /kb-web 下面。相对 base 的产物
+# 天然支持 alias 子路径，无需任何构建参数配合。
 # location /kb-web {
 #     alias /web/KnowledgeBaseWeb;
 #     index index.html;
-#
-#     # 同上，客户端路由的二级路径要落回 index.html——但因为用的是 alias 不是
-#     # root，fallback 目标必须写完整的 /kb-web/index.html（带前缀），让 nginx
-#     # 重新走一遍 location 匹配再套 alias，写成 /index.html 会绕过 /kb-web
-#     # 这个 location，找错目录。
-#     try_files $uri $uri/ /kb-web/index.html;
 # }

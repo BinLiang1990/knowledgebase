@@ -7,10 +7,19 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# 构建产物一律不入库（前端开发规范 §2.1）
 node_modules
 dist
 dist-ssr
+dist.tar.gz
 *.local
+
+# 环境变量文件无秘钥、按规范 §2.5 入库（根 .gitignore 的 .env.* 规则在此显式豁免）
+!.env.development
+!.env.production
+
+# auto-imports.d.ts / components.d.ts 必须提交（规范 §2.4：否则新克隆仓库
+# typecheck/build 因缺声明大面积报错）——不要把它们加进本文件
 
 # Editor directories and files
 .vscode/*

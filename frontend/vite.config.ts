@@ -1,18 +1,51 @@
-/// <reference types="vitest/config" />
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import process from 'node:process'
+import { fileURLToPath, URL } from 'node:url'
+import vue from '@vitejs/plugin-vue'
+import AutoImport from 'unplugin-auto-import/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import Components from 'unplugin-vue-components/vite'
+import { defineConfig, loadEnv } from 'vite'
 
-// https://vite.dev/config/
-export default defineConfig(({ mode }) => ({
-  // 生产环境部署在 nginx 的 /kb-web 子路径下（alias 到 /web/KnowledgeBaseWeb，
-  // 不是独立域名的根路径），资源引用必须带 /kb-web/ 前缀，否则打包出来的
-  // index.html 里 /assets/... 这类根相对路径请求不会落到 /kb-web 这个 location
-  // 上，浏览器直接 404。dev/test 模式仍然用根路径，不影响本地开发。
-  base: mode === 'production' ? '/kb-web/' : '/',
-  plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    globals: true,
-  },
-}))
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd())
+  return {
+    // 生产用相对 base，配合 hash 路由（前端开发规范 §2.4/§5.1），dist 可放任意
+    // 子目录（当前正式环境挂在 /kb-web 下）或本地直开，不再需要按部署路径重新 build。
+    base: mode === 'production' ? './' : '/',
+    resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+    plugins: [
+      vue(),
+      AutoImport({
+        // ElMessage 显式声明而不是只靠 resolver 按需解析：resolver 解析出的
+        // 名字只在被 transform 命中时才写进 auto-imports.d.ts，跑一次 vitest
+        // （只 transform 测试文件）就会把它从 dts 里冲掉，导致后续 vue-tsc
+        // 报 TS2304。显式声明后 dts 内容稳定；其样式改在 main.ts 全局引入。
+        imports: ['vue', 'vue-router', 'pinia', '@vueuse/core', { 'element-plus': ['ElMessage'] }],
+        resolvers: [ElementPlusResolver()],
+        dts: 'auto-imports.d.ts',
+      }),
+      Components({ resolvers: [ElementPlusResolver()], dts: 'components.d.ts' }),
+    ],
+    css: {
+      preprocessorOptions: {
+        scss: {
+          api: 'modern-compiler',
+          // 全局变量自动注入，业务文件里不写 @use（前端开发规范 §2.4）
+          additionalData: `@use "@/styles/variables.scss" as *;`,
+        },
+      },
+    },
+    server: {
+      host: '0.0.0.0',
+      // 规范 §2.6：后续系统自 3300 起分配独立 dev 端口
+      port: 3300,
+      proxy: {
+        [env.VITE_APP_BASE_API]: {
+          target: env.VITE_PROXY_TARGET,
+          changeOrigin: true,
+          rewrite: path => path.replace(new RegExp(`^${env.VITE_APP_BASE_API}`), ''),
+        },
+      },
+    },
+  }
+})
