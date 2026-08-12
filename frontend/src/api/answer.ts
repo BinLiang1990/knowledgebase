@@ -20,6 +20,9 @@ export interface Answer {
   revoked_at: string | null
   revoked_by: string | null
   revoke_reason: string | null
+  reactivated_at: string | null
+  reactivated_by: string | null
+  reactivate_reason: string | null
   created_at: string
 }
 
@@ -28,6 +31,8 @@ export interface CreateAnswerInput {
   content: string
   effective_time: string
   note?: string
+  /** issue #32：目标条件组合当前是撤回态时必填——写入即整链恢复 + 追加新版本 */
+  reactivate_reason?: string
 }
 
 export interface EditAnswerInput {
@@ -41,6 +46,8 @@ export interface EditAnswerInput {
    */
   coord?: Record<string, FilterValue>
   migration_reason?: string
+  /** issue #32：编辑落点的链（迁移后的新条件或原条件本身）是撤回态时必填 */
+  reactivate_reason?: string
 }
 
 /** 写一条答案（4.x） */

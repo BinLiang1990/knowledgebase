@@ -91,19 +91,40 @@ def _ensure_title_available(db: Session, kb_id: int, title: str, exclude_id: int
         raise BusinessError(_DUPLICATE_TITLE_MSG, status_code=400)
 
 
-def _revive_chain_if_revoked(db: Session, kp_id: int, coord_hash: str) -> None:
-    """2026-08-10 revision: writing a new version into a coord chain is now
-    allowed even if that chain was previously revoked — revocation is no
-    longer a terminal state (supersedes the P0 decision recorded in
-    docs/specs/2026-08-08-knowledge-point-answer-api-design.md §"写一条答案"
-    and PRD §8's old "撤回的撤回" non-goal). Clearing every row's `revoked`
-    flag chain-wide, rather than just inserting a fresh non-revoked row,
-    keeps the "whole chain shares one revoked value" invariant (PRD §6 rule
-    #4) intact instead of producing a half-revoked chain."""
+def _reactivate_chain_if_revoked(
+    db: Session, kp_id: int, coord_hash: str, reactivate_reason: str | None
+) -> None:
+    """2026-08-10 revision + issue #32 完整版: writing a new version into a
+    coord chain is allowed even if that chain was previously revoked —
+    revocation is no longer a terminal state (supersedes the P0 decision
+    recorded in docs/specs/2026-08-08-knowledge-point-answer-api-design.md
+    §"写一条答案" and PRD §8's old "撤回的撤回" non-goal). Clearing every
+    row's `revoked` flag chain-wide, rather than just inserting a fresh
+    non-revoked row, keeps the "whole chain shares one revoked value"
+    invariant (PRD §6 rule #4) intact instead of producing a half-revoked
+    chain.
+
+    Issue #32 refinements over the 08-10 interim version:
+    - 恢复需要必填原因（镜像 revoke_reason 的地位），链非撤回态时该参数被
+      忽略——调用方可以无脑透传请求字段；
+    - revoked_at/revoked_by/revoke_reason **保留原样当历史**（参照
+      restore_knowledge_point 的做法），恢复信息写进 reactivated_* 三件套，
+      变更留痕据此推导"撤回→恢复"两个条目（change_log.py）。
+    """
+    chain_revoked = db.execute(
+        select(Answer.id)
+        .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == coord_hash, Answer.revoked.is_(True))
+        .limit(1)
+    ).first() is not None
+    if not chain_revoked:
+        return
+    reason = (reactivate_reason or "").strip()
+    if not reason:
+        raise BusinessError("该条件组合此前已被撤回，重新启用需填写原因")
     db.execute(
         update(Answer)
         .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == coord_hash, Answer.revoked.is_(True))
-        .values(revoked=False, revoked_at=None, revoked_by=None, revoke_reason=None)
+        .values(revoked=False, reactivated_at=func.now(), reactivated_by="admin", reactivate_reason=reason)
     )
 
 
@@ -534,7 +555,7 @@ def create_answer(kb_id: int, kp_id: int, payload: AnswerCreate, db: Session = D
         raise BusinessError(str(exc), status_code=400) from exc
 
     coord_hash = compute_coord_hash(normalized)
-    _revive_chain_if_revoked(db, kp_id, coord_hash)
+    _reactivate_chain_if_revoked(db, kp_id, coord_hash, payload.reactivate_reason)
 
     answer = Answer(
         knowledge_base_id=kb_id,
@@ -610,7 +631,7 @@ def edit_answer(
             .values(revoked=True, revoked_at=func.now(), revoked_by="admin", revoke_reason=reason)
         )
 
-    _revive_chain_if_revoked(db, kp_id, new_hash)
+    _reactivate_chain_if_revoked(db, kp_id, new_hash, payload.reactivate_reason)
 
     new_answer = Answer(
         knowledge_base_id=kb_id,
@@ -660,7 +681,7 @@ def promote_answer_to_default(
     source = _get_answer_or_404(db, kb_id, kp_id, answer_id)
 
     default_hash = compute_coord_hash({})
-    _revive_chain_if_revoked(db, kp_id, default_hash)
+    _reactivate_chain_if_revoked(db, kp_id, default_hash, payload.reactivate_reason)
 
     promoted = Answer(
         knowledge_base_id=kb_id,

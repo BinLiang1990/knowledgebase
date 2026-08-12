@@ -88,6 +88,9 @@ class AnswerCreate(BaseModel):
     effective_time: date
     coord: dict[str, Any] = Field(default_factory=dict)
     note: str | None = None
+    # issue #32：目标条件组合当前是撤回态时必填（接口层校验，见
+    # _reactivate_chain_if_revoked）；其余情况可不传/被忽略
+    reactivate_reason: str | None = Field(default=None, max_length=500)
 
 
 class AnswerEdit(BaseModel):
@@ -99,6 +102,8 @@ class AnswerEdit(BaseModel):
     # is rejected rather than silently treated the same way.
     coord: dict[str, Any] | None = None
     migration_reason: str | None = Field(default=None, max_length=500)
+    # issue #32：编辑落点的链（迁移后的新条件，或原条件本身）处于撤回态时必填
+    reactivate_reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="before")
     @classmethod
@@ -127,6 +132,10 @@ class AnswerOut(BaseModel):
     revoked_at: datetime | None
     revoked_by: str | None
     revoke_reason: str | None
+    # issue #32：最近一次恢复的信息；恢复时 revoked_* 保留原样当历史
+    reactivated_at: datetime | None
+    reactivated_by: str | None
+    reactivate_reason: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -135,6 +144,8 @@ class AnswerOut(BaseModel):
 class AnswerPromoteToDefault(BaseModel):
     effective_time: date
     note: str | None = None
+    # issue #32：默认答案链处于撤回态时必填
+    reactivate_reason: str | None = Field(default=None, max_length=500)
 
 
 class AnswerRevoke(BaseModel):

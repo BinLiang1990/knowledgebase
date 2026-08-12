@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CoordRow } from './coordRows'
 import type { Dimension } from '@/api/dimension'
+import type { AnswerGroup } from '@/api/knowledgePoint'
 // 写/编辑答案合体弹窗：open() 新写、open(existing) 编辑（镜像 demo 共用的
 // #ansMask 弹窗，设计文档 §4.2-§4.4）。
 import type { Filters } from '@/utils/dimension'
@@ -18,11 +19,16 @@ export interface ExistingAnswer {
   note: string | null
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   kbId: number
   kpId: number
   dimensions: Dimension[]
-}>()
+  /**
+   * 知识点全部条件组（含撤回组，issue #32）：写入目标命中撤回组时要求填
+   * "重新启用原因"。不传时功能退化为服务端兜底（400 提示）。
+   */
+  groups?: AnswerGroup[]
+}>(), { groups: () => [] })
 
 const emit = defineEmits<{
   /** 保存成功——父页面重载条件组与知识点统计 */
@@ -37,6 +43,7 @@ const effectiveTime = ref(today())
 const note = ref('')
 const rows = ref<CoordRow[]>([])
 const migrationReason = ref('')
+const reactivateReason = ref('')
 const error = ref('')
 
 const isEdit = computed(() => existing.value !== null)
@@ -50,6 +57,7 @@ function open(target?: ExistingAnswer) {
   note.value = target?.note ?? ''
   rows.value = target ? coordRowsFromCoord(target.coord, props.dimensions) : []
   migrationReason.value = ''
+  reactivateReason.value = ''
   error.value = ''
   visible.value = true
 }
@@ -62,6 +70,16 @@ const showMigrationReason = computed(() => {
   const result = coordRowsToCoord(rows.value, props.dimensions)
   return Boolean(result.coord) && diffCoord(existing.value.coord, result.coord!, props.dimensions)
 })
+
+// 写入目标命中的撤回组（issue #32）：新写/迁移/编辑撤回链自身三条路径统一
+// 用"当前编辑的条件 == 某个撤回组的条件"判定，命中即要求重新启用原因
+const targetRevokedGroup = computed(() => {
+  const result = coordRowsToCoord(rows.value, props.dimensions)
+  if (!result.coord)
+    return null
+  return props.groups.find(g => g.revoked && !diffCoord(g.coord, result.coord!, props.dimensions)) ?? null
+})
+const showReactivateReason = computed(() => targetRevokedGroup.value !== null)
 
 async function submit() {
   const trimmedContent = content.value.trim()
@@ -77,6 +95,12 @@ async function submit() {
   const coord = result.coord
   const trimmedNote = note.value.trim() || undefined
 
+  if (showReactivateReason.value && !reactivateReason.value.trim()) {
+    error.value = '该条件组合此前已被撤回，重新启用需填写原因。'
+    return
+  }
+  const trimmedReactivateReason = showReactivateReason.value ? reactivateReason.value.trim() : undefined
+
   if (!existing.value) {
     submitting.value = true
     try {
@@ -85,6 +109,7 @@ async function submit() {
         content: trimmedContent,
         effective_time: effectiveTime.value,
         note: trimmedNote,
+        reactivate_reason: trimmedReactivateReason,
       })
       ElMessage.success('已保存答案')
       visible.value = false
@@ -117,6 +142,7 @@ async function submit() {
       content: trimmedContent,
       effective_time: effectiveTime.value,
       note: trimmedNote,
+      reactivate_reason: trimmedReactivateReason,
       // 条件未变时整个省略 coord——「总是发」会破坏「coord 引用已停用维度的
       // 答案仍可编辑内容/时间」这条路径（设计文档 §4.4）
       ...(changed ? { coord, migration_reason: migrationReason.value.trim() } : {}),
@@ -157,6 +183,14 @@ async function submit() {
     <div v-if="showMigrationReason" class="mf">
       <label><span class="req">*</span>迁移原因</label>
       <input v-model="migrationReason" type="text" placeholder="条件变化后为什么要迁移，将记录在留痕中">
+    </div>
+    <div v-if="showReactivateReason" class="mf">
+      <div class="risk" style="margin-bottom: 8px">
+        该条件组合此前已被撤回（原因：{{ targetRevokedGroup?.latest_answer.revoke_reason || '—' }}）。
+        继续保存将恢复整条版本链，并把这条内容作为新版本追加；撤回记录保留在变更留痕中。
+      </div>
+      <label><span class="req">*</span>重新启用原因</label>
+      <input v-model="reactivateReason" type="text" maxlength="500" placeholder="为什么要重新启用这个条件，将记录在留痕中">
     </div>
     <div class="mf">
       <label>变更说明(可选)</label>

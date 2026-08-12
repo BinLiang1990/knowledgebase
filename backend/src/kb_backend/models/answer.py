@@ -41,4 +41,10 @@ class Answer(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 重新启用三件套（issue #32）：与 revoke 三件套同构的链级字段。恢复时
+    # revoked_* 保留原样当历史，只保留最近一轮撤回/恢复（完整事件史留 V2，
+    # 见 docs/specs/2026-08-12-answer-reactivate-design.md §1）。
+    reactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reactivated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reactivate_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at = created_at_column()

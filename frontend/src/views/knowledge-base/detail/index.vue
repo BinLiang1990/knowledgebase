@@ -444,6 +444,7 @@ function reloadAfterKpMutation() {
         :kb-id="kbId"
         :kp-id="kpId"
         :dimensions="dimensions"
+        :groups="groups"
         @success="reloadAfterAnswerMutation"
       />
       <EditTitleDialog ref="editTitleDialogRef" :kb-id="kbId" :kp-id="kpId" @success="kpQuery.load" />

@@ -33,6 +33,7 @@ const STATUS_TAG_CLASS: Record<ChangeLogEntry['status'], string> = {
   live: 'green',
   superseded: 'gray',
   revoked: 'red',
+  reactivated: 'blue',
 }
 
 interface RowView {
