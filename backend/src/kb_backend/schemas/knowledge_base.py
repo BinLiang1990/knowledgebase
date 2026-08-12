@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -14,6 +14,13 @@ def _stripped_non_empty_name(v: str) -> str:
 class KnowledgeBaseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
+    # 创建时直接启用维度（可选）——省去"建库后必须再去知识库设置勾选"的
+    # 二段式操作。省略/None/[] 都等价于旧行为：不启用任何维度。
+    # 长度上限镜像 EnabledDimensionsUpdate.dimension_keys 的理由
+    # （schemas/dimension.py）。
+    enabled_dimension_keys: list[Annotated[str, Field(max_length=100)]] | None = Field(
+        default=None, max_length=200
+    )
 
     @field_validator("name")
     @classmethod

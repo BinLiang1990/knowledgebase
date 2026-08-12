@@ -19,6 +19,11 @@ export interface KnowledgeBaseInput {
   description?: string
 }
 
+export interface KnowledgeBaseCreateInput extends KnowledgeBaseInput {
+  /** 创建时直接启用的维度 key（可选）——省去建库后再去「知识库设置」勾选 */
+  enabled_dimension_keys?: string[]
+}
+
 /**
  * 知识库全量列表——该接口没有关键词/分页参数，搜索与分页在前端内存中做
  * （设计文档 §5）：数据量撑不起服务端过滤，且与 demo 的客户端做法对齐。
@@ -27,8 +32,8 @@ export function listKnowledgeBases() {
   return request.get<KnowledgeBase[]>('/knowledge-bases')
 }
 
-/** 新增知识库 */
-export function createKnowledgeBase(input: KnowledgeBaseInput) {
+/** 新增知识库（可同时启用维度，与建库同一事务） */
+export function createKnowledgeBase(input: KnowledgeBaseCreateInput) {
   return request.post<KnowledgeBase>('/knowledge-bases', input)
 }
 

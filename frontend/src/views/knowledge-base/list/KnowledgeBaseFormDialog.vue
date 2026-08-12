@@ -1,6 +1,11 @@
 <script setup lang="ts">
 // 新增/编辑知识库合体弹窗：open() 新增、open(kb) 编辑（规范 §8.2 非受控模式）。
+// 新增模式下可直接勾选启用维度（与建库同一事务）——省去"建完还要去
+// 知识库设置勾维度"的二段式操作；编辑模式刻意不出现维度区（调整已建库的
+// 维度是设置页的职责，那里有"使用中"的保留链路语义）。
+import type { Dimension } from '@/api/dimension'
 import type { KnowledgeBase } from '@/api/knowledgeBase'
+import { listAdminDimensions } from '@/api/dimension'
 import { createKnowledgeBase, updateKnowledgeBase } from '@/api/knowledgeBase'
 
 const emit = defineEmits<{
@@ -15,15 +20,38 @@ const name = ref('')
 const description = ref('')
 const error = ref('')
 
+const dimensions = ref<Dimension[]>([])
+const dimensionsLoading = ref(false)
+const dimensionsFailed = ref(false)
+const selectedDimensionKeys = ref<string[]>([])
+
 const isEdit = computed(() => target.value !== null)
 const title = computed(() => (isEdit.value ? `编辑知识库 · ${target.value!.name}` : '新增知识库'))
+
+async function loadDimensions() {
+  dimensionsLoading.value = true
+  dimensionsFailed.value = false
+  try {
+    dimensions.value = (await listAdminDimensions()).filter(d => d.status === 'active')
+  }
+  catch {
+    // 维度加载失败不阻塞建库（勾选区显示重试入口），错误已由拦截器提示
+    dimensionsFailed.value = true
+  }
+  finally {
+    dimensionsLoading.value = false
+  }
+}
 
 function open(kb?: KnowledgeBase) {
   target.value = kb ?? null
   name.value = kb?.name ?? ''
   description.value = kb?.description ?? ''
   error.value = ''
+  selectedDimensionKeys.value = []
   visible.value = true
+  if (!kb)
+    loadDimensions()
 }
 defineExpose({ open })
 
@@ -34,13 +62,18 @@ async function submit() {
     return
   }
   error.value = ''
-  const input = { name: trimmedName, description: description.value.trim() }
   submitting.value = true
   try {
-    if (target.value)
-      await updateKnowledgeBase(target.value.id, input)
-    else
-      await createKnowledgeBase(input)
+    if (target.value) {
+      await updateKnowledgeBase(target.value.id, { name: trimmedName, description: description.value.trim() })
+    }
+    else {
+      await createKnowledgeBase({
+        name: trimmedName,
+        description: description.value.trim(),
+        enabled_dimension_keys: selectedDimensionKeys.value.length ? selectedDimensionKeys.value : undefined,
+      })
+    }
     ElMessage.success(isEdit.value ? `已更新知识库「${trimmedName}」` : `已创建知识库「${trimmedName}」`)
     visible.value = false
     emit('success')
@@ -65,6 +98,33 @@ async function submit() {
     <div class="mf">
       <label>描述(可选)</label>
       <textarea v-model="description" rows="2" placeholder="这个知识库用来存放什么类型的知识点" maxlength="2000" />
+    </div>
+    <div v-if="!isEdit" class="mf">
+      <label>启用维度(可选)</label>
+      <div v-if="dimensionsLoading" class="hint">
+        <span class="spin" /> 加载维度中…
+      </div>
+      <div v-else-if="dimensionsFailed" class="hint">
+        维度加载失败 · <a @click="loadDimensions">重试</a>（也可以先建库，稍后到「知识库设置」启用）
+      </div>
+      <div v-else-if="dimensions.length === 0" class="hint">
+        还没有可用的全局维度——先到「维度管理」新增，或建库后再到「知识库设置」启用
+      </div>
+      <template v-else>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 4px 0">
+          <label
+            v-for="d in dimensions"
+            :key="d.key"
+            style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer"
+          >
+            <input v-model="selectedDimensionKeys" type="checkbox" :value="d.key">
+            {{ d.label }}<span style="color: var(--ink-6)">（权重 {{ d.weight }}）</span>
+          </label>
+        </div>
+        <div class="hint">
+          只有启用的维度才能在本知识库的答案里用作适用条件；创建后可随时到「知识库设置」调整
+        </div>
+      </template>
     </div>
     <p v-if="error" class="hint" style="color: var(--red)">
       {{ error }}

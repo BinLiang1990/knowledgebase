@@ -141,10 +141,12 @@ function setKbEnabledDims(kbId, keys) {
   saveKnowledgeBases(bases);
 }
 
-function addKnowledgeBase({ name, description }) {
+function addKnowledgeBase({ name, description, enabledDimKeys }) {
   const bases = getKnowledgeBases();
   const id = nextKbId();
-  bases.push({ id, name, description: description || "", status: "active", created_at: new Date().toISOString(), enabledDimKeys: [] });
+  // enabledDimKeys：创建时直接启用维度（与真实后端 POST /knowledge-bases 的
+  // enabled_dimension_keys 对齐），省去建库后再进「知识库设置」勾选的二段式操作
+  bases.push({ id, name, description: description || "", status: "active", created_at: new Date().toISOString(), enabledDimKeys: enabledDimKeys || [] });
   saveKnowledgeBases(bases);
   return id;
 }

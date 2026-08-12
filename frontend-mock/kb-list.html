@@ -75,6 +75,11 @@
         <label>描述(可选)</label>
         <textarea id="kbDesc" rows="2" placeholder="这个知识库用来存放什么类型的知识点"></textarea>
       </div>
+      <div class="mf" id="kbDimsField">
+        <label>启用维度(可选)</label>
+        <div id="kbDimRows" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:4px 0"></div>
+        <div class="hint">只有启用的维度才能在本知识库的答案里用作适用条件；创建后可随时到「知识库设置」调整</div>
+      </div>
       <p class="hint" id="kbFormHint" style="color:var(--red)"></p>
     </div>
     <div class="mo-foot">
@@ -163,12 +168,26 @@
     });
   }
 
+  // 新增模式：勾选启用维度（与建库一并生效）。编辑模式不出现维度区——调整
+  // 已建库的维度是「知识库设置」页的职责，与真实前端 KnowledgeBaseFormDialog 一致
+  function renderKbDimRows() {
+    const dims = getActiveDimensions();
+    document.getElementById("kbDimRows").innerHTML = dims.length
+      ? dims.map(d => `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" class="kb-dim-check" value="${escapeHtml(d.key)}">
+          ${escapeHtml(d.label)}<span style="color:var(--ink-6)">（权重 ${d.weight ?? 50}）</span>
+        </label>`).join("")
+      : `<span class="hint">还没有可用的全局维度——先到「维度管理」新增，或建库后再到「知识库设置」启用</span>`;
+  }
+
   function openAddKbModal() {
     document.getElementById("kbModalTitle").textContent = "新增知识库";
     document.getElementById("kbId").value = "";
     document.getElementById("kbName").value = "";
     document.getElementById("kbDesc").value = "";
     document.getElementById("kbFormHint").textContent = "";
+    document.getElementById("kbDimsField").style.display = "";
+    renderKbDimRows();
     openModal("kbMask");
   }
 
@@ -179,6 +198,7 @@
     document.getElementById("kbName").value = b.name;
     document.getElementById("kbDesc").value = b.description || "";
     document.getElementById("kbFormHint").textContent = "";
+    document.getElementById("kbDimsField").style.display = "none";
     openModal("kbMask");
   }
 
@@ -193,8 +213,9 @@
       updateKnowledgeBase(id, { name, description });
       toast(`已更新知识库「${name}」`, "ok");
     } else {
-      addKnowledgeBase({ name, description });
-      toast(`已创建知识库「${name}」`, "ok");
+      const enabledDimKeys = [...document.querySelectorAll(".kb-dim-check:checked")].map(el => el.value);
+      addKnowledgeBase({ name, description, enabledDimKeys });
+      toast(`已创建知识库「${name}」${enabledDimKeys.length ? `，已启用 ${enabledDimKeys.length} 个维度` : ""}`, "ok");
     }
     closeModal("kbMask");
     renderKbList();

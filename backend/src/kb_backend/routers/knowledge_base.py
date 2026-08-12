@@ -85,13 +85,41 @@ def _ensure_name_available(db: Session, name: str, exclude_id: int | None = None
         raise BusinessError(_DUPLICATE_NAME_MSG, status_code=400)
 
 
+def _resolve_dimension_keys(db: Session, requested_keys: list[str]) -> list[str]:
+    """把请求里的维度 key 逐个解析成 DB 的规范拼写：存在性/启用状态校验 +
+    按规范 key 去重。逐个查询而非批量 IN 的原因见 set_enabled_dimensions
+    原注释（collation 折叠问题，Codex PR #25）——本函数就是从那里提取的，
+    供「创建知识库时直接启用维度」复用。"""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for requested_key in requested_keys:
+        dim = db.execute(
+            select(DimensionDefinition).where(DimensionDefinition.key == requested_key)
+        ).scalar_one_or_none()
+        if dim is None:
+            raise BusinessError(f"维度「{requested_key}」不存在", status_code=400)
+        if dim.status != "active":
+            raise BusinessError(f"维度「{requested_key}」已停用，无法启用", status_code=400)
+        if dim.key not in seen:
+            seen.add(dim.key)
+            keys.append(dim.key)
+    return keys
+
+
 @router.post("")
 def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(get_db)) -> dict:
     _ensure_name_available(db, payload.name)
+    # 维度校验放在建库之前：任何一个 key 不合法都不应留下半成品知识库
+    keys = _resolve_dimension_keys(db, payload.enabled_dimension_keys or [])
 
     kb = KnowledgeBase(name=payload.name, description=payload.description, status="active")
     db.add(kb)
     try:
+        # 建库 + 启用维度同一事务（本功能的意义所在：不再需要建完后
+        # 二段式地去「知识库设置」勾选）
+        db.flush()
+        for key in keys:
+            db.add(KnowledgeBaseEnabledDimension(knowledge_base_id=kb.id, dimension_key=key))
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -233,18 +261,9 @@ def set_enabled_dimensions(
     # canonical-key-based, not raw-spelling-based, and guarantees every
     # inserted row uses the DB's own spelling rather than whatever
     # case/accent variant the client happened to type. Codex outer-gate
-    # finding on PR #25.
-    keys: list[str] = []
-    seen: set[str] = set()
-    for requested_key in payload.dimension_keys:
-        dim = db.execute(select(DimensionDefinition).where(DimensionDefinition.key == requested_key)).scalar_one_or_none()
-        if dim is None:
-            raise BusinessError(f"维度「{requested_key}」不存在", status_code=400)
-        if dim.status != "active":
-            raise BusinessError(f"维度「{requested_key}」已停用，无法启用", status_code=400)
-        if dim.key not in seen:
-            seen.add(dim.key)
-            keys.append(dim.key)
+    # finding on PR #25. (逻辑提取为 _resolve_dimension_keys，与
+    # create_knowledge_base 的"创建时启用维度"共用。)
+    keys = _resolve_dimension_keys(db, payload.dimension_keys)
 
     # Only replace the *active*-dimension portion of this KB's enabled set,
     # not the whole table. A dimension that was enabled here and later
