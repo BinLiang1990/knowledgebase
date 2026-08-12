@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
         // 名字只在被 transform 命中时才写进 auto-imports.d.ts，跑一次 vitest
         // （只 transform 测试文件）就会把它从 dts 里冲掉，导致后续 vue-tsc
         // 报 TS2304。显式声明后 dts 内容稳定；其样式改在 main.ts 全局引入。
-        imports: ['vue', 'vue-router', 'pinia', '@vueuse/core', { 'element-plus': ['ElMessage'] }],
+        imports: ['vue', 'vue-router', 'pinia', '@vueuse/core', { 'element-plus': ['ElMessage', 'ElMessageBox'] }],
         resolvers: [ElementPlusResolver()],
         dts: 'auto-imports.d.ts',
       }),

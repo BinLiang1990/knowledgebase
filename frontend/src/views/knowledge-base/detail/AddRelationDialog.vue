@@ -161,21 +161,31 @@ async function submit() {
     <div class="mf">
       <label><span class="req">*</span>对端知识库</label>
       <select v-model="otherKbId">
-        <option :value="null" disabled>选择知识库…</option>
-        <option v-for="b in kbs" :key="b.id" :value="b.id">{{ b.name }}</option>
+        <option :value="null" disabled>
+          选择知识库…
+        </option>
+        <option v-for="b in kbs" :key="b.id" :value="b.id">
+          {{ b.name }}
+        </option>
       </select>
     </div>
     <div class="mf">
       <label><span class="req">*</span>对端知识点</label>
       <select v-model="otherKpId" :disabled="loadingKps || otherKbId == null">
-        <option :value="null" disabled>{{ loadingKps ? '加载中…' : '选择知识点…' }}</option>
-        <option v-for="k in kps" :key="k.id" :value="k.id">{{ k.title }}</option>
+        <option :value="null" disabled>
+          {{ loadingKps ? '加载中…' : '选择知识点…' }}
+        </option>
+        <option v-for="k in kps" :key="k.id" :value="k.id">
+          {{ k.title }}
+        </option>
       </select>
     </div>
     <div class="mf">
       <label><span class="req">*</span>对端答案（条件组合）</label>
       <select v-model="otherHash" :disabled="loadingGroups || otherKpId == null">
-        <option value="" disabled>{{ loadingGroups ? '加载中…' : '选择条件组合…' }}</option>
+        <option value="" disabled>
+          {{ loadingGroups ? '加载中…' : '选择条件组合…' }}
+        </option>
         <option v-for="g in otherGroups" :key="g.live_answer!.coord_hash" :value="g.live_answer!.coord_hash">
           {{ chainLabel(g) }}
         </option>

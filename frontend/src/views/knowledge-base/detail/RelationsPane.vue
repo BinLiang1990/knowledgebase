@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import type { Dimension } from '@/api/dimension'
 // 「答案关联」tab（docs/PRD-答案关联.md §5.2）：按"本知识点侧的链"分组展示
 // 关联卡片。数据由父级 index.vue 的 relationsQuery 持有并轮询（「当前答案」
 // 卡片上的角标要复用同一份数据），本组件只负责渲染与单条操作。
 import type { AnswerRelation, RelationEndpoint, RelationsData } from '@/api/relation'
-import type { Dimension } from '@/api/dimension'
 import { deleteRelation, regenerateRelation } from '@/api/relation'
 import { describeCoord } from '@/utils/coord'
 import { formatDateTime } from '@/utils/format'

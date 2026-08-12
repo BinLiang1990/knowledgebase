@@ -26,6 +26,9 @@ export function makeAnswer(overrides: Partial<Answer> = {}): Answer {
     revoked_at: null,
     revoked_by: null,
     revoke_reason: null,
+    reactivated_at: null,
+    reactivated_by: null,
+    reactivate_reason: null,
     created_at: '2026-08-08T00:00:00',
     ...overrides,
   }
