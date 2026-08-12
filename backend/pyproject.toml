@@ -9,6 +9,9 @@ requires-python = ">=3.10"
 dependencies = [
     "alembic>=1.19.0",
     "fastapi>=0.141.1",
+    # 答案关联的网关客户端(gateway.py)在运行时用 httpx —— 之前它只是
+    # dev 组里 TestClient 的传递依赖，提升为正式依赖
+    "httpx>=0.28.1",
     "pydantic-settings>=2.14.2",
     "pymysql>=1.2.0",
     "sqlalchemy>=2.0",

@@ -32,6 +32,35 @@ class Settings(BaseSettings):
     # backend, so without this the browser blocks every request outright.
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # ---- 答案关联(docs/PRD-答案关联.md §7)：向量召回 + LLM 描述生成 ----
+    # Both gateways are OpenAI-compatible endpoints (机房 FastGPT/OneAPI →
+    # Ollama). All empty by default: the feature degrades to "disabled" —
+    # analyze endpoints return a BusinessError and the worker never starts —
+    # so an unconfigured deployment is unaffected (PRD §0.11).
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_model: str = ""
+    relation_llm_base_url: str = ""
+    relation_llm_api_key: str = ""
+    relation_llm_model: str = ""
+    relation_top_k: int = 10
+    relation_min_similarity: float = 0.60
+    relation_embed_batch: int = 32
+    relation_gen_batch: int = 10
+    relation_max_content_chars: int = 4000
+
+    @property
+    def relation_analysis_enabled(self) -> bool:
+        """Analysis needs BOTH gateways: embeddings for recall and chat for
+        description generation. API key is optional on purpose — an intranet
+        gateway may not require one."""
+        return bool(
+            self.embedding_base_url
+            and self.embedding_model
+            and self.relation_llm_base_url
+            and self.relation_llm_model
+        )
+
     @property
     def cors_allowed_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]

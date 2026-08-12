@@ -21,7 +21,8 @@ const LS_KBS = "kb_mock_bases";
 const LS_DIMENSIONS = "kb_mock_dimensions";
 const LS_KPS = "kb_mock_kps";
 const LS_ANSWERS = "kb_mock_answers";
-const LS_SEEDED = "kb_mock_seeded_v6";
+const LS_RELATIONS = "kb_mock_relations";
+const LS_SEEDED = "kb_mock_seeded_v7";
 
 const FIELD_TYPE_LABEL = { text: "文本", number: "数值", date: "时间", boolean: "布尔" };
 
@@ -48,6 +49,7 @@ function seedIfEmpty() {
     { kbId: "1", id: "2", title: "会员等级说明", status: "active", operator: "admin", created_at: "2026-08-03T09:00:00" },
     { kbId: "1", id: "3", title: "发票开具流程", status: "active", operator: "admin", created_at: "2026-08-05T09:00:00" },
     { kbId: "2", id: "1", title: "值班交接规范", status: "active", operator: "admin", created_at: "2026-08-04T09:00:00" },
+    { kbId: "2", id: "2", title: "支付退款故障处置", status: "active", operator: "admin", created_at: "2026-08-05T09:00:00" },
   ];
 
   let seq = 0;
@@ -64,12 +66,38 @@ function seedIfEmpty() {
 
     { id: nid(), kbId: "2", kpId: "1", coord: {}, content: "值班交接需在群里同步当前故障与待办事项，交接人确认后方可下班。", time: "2026-08-04", operator: "admin", note: "初始创建", revoked: false, created_at: "2026-08-04T09:00:00" },
     { id: nid(), kbId: "2", kpId: "1", coord: { tenant: "示例租户B" }, content: "「示例租户B」的值班交接补充说明：额外检查监控大盘并同步给对方值班群。", time: "2026-08-04", operator: "admin", note: "补充租户定制说法", revoked: false, created_at: "2026-08-04T09:30:00" },
+
+    { id: nid(), kbId: "2", kpId: "2", coord: {}, content: "用户按退款政策发起的退款若支付渠道执行失败，先在工单系统登记异常，再触发人工退款补偿流程，处理时限 24 小时内完成。", time: "2026-08-05", operator: "admin", note: "初始创建", revoked: false, created_at: "2026-08-05T09:00:00" },
+  ];
+
+  // 预置两条答案关联：一条 AI 生成的跨知识库关联(其中一端内容已更新，演示 stale 角标)，
+  // 一条手动添加的同库跨知识点关联
+  const relations = [
+    {
+      id: "r1",
+      a: { kbId: "1", kpId: "1", coordKey: "(默认)", coord: {} },
+      b: { kbId: "2", kpId: "2", coordKey: "(默认)", coord: {} },
+      contentA: "订单支付完成后 7 天内，未使用/未核销的订单支持无理由退款。",
+      contentB: "用户按退款政策发起的退款若支付渠道执行失败，先在工单系统登记异常，再触发人工退款补偿流程，处理时限 24 小时内完成。",
+      description: "两条答案主题相关：「退款政策」（产品知识库）规定了面向用户的无理由退款期限与口径；「支付退款故障处置」（运维知识库）描述退款执行失败时的登记与人工补偿流程。前者是政策口径，后者是该政策落地时异常场景的执行预案，二者互补，未见冲突。",
+      source: "ai", similarity: 0.31, model: "mock-llm", operator: "admin", created_at: "2026-08-06T11:00:00",
+    },
+    {
+      id: "r2",
+      a: { kbId: "1", kpId: "1", coordKey: "tenant:示例租户B", coord: { tenant: "示例租户B" } },
+      b: { kbId: "1", kpId: "3", coordKey: "tenant:示例租户B", coord: { tenant: "示例租户B" } },
+      contentA: "「示例租户B」按合同约定执行 30 天无理由退款，与默认政策不同。",
+      contentB: "「示例租户B」需要先在后台提交对公发票信息，审核通过后才能申请开票。",
+      description: "同为「示例租户B」的定制口径：退款按合同约定 30 天执行，开票前需先提交对公发票信息并通过审核。客服为该租户处理“退款后重新开票”类诉求时，需同时遵循这两条约定。",
+      source: "manual", similarity: null, model: null, operator: "admin", created_at: "2026-08-06T14:00:00",
+    },
   ];
 
   localStorage.setItem(LS_KBS, JSON.stringify(bases));
   localStorage.setItem(LS_DIMENSIONS, JSON.stringify(dimensions));
   localStorage.setItem(LS_KPS, JSON.stringify(kps));
   localStorage.setItem(LS_ANSWERS, JSON.stringify(answers));
+  localStorage.setItem(LS_RELATIONS, JSON.stringify(relations));
   localStorage.setItem(LS_SEEDED, "1");
 }
 
@@ -78,6 +106,7 @@ function resetDemoData() {
   localStorage.removeItem(LS_DIMENSIONS);
   localStorage.removeItem(LS_KPS);
   localStorage.removeItem(LS_ANSWERS);
+  localStorage.removeItem(LS_RELATIONS);
   localStorage.removeItem(LS_SEEDED);
   seedIfEmpty();
 }
@@ -591,6 +620,184 @@ function toggleDimensionStatus(key) {
 
 function dimensionUsageCount(key) {
   return getAllAnswers().filter(a => !a.revoked && a.coord[key] !== undefined && a.coord[key] !== "").length;
+}
+
+/* ---------------- 答案关联 (Answer Relations) ----------------
+   见 docs/PRD-答案关联.md。演示实现：
+   - "向量召回"用字符 bigram 的 Dice 相似度模拟（正式环境走 Ollama 向量模型 + 余弦）；
+   - "关联描述"用本地模板模拟（正式环境走 LLM 批量生成）。
+   关联端点 = { kbId, kpId, coordKey, coord }，即一条版本链；描述始终基于两端当前生效版本。
+   同一对答案只有一条记录(端点按 key 排序规范化)；source=manual 的不被 AI 分析覆盖。 */
+
+const REL_TOP_K = 10;
+const REL_MIN_SIM = 0.04;
+
+function getRelations() { return JSON.parse(localStorage.getItem(LS_RELATIONS) || "[]"); }
+function saveRelations(list) { localStorage.setItem(LS_RELATIONS, JSON.stringify(list)); }
+
+function relEndpointKey(e) { return e.kbId + "::" + e.kpId + "::" + e.coordKey; }
+function relPairKey(x, y) {
+  const kx = relEndpointKey(x), ky = relEndpointKey(y);
+  return kx <= ky ? kx + "##" + ky : ky + "##" + kx;
+}
+function relationsForKp(kbId, kpId) {
+  return getRelations().filter(r =>
+    (r.a.kbId === kbId && r.a.kpId === kpId) || (r.b.kbId === kbId && r.b.kpId === kpId));
+}
+function relationsForChain(kbId, kpId, coordKey) {
+  return getRelations().filter(r =>
+    (r.a.kbId === kbId && r.a.kpId === kpId && r.a.coordKey === coordKey) ||
+    (r.b.kbId === kbId && r.b.kpId === kpId && r.b.coordKey === coordKey));
+}
+function findRelationByPair(x, y) {
+  const pk = relPairKey(x, y);
+  return getRelations().find(r => relPairKey(r.a, r.b) === pk);
+}
+function deleteRelation(id) { saveRelations(getRelations().filter(r => r.id !== id)); }
+function updateRelation(id, patch) {
+  const list = getRelations();
+  const r = list.find(x => x.id === id);
+  if (!r) return;
+  Object.assign(r, patch);
+  saveRelations(list);
+}
+
+// x/y = 完整端点 { kbId, kpId, coordKey, coord, content, title, kbName }；落库时端点排序规范化
+function makeRelation(x, y, description, source, similarity) {
+  const [a, b] = relEndpointKey(x) <= relEndpointKey(y) ? [x, y] : [y, x];
+  const rel = {
+    id: "r" + Date.now() + Math.floor(Math.random() * 1000),
+    a: { kbId: a.kbId, kpId: a.kpId, coordKey: a.coordKey, coord: a.coord },
+    b: { kbId: b.kbId, kpId: b.kpId, coordKey: b.coordKey, coord: b.coord },
+    contentA: a.content, contentB: b.content,
+    description, source, similarity: similarity ?? null,
+    model: source === "ai" ? "mock-llm" : null,
+    operator: "admin", created_at: new Date().toISOString(),
+  };
+  const list = getRelations();
+  list.push(rel);
+  saveRelations(list);
+  return rel;
+}
+
+// 端点解析：返回 { kbObj, kp, live(该链当前生效组), state }
+// state: ok | revoked(链无生效版本) | kp-deleted | missing
+function relEndpointInfo(e) {
+  const kbObj = getKnowledgeBase(e.kbId);
+  const kp = kbObj ? getKnowledgePoint(e.kbId, e.kpId) : null;
+  let live = null;
+  if (kp) live = liveGroups(e.kbId, e.kpId, MOCK_NOW).find(g => g.coordKey === e.coordKey) || null;
+  let state = "ok";
+  if (!kbObj || !kp) state = "missing";
+  else if (kp.status === "deleted") state = "kp-deleted";
+  else if (!live) state = "revoked";
+  return { kbObj, kp, live, state };
+}
+
+// 端点解析(完整版)：附带 title/kbName/当前内容，供描述生成使用；不可用返回 null
+function relEndpointFull(e) {
+  const info = relEndpointInfo(e);
+  if (info.state !== "ok") return null;
+  return { kbId: e.kbId, kpId: e.kpId, coordKey: e.coordKey, coord: e.coord, content: info.live.live.content, title: info.kp.title, kbName: info.kbObj.name };
+}
+
+// ---- 相似召回（模拟向量）----
+function relBigrams(s) {
+  s = String(s || "").replace(/\s+/g, "");
+  const set = new Set();
+  for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+  return set;
+}
+function relSimilarity(x, y) {
+  const A = relBigrams(x), B = relBigrams(y);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  A.forEach(g => { if (B.has(g)) inter++; });
+  return 2 * inter / (A.size + B.size);
+}
+
+// 全库全部有效端点(所有启用知识库 × 未删除知识点 × 有生效版本的链)
+function collectAllEndpoints() {
+  const out = [];
+  getActiveKnowledgeBases().forEach(b => {
+    listActiveKPs(b.id).forEach(kp => {
+      liveGroups(b.id, kp.id, MOCK_NOW).forEach(g => {
+        out.push({ kbId: b.id, kpId: kp.id, coordKey: g.coordKey, coord: g.coord, content: g.live.content, title: kp.title, kbName: b.name });
+      });
+    });
+  });
+  return out;
+}
+
+function clipText(s, n) {
+  s = String(s || "");
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+// ---- 描述生成（模拟 LLM）----
+function mockRelationDescription(x, y) {
+  const condOf = e => coordText(e.coord) === "默认" ? "默认条件（处处适用）" : "「" + coordText(e.coord) + "」条件";
+  const samePoint = x.kbId === y.kbId && x.kpId === y.kpId;
+  const sameKb = x.kbId === y.kbId;
+  const head = samePoint
+    ? `同一知识点「${x.title}」下两个不同条件的说法。`
+    : `两条答案主题相关：「${x.title}」（${x.kbName}）与「${y.title}」（${y.kbName}${sameKb ? "" : "，跨知识库"}）。`;
+  const tail = samePoint
+    ? "两者按各自适用条件并存，查询时按条件取用；使用时注意二者在口径上的差异。"
+    : "两者内容互补：使用其中一条时建议同时参考另一条；若口径出现不一致，需回溯核对并修订较旧的一条。";
+  return `${head}前者在${condOf(x)}下的说法是：“${clipText(x.content, 42)}”；后者在${condOf(y)}下的说法是：“${clipText(y.content, 42)}”。${tail}`;
+}
+
+// ---- 分析执行：以 center 端点为中心，全库召回 Top-K 并生成/更新关联 ----
+// center = 完整端点；返回 { found, created, updated, skipped }
+function runRelationAnalysis(center) {
+  const centerText = center.title + " " + center.content;
+  const candidates = collectAllEndpoints()
+    .filter(e => relEndpointKey(e) !== relEndpointKey(center))
+    .map(e => ({ e, sim: relSimilarity(centerText, e.title + " " + e.content) }))
+    .filter(x => x.sim >= REL_MIN_SIM)
+    .sort((m, n) => n.sim - m.sim)
+    .slice(0, REL_TOP_K);
+
+  let created = 0, updated = 0, skipped = 0;
+  candidates.forEach(({ e, sim }) => {
+    const exist = findRelationByPair(center, e);
+    if (exist && exist.source === "manual") { skipped++; return; } // 手动维护的不覆盖
+    const description = mockRelationDescription(center, e);
+    if (exist) {
+      const [a] = relEndpointKey(center) <= relEndpointKey(e) ? [center, e] : [e, center];
+      const centerIsA = relEndpointKey(a) === relEndpointKey(center);
+      updateRelation(exist.id, {
+        description,
+        contentA: centerIsA ? center.content : e.content,
+        contentB: centerIsA ? e.content : center.content,
+        similarity: Math.round(sim * 100) / 100,
+        source: "ai", model: "mock-llm", created_at: new Date().toISOString(),
+      });
+      updated++;
+    } else {
+      makeRelation(center, e, description, "ai", Math.round(sim * 100) / 100);
+      created++;
+    }
+  });
+  return { found: candidates.length, created, updated, skipped };
+}
+
+// ---- 知识点级自动关联：对该知识点全部有效链逐条执行分析，聚合结果 ----
+function runAutoRelate(kbId, kpId) {
+  const kpObj = getKnowledgePoint(kbId, kpId), kbObj = getKnowledgeBase(kbId);
+  const total = { chains: 0, found: 0, created: 0, updated: 0, skipped: 0 };
+  if (!kpObj || !kbObj) return total;
+  liveGroups(kbId, kpId, MOCK_NOW).forEach(g => {
+    const center = { kbId, kpId, coordKey: g.coordKey, coord: g.coord, content: g.live.content, title: kpObj.title, kbName: kbObj.name };
+    const r = runRelationAnalysis(center);
+    total.chains++;
+    total.found += r.found;
+    total.created += r.created;
+    total.updated += r.updated;
+    total.skipped += r.skipped;
+  });
+  return total;
 }
 
 // ---------------- UI helpers ----------------

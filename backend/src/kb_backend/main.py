@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -7,12 +9,29 @@ from sqlalchemy.orm import Session
 from kb_backend.config import get_settings
 from kb_backend.db import get_db
 from kb_backend.envelope import BusinessError, envelope, register_exception_handlers
+from kb_backend.relation_worker import start_relation_worker
 from kb_backend.routers.audit_log import router as audit_log_router
 from kb_backend.routers.dimension import router as dimension_router
 from kb_backend.routers.knowledge_base import router as knowledge_base_router
 from kb_backend.routers.knowledge_point import router as knowledge_point_router
+from kb_backend.routers.relation import global_router as relation_global_router
+from kb_backend.routers.relation import kp_router as relation_kp_router
 
-app = FastAPI(title="Knowledge Base Backend")
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # 答案关联 worker：网关未配置时返回 None(功能降级为 disabled)。
+    # 注意 TestClient(app) 不走 lifespan(只有 `with TestClient(...)` 才走)，
+    # 所以现有测试不受影响，也绝不会在测试里意外起线程。
+    worker = start_relation_worker()
+    try:
+        yield
+    finally:
+        if worker is not None:
+            worker.stop()
+
+
+app = FastAPI(title="Knowledge Base Backend", lifespan=_lifespan)
 register_exception_handlers(app)
 # allow_methods/allow_headers must be explicit: CORSMiddleware's own
 # defaults are allow_methods=("GET",) and allow_headers=() — every
@@ -30,13 +49,17 @@ app.add_middleware(
     # comment above describes. Codex outer-gate finding on PR #25: this
     # endpoint worked fine against TestClient (no CORS involved) but every
     # real browser call would fail preflight.
-    allow_methods=["GET", "POST", "PATCH", "PUT"],
+    # DELETE added for issue "答案关联" 的 DELETE /answer-relations/{id} —
+    # same explicit-list trap as the PUT note above.
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
 app.include_router(knowledge_base_router)
 app.include_router(dimension_router)
 app.include_router(knowledge_point_router)
 app.include_router(audit_log_router)
+app.include_router(relation_kp_router)
+app.include_router(relation_global_router)
 
 
 @app.get("/health")

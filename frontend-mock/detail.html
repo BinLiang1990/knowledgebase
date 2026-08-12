@@ -140,13 +140,82 @@
   </div>
 </div>
 
+<!-- 分析关联：三阶段进度 -->
+<div class="mask" id="relAnalyzeMask">
+  <div class="modal">
+    <div class="mo-head"><h3>分析关联</h3><button class="mo-close" onclick="closeModal('relAnalyzeMask')">✕</button></div>
+    <div class="mo-body">
+      <p id="relAnalyzeTarget" style="font-size:13px;color:var(--ink-3);margin-bottom:10px"></p>
+      <div id="relAnalyzeSteps" style="font-size:13.5px;line-height:2.2"></div>
+      <p class="hint" style="margin-top:10px">演示环境：召回与描述由本地模拟生成；正式环境经向量模型召回 + LLM 生成，异步任务可轮询进度。</p>
+    </div>
+    <div class="mo-foot" id="relAnalyzeFoot"></div>
+  </div>
+</div>
+
+<!-- 手动添加关联 -->
+<div class="mask" id="relAddMask">
+  <div class="modal">
+    <div class="mo-head"><h3>手动添加关联</h3><button class="mo-close" onclick="closeModal('relAddMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="relSelfKpId" />
+      <div class="mf">
+        <label><span class="req">*</span>本知识点侧答案</label>
+        <select id="relSelfChain"></select>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>对端知识库</label>
+        <select id="relKbSel" onchange="relKbChanged()"></select>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>对端知识点</label>
+        <select id="relKpSel" onchange="relKpChanged()"></select>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>对端答案（条件组合）</label>
+        <select id="relChainSel"></select>
+      </div>
+      <div class="mf">
+        <label><span class="req">*</span>关联描述</label>
+        <textarea id="relDesc" rows="4" placeholder="说明两条答案之间的关系；也可以点下方按钮由 AI 生成后再修改"></textarea>
+        <button class="btn sm" style="margin-top:8px" onclick="genRelDesc()">✦ AI 生成描述</button>
+      </div>
+      <p class="hint" id="relFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('relAddMask')">取 消</button>
+      <button class="btn primary" onclick="submitRelAdd()">保 存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑关联描述 -->
+<div class="mask" id="relEditMask">
+  <div class="modal">
+    <div class="mo-head"><h3>编辑关联描述</h3><button class="mo-close" onclick="closeModal('relEditMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="relEditId" />
+      <div class="mf">
+        <label><span class="req">*</span>关联描述</label>
+        <textarea id="relEditDesc" rows="5"></textarea>
+      </div>
+      <div class="hint">人工改写后该关联标记为「手动」，后续 AI 分析不再覆盖它。</div>
+      <p class="hint" id="relEditHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('relEditMask')">取 消</button>
+      <button class="btn primary" onclick="submitRelEdit()">保 存</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="assets/app.js"></script>
 <script>
   function currentId() { return new URLSearchParams(location.search).get("id") || ""; }
   function attrJson(obj) { return JSON.stringify(obj).replace(/'/g, "&#39;"); }
-  let S = { filters: {}, qMode: "now", qTime: MOCK_NOW, ddOpen: false, ddDim: null, tab: "now" };
+  let S = { filters: {}, qMode: "now", qTime: MOCK_NOW, ddOpen: false, ddDim: null, tab: new URLSearchParams(location.search).get("tab") || "now" };
   let TL_COORD = null;
   let TREE_AXIS_A = null, TREE_AXIS_B = "__init", TREE_EXP = false;
 
@@ -215,16 +284,21 @@
       : groups.map((g, i) => {
           const condTxt = coordSpec(g.coord) ? "适用条件：" + coordText(g.coord) : "默认答案 · 处处适用";
           const canPromote = coordSpec(g.coord) > 0;
+          const relCount = relationsForChain(kb.id, kpId, g.coordKey).length;
+          const relBadge = relCount
+            ? `<span class="tag purple" style="cursor:pointer" title="查看该答案的关联" onclick="S.tab='relations';renderDetail()">关联 ${relCount}</span>`
+            : "";
           return `<div class="ans-item">
             <div style="display:flex;align-items:flex-start;gap:16px">
               <div class="ai-content" style="flex:1">${escapeHtml(g.live.content)}</div>
               <span class="ops" style="font-size:12.5px;white-space:nowrap;padding-top:3px">
+                <a onclick='startAnalyze("${kpId}", ${attrJson(g.coord)})'>分析关联</a>
                 <a onclick='openWriteAnswerModal("${kpId}", ${attrJson({ coord: g.coord, content: g.live.content })})'>编辑</a>
                 ${canPromote ? `<a onclick='openPromoteModal("${kpId}", ${attrJson(g.live.content)})'>设为默认</a>` : ""}
                 <a class="danger" onclick='openRevokeAnswerModal("${kb.id}", "${kpId}", ${attrJson(g.coord)}, ${attrJson(g.live.content)})'>撤回</a>
               </span>
             </div>
-            <div class="ai-cond">${uniqueTop && i === 0 ? '<span class="live"><i></i>此条件下生效</span>' : ""}<span>${escapeHtml(condTxt)}</span><span><span class="num">${escapeHtml(g.live.time)}</span> 起 · 共 ${g.versionCount} 版</span><span>${escapeHtml(g.live.operator)} 录入</span></div>
+            <div class="ai-cond">${uniqueTop && i === 0 ? '<span class="live"><i></i>此条件下生效</span>' : ""}<span>${escapeHtml(condTxt)}</span><span><span class="num">${escapeHtml(g.live.time)}</span> 起 · 共 ${g.versionCount} 版</span><span>${escapeHtml(g.live.operator)} 录入</span>${relBadge}</div>
           </div>`;
         }).join("");
 
@@ -373,6 +447,273 @@
     </tbody></table></div>`;
   }
 
+  /* ---------------- 答案关联 tab（见 docs/PRD-答案关联.md §5） ---------------- */
+
+  // 确定一条关联里哪端属于当前知识点(同知识点关联时取 a 端)
+  function relSelfOther(rel) {
+    const isSelfA = rel.a.kbId === kb.id && rel.a.kpId === currentId();
+    return {
+      self: isSelfA ? rel.a : rel.b,
+      other: isSelfA ? rel.b : rel.a,
+      selfContent: isSelfA ? rel.contentA : rel.contentB,
+      otherContent: isSelfA ? rel.contentB : rel.contentA,
+    };
+  }
+
+  function relCardHtml(rel) {
+    const { self, other, selfContent, otherContent } = relSelfOther(rel);
+    const selfInfo = relEndpointInfo(self), otherInfo = relEndpointInfo(other);
+    const stale = (selfInfo.state === "ok" && selfInfo.live.live.content !== selfContent)
+               || (otherInfo.state === "ok" && otherInfo.live.live.content !== otherContent);
+    const samePoint = other.kbId === kb.id && other.kpId === currentId();
+    const otherCond = other.coordKey === "(默认)" ? "默认答案" : coordText(other.coord);
+    const otherName = samePoint
+      ? `本知识点 / ${otherCond}`
+      : `${otherInfo.kbObj ? otherInfo.kbObj.name : "未知知识库"} / ${otherInfo.kp ? otherInfo.kp.title : "未知知识点"} / ${otherCond}`;
+    const otherLink = otherInfo.kp && !samePoint
+      ? `<a href="detail.html?kb=${other.kbId}&id=${other.kpId}" style="font-weight:600">${escapeHtml(otherName)}</a>`
+      : `<b>${escapeHtml(otherName)}</b>`;
+
+    const badges = [
+      rel.source === "ai" ? `<span class="tag blue">AI</span>` : `<span class="tag purple">手动</span>`,
+      stale ? `<span class="tag orange">内容已更新</span>` : "",
+      otherInfo.state === "revoked" ? `<span class="tag gray">对端已撤回</span>` : "",
+      (otherInfo.state === "kp-deleted" || otherInfo.state === "missing") ? `<span class="tag gray">对端知识点已删除</span>` : "",
+    ].join("");
+
+    const canRegen = selfInfo.state === "ok" && otherInfo.state === "ok";
+    const ops = [
+      rel.source === "manual" ? `<a onclick="openRelEdit('${rel.id}')">编辑描述</a>` : "",
+      canRegen ? `<a onclick="regenRelation('${rel.id}')">重新生成</a>` : "",
+      `<a class="danger" onclick="removeRelation('${rel.id}')">删除</a>`,
+    ].filter(Boolean).join("");
+
+    const foot = [
+      rel.source === "ai" ? `由 ${escapeHtml(rel.model || "mock-llm")} 生成` : `${escapeHtml(rel.operator)} 手动添加`,
+      `<span class="num">${escapeHtml((rel.created_at || "").replace("T", " ").slice(0, 16))}</span>`,
+      rel.similarity ? `相似度 <span class="num">${Math.round(rel.similarity * 100)}%</span>` : "",
+    ].filter(Boolean).join(" · ");
+
+    const otherSummary = otherInfo.state === "ok"
+      ? `<div style="font-size:12.5px;color:var(--ink-6);margin-top:6px">对端当前内容：${escapeHtml(clipText(otherInfo.live.live.content, 60))}</div>`
+      : "";
+
+    return `<div class="ans-item">
+      <div style="display:flex;align-items:flex-start;gap:16px">
+        <div style="flex:1">
+          <div style="font-size:13.5px;margin-bottom:6px">↔ ${otherLink} ${badges}</div>
+          <div class="ai-content" style="font-size:13.5px;color:var(--ink-2)">${escapeHtml(rel.description)}</div>
+          ${otherSummary}
+        </div>
+        <span class="ops" style="font-size:12.5px;white-space:nowrap;padding-top:3px">${ops}</span>
+      </div>
+      <div class="ai-cond"><span>${foot}</span></div>
+    </div>`;
+  }
+
+  function tabRelations(kpId) {
+    const rels = relationsForKp(kb.id, kpId);
+    const head = `<div class="form-row" style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:13px;color:var(--ink-4)">答案关联 <b class="num">${rels.length}</b> 条 · 由「自动关联 / 分析关联」生成或手动添加；关联在两端知识点的详情页对称可见</span>
+      <span style="display:flex;gap:8px">
+        <button class="btn sm" onclick="startAutoRelate('${kpId}')">✦ 自动关联</button>
+        <button class="btn primary sm" onclick="openRelAdd('${kpId}')">+ 手动添加关联</button>
+      </span>
+    </div>`;
+    if (!rels.length) {
+      return head + `<div class="empty-block">暂无关联。<br>在「当前答案」里对某条答案点击「分析关联」，或点右上角手动添加。</div>`;
+    }
+    const groups = new Map();
+    rels.forEach(rel => {
+      const { self } = relSelfOther(rel);
+      if (!groups.has(self.coordKey)) groups.set(self.coordKey, { coord: self.coord, list: [] });
+      groups.get(self.coordKey).list.push(rel);
+    });
+    const keys = [...groups.keys()].sort((a, b) => (a === "(默认)" ? -1 : b === "(默认)" ? 1 : a.localeCompare(b)));
+    const body = keys.map(k => {
+      const g = groups.get(k);
+      const label = k === "(默认)" ? "默认答案" : coordText(g.coord);
+      return `<div style="margin-top:18px">
+        <div style="font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:4px">本知识点 · ${escapeHtml(label)}（${g.list.length} 条关联）</div>
+        ${g.list.map(relCardHtml).join("")}
+      </div>`;
+    }).join("");
+    return head + body;
+  }
+
+  // ---- 发起分析(演示：三阶段假进度 + 本地模拟召回/生成) ----
+  // targetHtml: 弹窗里的"分析对象"说明；execFn: 最后一步实际执行，返回 { summaryHtml, changed }
+  let REL_TIMERS = [];
+  function runAnalyzeModal(targetHtml, execFn) {
+    const steps = ["补齐向量（增量 embedding）", "全库相似召回（Top-10 · 相似度阈值）", "生成关联描述（批量）"];
+    document.getElementById("relAnalyzeTarget").innerHTML = targetHtml;
+    const stepsEl = document.getElementById("relAnalyzeSteps");
+    stepsEl.innerHTML = steps.map((s, i) => `<div id="relStep${i}" style="color:var(--ink-6)">◌ ${s}</div>`).join("");
+    document.getElementById("relAnalyzeFoot").innerHTML = "";
+    openModal("relAnalyzeMask");
+
+    REL_TIMERS.forEach(clearTimeout);
+    REL_TIMERS = [];
+    const mark = i => {
+      const el = document.getElementById("relStep" + i);
+      if (el) { el.textContent = "✓ " + steps[i]; el.style.color = "#0f9d58"; }
+    };
+    REL_TIMERS.push(setTimeout(() => mark(0), 600));
+    REL_TIMERS.push(setTimeout(() => mark(1), 1400));
+    REL_TIMERS.push(setTimeout(() => {
+      mark(2);
+      const { summaryHtml, changed } = execFn();
+      stepsEl.innerHTML += `<div style="margin-top:10px;color:var(--ink-2)">${summaryHtml}</div>`;
+      document.getElementById("relAnalyzeFoot").innerHTML =
+        `<button class="btn" onclick="closeModal('relAnalyzeMask')">关 闭</button>` +
+        (changed ? `<button class="btn primary" onclick="closeModal('relAnalyzeMask');S.tab='relations';renderDetail()">查看关联</button>` : "");
+      renderDetail();
+    }, 2300));
+  }
+
+  // 单条答案分析(「当前答案」卡片上的「分析关联」)
+  function startAnalyze(kpId, coord) {
+    const kp = getKnowledgePoint(kb.id, kpId);
+    const g = liveGroups(kb.id, kpId, MOCK_NOW).find(x => x.coordKey === coordKeyOf(coord));
+    if (!kp || !g) { toast("该条件当前没有生效答案，无法分析", "err"); return; }
+    const center = { kbId: kb.id, kpId, coordKey: g.coordKey, coord: g.coord, content: g.live.content, title: kp.title, kbName: kb.name };
+    runAnalyzeModal(
+      `分析对象：<b>${escapeHtml(kp.title)}</b> · ${escapeHtml(g.coordKey === "(默认)" ? "默认答案" : coordText(g.coord))}`,
+      () => {
+        const res = runRelationAnalysis(center);
+        const summaryHtml = res.found === 0
+          ? "没有召回到足够相似的答案。"
+          : `召回 <b class="num">${res.found}</b> 条相似答案：新增关联 <b class="num">${res.created}</b> 条、更新 <b class="num">${res.updated}</b> 条${res.skipped ? `、跳过手动维护 <b class="num">${res.skipped}</b> 条` : ""}。`;
+        return { summaryHtml, changed: res.created + res.updated > 0 };
+      });
+  }
+
+  // 知识点级自动关联(「答案关联」tab 头部按钮)：全部答案逐条检索相关知识点并自动关联
+  function startAutoRelate(kpId) {
+    const kp = getKnowledgePoint(kb.id, kpId);
+    const chains = liveGroups(kb.id, kpId, MOCK_NOW);
+    if (!kp || !chains.length) { toast("当前没有生效答案，无法自动关联", "err"); return; }
+    runAnalyzeModal(
+      `分析对象：<b>${escapeHtml(kp.title)}</b> · 全部 <b class="num">${chains.length}</b> 条答案，逐条在所有知识库中检索相关知识点`,
+      () => {
+        const res = runAutoRelate(kb.id, kpId);
+        const summaryHtml = res.found === 0
+          ? `已分析 <b class="num">${res.chains}</b> 条答案，没有召回到足够相似的答案。`
+          : `已分析 <b class="num">${res.chains}</b> 条答案，召回 <b class="num">${res.found}</b> 条相似答案：新增关联 <b class="num">${res.created}</b> 条、更新 <b class="num">${res.updated}</b> 条${res.skipped ? `、跳过手动维护 <b class="num">${res.skipped}</b> 条` : ""}。`;
+        return { summaryHtml, changed: res.created + res.updated > 0 };
+      });
+  }
+
+  // ---- 单条关联操作 ----
+  function regenRelation(id) {
+    const rel = getRelations().find(r => r.id === id);
+    if (!rel) return;
+    const x = relEndpointFull(rel.a), y = relEndpointFull(rel.b);
+    if (!x || !y) { toast("有一端已不可用，无法重新生成", "err"); return; }
+    toast("正在重新生成描述…");
+    setTimeout(() => {
+      updateRelation(id, {
+        description: mockRelationDescription(x, y),
+        contentA: x.content, contentB: y.content,
+        source: "ai", model: "mock-llm", created_at: new Date().toISOString(),
+      });
+      toast("描述已重新生成", "ok");
+      renderDetail();
+    }, 700);
+  }
+  function removeRelation(id) {
+    if (!confirm("确定删除这条关联？此操作不可恢复。")) return;
+    deleteRelation(id);
+    toast("已删除关联", "ok");
+    renderDetail();
+  }
+
+  // ---- 编辑描述弹窗 ----
+  function openRelEdit(id) {
+    const rel = getRelations().find(r => r.id === id);
+    if (!rel) return;
+    document.getElementById("relEditId").value = id;
+    document.getElementById("relEditDesc").value = rel.description;
+    document.getElementById("relEditHint").textContent = "";
+    openModal("relEditMask");
+  }
+  function submitRelEdit() {
+    const id = document.getElementById("relEditId").value;
+    const desc = document.getElementById("relEditDesc").value.trim();
+    if (!desc) { document.getElementById("relEditHint").textContent = "描述不能为空。"; return; }
+    updateRelation(id, { description: desc, source: "manual", model: null });
+    toast("已更新描述", "ok");
+    closeModal("relEditMask");
+    renderDetail();
+  }
+
+  // ---- 手动添加弹窗(级联：知识库 → 知识点 → 条件组合) ----
+  function relChainOptionsHtml(kbId, kpId, selected) {
+    return liveGroups(kbId, kpId, MOCK_NOW).map(g =>
+      `<option value="${escapeHtml(g.coordKey)}" ${selected === g.coordKey ? "selected" : ""}>${escapeHtml(g.coordKey === "(默认)" ? "默认答案" : coordText(g.coord))} · ${escapeHtml(clipText(g.live.content, 18))}</option>`).join("");
+  }
+  function openRelAdd(kpId, selfCoordKey) {
+    document.getElementById("relSelfKpId").value = kpId;
+    document.getElementById("relSelfChain").innerHTML = relChainOptionsHtml(kb.id, kpId, selfCoordKey);
+    document.getElementById("relKbSel").innerHTML = getActiveKnowledgeBases()
+      .map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join("");
+    relKbChanged();
+    document.getElementById("relDesc").value = "";
+    document.getElementById("relFormHint").textContent = "";
+    openModal("relAddMask");
+  }
+  function relKbChanged() {
+    const kbId = document.getElementById("relKbSel").value;
+    const kps = listActiveKPs(kbId);
+    document.getElementById("relKpSel").innerHTML = kps.length
+      ? kps.map(k => `<option value="${k.id}">${escapeHtml(k.title)}</option>`).join("")
+      : `<option value="">（该知识库暂无知识点）</option>`;
+    relKpChanged();
+  }
+  function relKpChanged() {
+    const kbId = document.getElementById("relKbSel").value;
+    const kpId = document.getElementById("relKpSel").value;
+    document.getElementById("relChainSel").innerHTML = kpId ? relChainOptionsHtml(kbId, kpId) : "";
+  }
+  function readRelAddEndpoints() {
+    const hint = document.getElementById("relFormHint");
+    const selfKpId = document.getElementById("relSelfKpId").value;
+    const selfKey = document.getElementById("relSelfChain").value;
+    const otherKbId = document.getElementById("relKbSel").value;
+    const otherKpId = document.getElementById("relKpSel").value;
+    const otherKey = document.getElementById("relChainSel").value;
+    if (!selfKey || !otherKbId || !otherKpId || !otherKey) { hint.textContent = "请完整选择两端答案。"; return null; }
+    const build = (kbId, kpId, coordKey) => {
+      const g = liveGroups(kbId, kpId, MOCK_NOW).find(x => x.coordKey === coordKey);
+      const kpObj = getKnowledgePoint(kbId, kpId), kbObj = getKnowledgeBase(kbId);
+      if (!g || !kpObj || !kbObj) return null;
+      return { kbId, kpId, coordKey, coord: g.coord, content: g.live.content, title: kpObj.title, kbName: kbObj.name };
+    };
+    const x = build(kb.id, selfKpId, selfKey), y = build(otherKbId, otherKpId, otherKey);
+    if (!x || !y) { hint.textContent = "所选答案不可用（可能已撤回）。"; return null; }
+    if (relEndpointKey(x) === relEndpointKey(y)) { hint.textContent = "不能与自身建立关联，请换一条答案。"; return null; }
+    return { x, y };
+  }
+  function genRelDesc() {
+    const eps = readRelAddEndpoints();
+    if (!eps) return;
+    document.getElementById("relDesc").value = mockRelationDescription(eps.x, eps.y);
+    document.getElementById("relFormHint").textContent = "";
+  }
+  function submitRelAdd() {
+    const hint = document.getElementById("relFormHint");
+    const eps = readRelAddEndpoints();
+    if (!eps) return;
+    if (findRelationByPair(eps.x, eps.y)) { hint.textContent = "这两条答案之间已存在关联，可在列表中编辑或删除。"; return; }
+    const desc = document.getElementById("relDesc").value.trim();
+    if (!desc) { hint.textContent = "请填写关联描述，或点「AI 生成描述」。"; return; }
+    makeRelation(eps.x, eps.y, desc, "manual", null);
+    toast("已添加关联", "ok");
+    closeModal("relAddMask");
+    S.tab = "relations";
+    renderDetail();
+  }
+
   function openRenameModal() {
     document.getElementById("titleInput").value = currentKpTitle();
     document.getElementById("titleFormHint").textContent = "";
@@ -412,9 +753,10 @@
          <button class="btn" onclick="openRenameModal()">编辑标题</button>
          <button class="btn danger" onclick="openDeleteModal('${id}','${escapeHtml(kp.title)}')">删 除</button>`;
 
-    const tabs = [["now", "当前答案"], ["tree", "立体全景"], ["timeline", "版本历史"], ["logs", "变更留痕"]];
+    const tabs = [["now", "当前答案"], ["relations", "答案关联"], ["tree", "立体全景"], ["timeline", "版本历史"], ["logs", "变更留痕"]];
     let body = "";
     if (S.tab === "now") body = tabNow(id);
+    else if (S.tab === "relations") body = tabRelations(id);
     else if (S.tab === "tree") body = tabTree(id);
     else if (S.tab === "timeline") body = tabTimeline(id, S.qTime);
     else body = tabLogs(id);

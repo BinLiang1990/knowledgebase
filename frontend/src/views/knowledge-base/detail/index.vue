@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import type { ExistingAnswer } from './WriteAnswerDialog.vue'
-// 知识点详情页：头部（标题/元信息/操作）+ 四个 tab（当前答案 / 立体全景 /
-// 版本历史 / 变更留痕）。立体全景仍是 P2（issue #16），按 IA 对齐 demo 保留
-// tab 位、内容为占位——与 issue #7 对未建统计卡的处理一致。
+// 知识点详情页：头部（标题/元信息/操作）+ 五个 tab（当前答案 / 答案关联 /
+// 立体全景 / 版本历史 / 变更留痕）。立体全景仍是 P2（issue #16），按 IA 对齐
+// demo 保留 tab 位、内容为占位——与 issue #7 对未建统计卡的处理一致。
 import type { AnswerGroup } from '@/api/knowledgePoint'
+import type { AnswerRelation } from '@/api/relation'
 import type { Filters } from '@/utils/dimension'
 import { listChangeLog } from '@/api/changeLog'
 import { listEnabledDimensions } from '@/api/dimension'
 import { listKnowledgeBases } from '@/api/knowledgeBase'
 import { getKnowledgePoint, listAnswerGroups } from '@/api/knowledgePoint'
+import { analyzeRelations, listRelations } from '@/api/relation'
 import RevokeAnswerDialog from '@/components/RevokeAnswerDialog.vue'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useCrumb } from '@/composables/useCrumb'
@@ -17,16 +19,20 @@ import { formatDate, today } from '@/utils/format'
 import { hasUniqueTopMatch, sortLiveGroupsByPriority } from '@/utils/resolve'
 import ConditionPicker from '../components/ConditionPicker.vue'
 import DeleteKnowledgePointDialog from '../components/DeleteKnowledgePointDialog.vue'
+import AddRelationDialog from './AddRelationDialog.vue'
+import EditRelationDialog from './EditRelationDialog.vue'
 import EditTitleDialog from './EditTitleDialog.vue'
+import RelationsPane from './RelationsPane.vue'
 import TimelinePane from './TimelinePane.vue'
 import WriteAnswerDialog from './WriteAnswerDialog.vue'
 
 defineOptions({ name: 'KnowledgePointDetail' })
 
-type TabKey = 'now' | 'tree' | 'timeline' | 'logs'
+type TabKey = 'now' | 'relations' | 'tree' | 'timeline' | 'logs'
 
 const TABS: Array<[TabKey, string]> = [
   ['now', '当前答案'],
+  ['relations', '答案关联'],
   ['tree', '立体全景'],
   ['timeline', '版本历史'],
   ['logs', '变更留痕'],
@@ -77,6 +83,68 @@ const changeLogQuery = useAsyncData(() => listChangeLog(kbId.value, kpId.value),
   watch: [kbReady],
 })
 
+// 答案关联（docs/PRD-答案关联.md §5）：查询归页面持有——「当前答案」卡片的
+// 关联角标和「答案关联」tab 复用同一份数据。分析进行中每 5s 静默轮询，
+// 完成后停（PRD §5.4）。
+let relationsPolling = false
+let relationsTimer: number | undefined
+const relationsQuery = useAsyncData(
+  () => listRelations(kbId.value, kpId.value, { silent: relationsPolling }),
+  { enabled: () => kbReady.value, watch: [kbReady] },
+)
+const relationStatus = computed(() => relationsQuery.data.value?.generation_status)
+const relationAnalysisDisabled = computed(() => relationStatus.value === 'disabled')
+watch(relationStatus, (status) => {
+  const shouldPoll = status === 'pending' || status === 'generating'
+  if (shouldPoll && relationsTimer === undefined) {
+    relationsTimer = window.setInterval(() => {
+      relationsPolling = true
+      relationsQuery.load()
+    }, 5000)
+  }
+  else if (!shouldPoll && relationsTimer !== undefined) {
+    window.clearInterval(relationsTimer)
+    relationsTimer = undefined
+    relationsPolling = false
+  }
+}, { immediate: true })
+onBeforeUnmount(() => {
+  if (relationsTimer !== undefined)
+    window.clearInterval(relationsTimer)
+})
+
+/** 该条件组现有关联数（角标）；按链的 coord_hash 匹配任一端 */
+function relationCount(g: AnswerGroup): number {
+  const hash = g.latest_answer.coord_hash
+  const rels = relationsQuery.data.value?.relations ?? []
+  return rels.filter(r =>
+    (r.a.kp_id === kpId.value && r.a.coord_hash === hash)
+    || (r.b.kp_id === kpId.value && r.b.coord_hash === hash),
+  ).length
+}
+
+const analyzeSubmitting = ref(false)
+
+/** 发起分析：coordHash 省略 = 知识点级自动关联（PRD §3.1） */
+async function startAnalyze(coordHash?: string) {
+  if (analyzeSubmitting.value)
+    return
+  analyzeSubmitting.value = true
+  try {
+    await analyzeRelations(kbId.value, kpId.value, coordHash)
+    ElMessage.success('已发起关联分析，完成后自动刷新')
+    tab.value = 'relations'
+    relationsPolling = false
+    relationsQuery.load()
+  }
+  catch {
+    // request 拦截器已提示（未配置网关/没有生效答案等）
+  }
+  finally {
+    analyzeSubmitting.value = false
+  }
+}
+
 const isDeleted = computed(() => kp.value?.status === 'deleted')
 const sorted = computed(() => sortLiveGroupsByPriority(groups.value, filters.value, dimensions.value))
 const uniqueTop = computed(() => hasUniqueTopMatch(sorted.value, hasFilter.value))
@@ -105,6 +173,12 @@ const writeDialogRef = ref<InstanceType<typeof WriteAnswerDialog>>()
 const editTitleDialogRef = ref<InstanceType<typeof EditTitleDialog>>()
 const deleteDialogRef = ref<InstanceType<typeof DeleteKnowledgePointDialog>>()
 const revokeDialogRef = ref<InstanceType<typeof RevokeAnswerDialog>>()
+const addRelationDialogRef = ref<InstanceType<typeof AddRelationDialog>>()
+const editRelationDialogRef = ref<InstanceType<typeof EditRelationDialog>>()
+
+function openEditRelation(rel: AnswerRelation) {
+  editRelationDialogRef.value?.open(rel)
+}
 
 function openWrite() {
   writeDialogRef.value?.open()
@@ -129,11 +203,13 @@ function openDelete() {
     deleteDialogRef.value?.open({ kbId: kbId.value, id: kp.value.id, title: kp.value.title })
 }
 
-// 答案变更（写/编辑/撤回）会改变条件组、知识点的在用答案数与留痕
+// 答案变更（写/编辑/撤回）会改变条件组、知识点的在用答案数与留痕；
+// 关联的 stale/对端撤回态也由答案内容推导，一并重载
 function reloadAfterAnswerMutation() {
   groupsQuery.load()
   kpQuery.load()
   changeLogQuery.load()
+  relationsQuery.load()
 }
 // 删除（软删）后知识点仍可查看，重载详情让页面切到已删除态；统计卡同步
 function reloadAfterKpMutation() {
@@ -249,7 +325,22 @@ function reloadAfterKpMutation() {
           </div>
         </div>
 
-        <div v-if="tab === 'tree'" class="empty-block">
+        <RelationsPane
+          v-if="tab === 'relations'"
+          :kb-id="kbId"
+          :kp-id="kpId"
+          :dimensions="dimensions"
+          :data="relationsQuery.data.value"
+          :loading="relationsQuery.loading.value"
+          :error="relationsQuery.error.value"
+          :readonly="isDeleted"
+          @refresh="relationsQuery.load"
+          @add-relation="addRelationDialogRef?.open()"
+          @edit-relation="openEditRelation"
+          @auto-relate="startAnalyze()"
+        />
+
+        <div v-else-if="tab === 'tree'" class="empty-block">
           立体全景开发中，见 Issue #16
         </div>
 
@@ -314,6 +405,13 @@ function reloadAfterKpMutation() {
                 </div>
                 <span class="ops" style="font-size: 12.5px; white-space: nowrap; padding-top: 3px">
                   <a
+                    :style="relationAnalysisDisabled || isDeleted ? 'color: var(--ink-6); cursor: not-allowed' : undefined"
+                    :title="relationAnalysisDisabled ? '关联分析未启用（服务端未配置模型网关）' : isDeleted ? '该知识点已删除' : '在所有知识库中检索与这条答案相关的答案'"
+                    @click="relationAnalysisDisabled || isDeleted ? undefined : startAnalyze(g.latest_answer.coord_hash)"
+                  >
+                    分析关联
+                  </a>
+                  <a
                     :style="editDisabledReason ? 'color: var(--ink-6); cursor: not-allowed' : undefined"
                     :title="editDisabledReason ?? undefined"
                     @click="editDisabledReason ? undefined : openEdit(g)"
@@ -328,6 +426,13 @@ function reloadAfterKpMutation() {
                 <span>{{ describeCoord(g.coord, dimensions) }}</span>
                 <span><span class="num">{{ g.live_answer!.effective_time }}</span> 起 · 共 {{ g.version_count }} 版</span>
                 <span>{{ g.live_answer!.operator }} 录入</span>
+                <span
+                  v-if="relationCount(g) > 0"
+                  class="tag purple"
+                  style="cursor: pointer"
+                  title="查看该答案的关联"
+                  @click="tab = 'relations'"
+                >关联 {{ relationCount(g) }}</span>
               </div>
             </div>
           </template>
@@ -344,6 +449,16 @@ function reloadAfterKpMutation() {
       <EditTitleDialog ref="editTitleDialogRef" :kb-id="kbId" :kp-id="kpId" @success="kpQuery.load" />
       <DeleteKnowledgePointDialog ref="deleteDialogRef" @success="reloadAfterKpMutation" />
       <RevokeAnswerDialog ref="revokeDialogRef" @success="reloadAfterAnswerMutation" />
+      <AddRelationDialog
+        ref="addRelationDialogRef"
+        :kb-id="kbId"
+        :kp-id="kpId"
+        :self-groups="groups"
+        :dimensions="dimensions"
+        :analysis-disabled="relationAnalysisDisabled"
+        @success="relationsQuery.load"
+      />
+      <EditRelationDialog ref="editRelationDialogRef" @success="relationsQuery.load" />
     </template>
   </template>
 </template>
