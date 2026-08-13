@@ -12,6 +12,8 @@ const userStore = useUserStore()
 
 const status = ref<'working' | 'error'>('working')
 const errorText = ref('')
+/** 排障用：到达本页时收到了哪些参数（只记参数名，绝不记 Ticket 值） */
+const receivedParams = ref('')
 
 onMounted(async () => {
   // 兼容两种部署形态：Query 在 Hash 内（…/#/sso?ticket=）与 Hash 前（…/?ticket=#/sso）
@@ -19,6 +21,11 @@ onMounted(async () => {
   const hashQuery = new URLSearchParams(window.location.hash.split('?')[1] || '')
   const ticket = hashQuery.get('ticket') || pageQuery.get('ticket') || ''
   const rawType = String(hashQuery.get('ticketType') || pageQuery.get('ticketType') || 'SAME_DOMAIN').toUpperCase()
+
+  const hashKeys = [...hashQuery.keys()]
+  const pageKeys = [...pageQuery.keys()]
+  receivedParams.value
+    = `hash 内参数：${hashKeys.length ? hashKeys.join(', ') : '无'} · hash 前参数：${pageKeys.length ? pageKeys.join(', ') : '无'}`
 
   // 读取后立即清除地址栏里的 Ticket（含 Hash 前的 Query）
   window.history.replaceState({}, '', `${window.location.pathname}#/sso`)
@@ -54,6 +61,9 @@ onMounted(async () => {
         </p>
         <p class="hint">
           Ticket 为一次性凭证，刷新本页无法重试。
+        </p>
+        <p v-if="receivedParams" class="hint" style="margin-top: 4px">
+          排障信息（{{ receivedParams }}）
         </p>
       </template>
     </div>
