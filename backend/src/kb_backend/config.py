@@ -49,6 +49,36 @@ class Settings(BaseSettings):
     relation_gen_batch: int = 10
     relation_max_content_chars: int = 4000
 
+    # ---- 统一身份认证（issue #36，手册 §4；设计文档 §3.1） ----
+    # auth_mode=off（默认）：免登录直通，行为与接入前一致，本地开发用。
+    # auth_mode=unified：正式环境，SSO + IDENTITYTOKEN 校验 + 角色检查。
+    # 刻意不实现手册的"本地账号密码"模式（设计文档 §D1）。
+    auth_mode: str = "off"
+    auth_system_code: str = ""
+    auth_accepted_ticket_types: str = "SAME_DOMAIN"
+    identity_base_url: str = "https://platform-identity.yicall.com"
+    identity_client_id: str = ""  # 空 = 与 auth_system_code 相同（手册 §2）
+    identity_client_secret: str = ""  # HMAC 明文密钥，只进 .env，绝不入库/日志
+    identity_app_type: str = "ADMIN"  # 换票未返回 loginDeviceType 时的兜底
+    identity_sso_timeout: float = 10.0
+    auth_cache_ttl_seconds: int = 60  # Token 校验的进程内缓存（手册 §6.4）
+
+    @property
+    def unified_auth_enabled(self) -> bool:
+        return self.auth_mode.strip().lower() == "unified"
+
+    @property
+    def identity_client_id_effective(self) -> str:
+        return self.identity_client_id.strip() or self.auth_system_code.strip()
+
+    @property
+    def accepted_ticket_types(self) -> set[str]:
+        return {
+            item.strip().upper()
+            for item in self.auth_accepted_ticket_types.split(",")
+            if item.strip()
+        }
+
     @property
     def relation_analysis_enabled(self) -> bool:
         """Analysis needs BOTH gateways: embeddings for recall and chat for

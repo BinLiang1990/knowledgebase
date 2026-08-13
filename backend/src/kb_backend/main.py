@@ -6,16 +6,19 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from kb_backend.auth.deps import auth_gate
 from kb_backend.config import get_settings
 from kb_backend.db import get_db
 from kb_backend.envelope import BusinessError, envelope, register_exception_handlers
 from kb_backend.relation_worker import start_relation_worker
 from kb_backend.routers.audit_log import router as audit_log_router
+from kb_backend.routers.auth import router as auth_router
 from kb_backend.routers.dimension import router as dimension_router
 from kb_backend.routers.knowledge_base import router as knowledge_base_router
 from kb_backend.routers.knowledge_point import router as knowledge_point_router
 from kb_backend.routers.relation import global_router as relation_global_router
 from kb_backend.routers.relation import kp_router as relation_kp_router
+from kb_backend.routers.user import router as user_router
 
 
 @asynccontextmanager
@@ -31,7 +34,11 @@ async def _lifespan(app: FastAPI):
             worker.stop()
 
 
-app = FastAPI(title="Knowledge Base Backend", lifespan=_lifespan)
+# auth_gate 是全局依赖：每个请求先经 auth/roles.py 的规则表决定要求的
+# 最低角色再放行（issue #36）。auth_mode=off（默认）时直通、行为与接入前
+# 完全一致；unified 时校验 IDENTITYTOKEN。公开面（/health、第三方只读
+# 对接面、OpenAPI 文档）在规则表里显式豁免。
+app = FastAPI(title="Knowledge Base Backend", lifespan=_lifespan, dependencies=[Depends(auth_gate)])
 register_exception_handlers(app)
 # allow_methods/allow_headers must be explicit: CORSMiddleware's own
 # defaults are allow_methods=("GET",) and allow_headers=() — every
@@ -52,8 +59,13 @@ app.add_middleware(
     # DELETE added for issue "答案关联" 的 DELETE /answer-relations/{id} —
     # same explicit-list trap as the PUT note above.
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
-    allow_headers=["Content-Type"],
+    # IDENTITYTOKEN / X-Identity-App-Type 是统一身份认证(#36)的自定义请求
+    # 头——同上面 methods 的教训：不显式列出，浏览器预检直接失败，而
+    # TestClient/curl 看不出任何问题。
+    allow_headers=["Content-Type", "IDENTITYTOKEN", "X-Identity-App-Type"],
 )
+app.include_router(auth_router)
+app.include_router(user_router)
 app.include_router(knowledge_base_router)
 app.include_router(dimension_router)
 app.include_router(knowledge_point_router)

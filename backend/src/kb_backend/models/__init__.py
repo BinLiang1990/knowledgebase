@@ -4,6 +4,7 @@ from .dimension import DimensionDefinition, KnowledgeBaseEnabledDimension
 from .knowledge_base import KnowledgeBase
 from .knowledge_point import KnowledgePoint
 from .relation import AnswerEmbedding, AnswerRelation, RelationTask
+from .user import User
 
 __all__ = [
     "Base",
@@ -15,4 +16,5 @@ __all__ = [
     "AnswerRelation",
     "AnswerEmbedding",
     "RelationTask",
+    "User",
 ]

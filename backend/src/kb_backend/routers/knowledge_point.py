@@ -7,6 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..auth.deps import current_operator
 from ..change_log import build_change_log
 from ..coord import CoordValueError, compute_coord_hash, normalize_coord
 from ..db import get_db
@@ -124,7 +125,7 @@ def _reactivate_chain_if_revoked(
     db.execute(
         update(Answer)
         .where(Answer.knowledge_point_id == kp_id, Answer.coord_hash == coord_hash, Answer.revoked.is_(True))
-        .values(revoked=False, reactivated_at=func.now(), reactivated_by="admin", reactivate_reason=reason)
+        .values(revoked=False, reactivated_at=func.now(), reactivated_by=current_operator(), reactivate_reason=reason)
     )
 
 
@@ -189,7 +190,7 @@ def create_knowledge_point(
     _get_kb_or_404(db, kb_id)
     _ensure_title_available(db, kb_id, payload.title)
 
-    kp = KnowledgePoint(knowledge_base_id=kb_id, title=payload.title, status="active", operator="admin")
+    kp = KnowledgePoint(knowledge_base_id=kb_id, title=payload.title, status="active", operator=current_operator())
     db.add(kp)
     try:
         db.flush()
@@ -208,7 +209,7 @@ def create_knowledge_point(
             content=payload.default_answer.content,
             effective_time=payload.default_answer.effective_time,
             note=payload.default_answer.note,
-            operator="admin",
+            operator=current_operator(),
             source="人工填报",
         )
         db.add(answer)
@@ -252,7 +253,7 @@ def batch_import_knowledge_points(
         try:
             with db.begin_nested():
                 _ensure_title_available(db, kb_id, item.title)
-                kp = KnowledgePoint(knowledge_base_id=kb_id, title=item.title, status="active", operator="admin")
+                kp = KnowledgePoint(knowledge_base_id=kb_id, title=item.title, status="active", operator=current_operator())
                 db.add(kp)
                 db.flush()
 
@@ -267,7 +268,7 @@ def batch_import_knowledge_points(
                             content=item.default_answer.content,
                             effective_time=item.default_answer.effective_time,
                             note=item.default_answer.note,
-                            operator="admin",
+                            operator=current_operator(),
                             source="人工填报",
                         )
                     )
@@ -565,7 +566,7 @@ def create_answer(kb_id: int, kp_id: int, payload: AnswerCreate, db: Session = D
         content=payload.content,
         effective_time=payload.effective_time,
         note=payload.note,
-        operator="admin",
+        operator=current_operator(),
         source="人工填报",
     )
     db.add(answer)
@@ -628,7 +629,7 @@ def edit_answer(
                 # migration's, losing the real revocation history.
                 Answer.revoked.is_(False),
             )
-            .values(revoked=True, revoked_at=func.now(), revoked_by="admin", revoke_reason=reason)
+            .values(revoked=True, revoked_at=func.now(), revoked_by=current_operator(), revoke_reason=reason)
         )
 
     _reactivate_chain_if_revoked(db, kp_id, new_hash, payload.reactivate_reason)
@@ -641,7 +642,7 @@ def edit_answer(
         content=payload.content,
         effective_time=payload.effective_time,
         note=payload.note,
-        operator="admin",
+        operator=current_operator(),
         source="人工编辑",
     )
     db.add(new_answer)
@@ -691,7 +692,7 @@ def promote_answer_to_default(
         content=source.content,
         effective_time=payload.effective_time,
         note=payload.note,
-        operator="admin",
+        operator=current_operator(),
         source="人工填报",
     )
     db.add(promoted)
@@ -736,7 +737,7 @@ def revoke_answer(
         .values(
             revoked=True,
             revoked_at=func.now(),
-            revoked_by="admin",
+            revoked_by=current_operator(),
             revoke_reason=payload.revoke_reason,
         )
     )

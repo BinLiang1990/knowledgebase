@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from ..auth.deps import current_operator
 from ..config import get_settings
 from ..db import get_db
 from ..envelope import BusinessError, envelope
@@ -61,7 +62,7 @@ def analyze(kb_id: int, kp_id: int, payload: AnalyzeRequest, db: Session = Depen
     if not endpoints:
         raise BusinessError("当前没有生效答案，无法分析")
 
-    task = schedule_analyze_task(db, kb_id, kp_id, payload.coord_hash)
+    task = schedule_analyze_task(db, kb_id, kp_id, payload.coord_hash, operator=current_operator())
     db.commit()
     db.refresh(task)
     return envelope({"task_id": task.id, "status": task.status})
@@ -231,14 +232,14 @@ def create_relation(payload: RelationCreate, db: Session = Depends(get_db)) -> d
         description=description,
         # 空描述 + generate：先落 ai 空壳，worker 填充；人工描述 = manual
         source="manual" if description else "ai",
-        operator="admin",
+        operator=current_operator(),
     )
     db.add(rel)
     db.flush()
 
     task_id = None
     if not description:
-        task = schedule_generate_pair_task(db, a.kb_id, a.kp_id, rel.id)
+        task = schedule_generate_pair_task(db, a.kb_id, a.kp_id, rel.id, operator=current_operator())
         db.flush()
         task_id = task.id
     db.commit()
@@ -268,7 +269,7 @@ def regenerate_relation(relation_id: int, db: Session = Depends(get_db)) -> dict
         raise BusinessError(_RELATION_NOT_FOUND_MSG, status_code=404)
     if not get_settings().relation_analysis_enabled:
         raise BusinessError(_ANALYSIS_DISABLED_MSG)
-    task = schedule_generate_pair_task(db, rel.kb_a_id, rel.kp_a_id, rel.id)
+    task = schedule_generate_pair_task(db, rel.kb_a_id, rel.kp_a_id, rel.id, operator=current_operator())
     db.commit()
     db.refresh(task)
     return envelope({"task_id": task.id, "status": task.status})
