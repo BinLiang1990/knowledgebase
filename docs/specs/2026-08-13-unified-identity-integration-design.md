@@ -101,7 +101,7 @@ id / identity_user_id (UNIQUE, NULL for dev) / identity_account / display_name
 - 平台登记（手册 §2，**禁止猜测，需向平台方取**）：
   - `systemCode` / `clientId` / `clientSecret`
   - `authDomain`：应为 `PUBLIC`（我们在 platform-enterprise.yicall.com 公网域）
-  - `entryUrl`：`https://platform-enterprise.yicall.com/#/sso`
+  - `entryUrl`：`https://platform-enterprise.yicall.com/kb-web/#/sso`（前端挂在 /kb-web 子路径下）
   - `acceptedTicketTypes`：`SAME_DOMAIN`
   - 确认 `userInfo`/`roleList` 能返回稳定 `roleCode`
 
