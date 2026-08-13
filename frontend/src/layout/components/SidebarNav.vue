@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { Clock, Grid, SetUp } from '@element-plus/icons-vue'
+import { Clock, Grid, SetUp, User } from '@element-plus/icons-vue'
 import logoUrl from '@/assets/logo.png'
 import { asyncRoutes } from '@/router/asyncRoutes'
+import { useUserStore } from '@/store/modules/user'
 
 // meta.icon 存 Element Plus 图标名字符串（规范 §5.6），这里做一次名称 → 组件
 // 映射；新增菜单项时在此登记图标即可。
-const ICONS: Record<string, Component> = { Grid, SetUp, Clock }
+const ICONS: Record<string, Component> = { Grid, SetUp, Clock, User }
 
-// 菜单直接从路由模块推导（hidden 的子页不进菜单），新增模块零改动
-const menuItems = asyncRoutes
-  .filter(r => r.meta?.title && !r.meta.hidden)
-  .sort((a, b) => (a.meta?.order ?? 99) - (b.meta?.order ?? 99))
+const userStore = useUserStore()
+
+// 菜单直接从路由模块推导（hidden 的子页不进菜单），新增模块零改动；
+// meta.minRole 不满足的项不展示（issue #37——如「用户管理」仅 sysadmin）
+const menuItems = computed(() =>
+  asyncRoutes
+    .filter(r => r.meta?.title && !r.meta.hidden)
+    .filter(r => !r.meta?.minRole || userStore.roleAtLeast(r.meta.minRole))
+    .sort((a, b) => (a.meta?.order ?? 99) - (b.meta?.order ?? 99)),
+)
 </script>
 
 <template>

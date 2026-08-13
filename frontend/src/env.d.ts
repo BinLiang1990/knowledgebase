@@ -8,6 +8,12 @@ interface ImportMetaEnv {
   readonly VITE_APP_BASE_API: string
   /** dev 代理的后端地址（仅 .env.development 提供） */
   readonly VITE_PROXY_TARGET?: string
+  /** 认证模式：unified=统一身份认证（正式环境），其余值/缺省=off 免登录（issue #37） */
+  readonly VITE_AUTH_MODE?: string
+  /** 统一平台前端登录页地址（unified 模式必填） */
+  readonly VITE_IDENTITY_LOGIN_URL?: string
+  /** 统一平台认证域（storage key 命名空间用，缺省 PUBLIC） */
+  readonly VITE_AUTH_DOMAIN?: string
 }
 
 interface ImportMeta {

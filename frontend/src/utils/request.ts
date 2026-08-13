@@ -7,7 +7,14 @@ import type { AxiosRequestConfig } from 'axios'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import JSONBigInt from 'json-bigint'
-import { API_SUCCESS_CODE, REQUEST_TIMEOUT_MS } from '@/settings'
+import {
+  API_SUCCESS_CODE,
+  APP_TYPE_HEADER,
+  IS_UNIFIED_AUTH,
+  REQUEST_TIMEOUT_MS,
+  TOKEN_HEADER,
+} from '@/settings'
+import { clearAuthStorage, getIdentityAppType, getToken } from '@/utils/auth'
 
 // 探测/轮询等确需静默的请求可传 silent: true（通过模块增强合法化，不做强转）
 declare module 'axios' {
@@ -43,6 +50,32 @@ const service = axios.create({
   ],
 })
 
+// 统一身份认证（issue #37，手册 §7.3）：unified 模式所有请求带统一 Token
+// 与设备类型；off 模式不加头，后端直通。
+service.interceptors.request.use((config) => {
+  if (IS_UNIFIED_AUTH) {
+    const token = getToken()
+    if (token)
+      config.headers.set(TOKEN_HEADER, token)
+    const appType = getIdentityAppType()
+    if (appType)
+      config.headers.set(APP_TYPE_HEADER, appType)
+  }
+  return config
+})
+
+/**
+ * 401 = 登录态失效：清本地会话回登录页。sso_login 自身的 401 是 Ticket
+ * 无效（手册 §7.3——不能当成存量会话失效处理），交由接票页展示错误。
+ */
+function handleUnauthorized(url: string | undefined) {
+  if (!IS_UNIFIED_AUTH || (url ?? '').includes('/auth/sso_login'))
+    return
+  clearAuthStorage()
+  if (!window.location.hash.startsWith('#/login'))
+    window.location.hash = '#/login'
+}
+
 service.interceptors.response.use(
   (response) => {
     const res = response.data
@@ -57,6 +90,24 @@ service.interceptors.response.use(
     return Promise.reject(new ApiError(msg))
   },
   (error) => {
+    // HTTP 非 2xx：优先用后端包络的 msg（后端 401/403/4xx 均带 envelope）
+    const status: number | undefined = error?.response?.status
+    const body = error?.response?.data
+    const bodyMsg: string | undefined
+      = body !== null && typeof body === 'object' && 'msg' in body ? body.msg : undefined
+    if (status === 401) {
+      handleUnauthorized(error?.config?.url)
+      const msg = bodyMsg || '登录已过期，请重新登录'
+      if (!error?.config?.silent)
+        ElMessage.error(msg)
+      return Promise.reject(new ApiError(msg))
+    }
+    if (status !== undefined && bodyMsg) {
+      // 业务 403（无权限）等：不清登录态，只提示（手册 §9）
+      if (!error?.config?.silent)
+        ElMessage.error(bodyMsg)
+      return Promise.reject(new ApiError(bodyMsg))
+    }
     // 网络失败、CORS、超时/中断等——没有响应包可解，统一一句话
     const msg = '网络异常，请稍后重试'
     if (!error?.config?.silent)
