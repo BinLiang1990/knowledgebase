@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通用化 Gateway · 子系统架构图 v0.5</title>
+<style>
+  body { margin:0; padding:32px 24px 48px; background:#f5f7fa; font-family:"PingFang SC","Microsoft YaHei",sans-serif; color:#1e293b; }
+  .wrap { max-width:1280px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 6px; color:#1e3a8a; }
+  .meta { font-size:13px; color:#64748b; margin-bottom:20px; }
+  .canvas { background:#fff; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 1px 3px rgba(15,23,42,.06); padding:12px; }
+  svg { width:100%; height:auto; display:block; }
+  svg text { font-family:"PingFang SC","Microsoft YaHei",sans-serif; }
+  .box-title { font-size:15px; font-weight:600; fill:#1e3a8a; }
+  .box-sub { font-size:11px; fill:#475569; }
+  .edge-label { font-size:11px; fill:#475569; paint-order:stroke; stroke:#ffffff; stroke-width:3px; }
+  .group-label { font-size:12px; font-weight:600; fill:#94a3b8; letter-spacing:2px; }
+  .legend { font-size:12px; fill:#64748b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>通用化 Gateway · 子系统架构图 <span style="font-size:14px;color:#64748b;">v0.5</span></h1>
+  <div class="meta">2026-08-04 · 对应《子系统架构设计v0.5.md》（v0.5.3）· 关系编号 R1–R13 与设计文档一致 · 新增：统一门户、锦囊推送、一企一库、R13 数据飞轮 · 同内容 Mermaid 版见《系统架构图.md》</div>
+  <div class="canvas">
+  <svg viewBox="0 0 1240 976" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+      </marker>
+      <marker id="arrBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+      </marker>
+      <marker id="arrSky" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#0284c7"/>
+      </marker>
+      <marker id="arrTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#0d9488"/>
+      </marker>
+    </defs>
+
+    <!-- ===== 统一身份管理系统（顶栏） ===== -->
+    <rect x="40" y="24" width="1160" height="64" rx="10" fill="#1d4ed8" stroke="#1e40af"/>
+    <text x="620" y="50" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">🛡️ 统一身份管理系统（只发门禁卡 · 只存不解释）</text>
+    <text x="620" y="72" text-anchor="middle" font-size="11.5" fill="#dbeafe">R9 · SSO · 组织/账号/角色身份 · 可访问系统名单 · 系统清单 · 服务间机器凭证 · 全平台访问与行为日志统一存查｜进门之后的权限与数据范围归各系统自建</text>
+    <line x1="220" y1="88" x2="220" y2="120" stroke="#2563eb" stroke-width="2" marker-end="url(#arrBlue)"/>
+    <line x1="620" y1="88" x2="620" y2="120" stroke="#2563eb" stroke-width="2" marker-end="url(#arrBlue)"/>
+    <line x1="900" y1="88" x2="900" y2="120" stroke="#2563eb" stroke-width="2" marker-end="url(#arrBlue)"/>
+    <!-- R11 埋点上报（业务应用层 -> 统一身份，右侧通道） -->
+    <line x1="1120" y1="216" x2="1120" y2="92" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+    <text x="1108" y="148" text-anchor="end" class="edge-label">R11 访问与行为埋点统一上报</text>
+    <text x="1108" y="164" text-anchor="end" class="edge-label">（机器凭证 · 最小字段集 · 只存不解释）</text>
+
+    <!-- ===== 统一门户（入口层） ===== -->
+    <rect x="40" y="124" width="1000" height="64" rx="10" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+    <text x="540" y="150" text-anchor="middle" font-size="15" font-weight="600" fill="#075985">🚪 统一门户（入口层 · v0.5 新增）</text>
+    <text x="540" y="172" text-anchor="middle" font-size="11" fill="#0369a1">应用中心宫格（按可访问名单渲染）· SSO 跳转 · 深链直达｜聚合待办 / 消息中心 / 全局搜索（P1）· 双实例预留（内部/客户）｜只做入口和贯通，不做业务、不存业务数据</text>
+    <line x1="220" y1="188" x2="220" y2="212" stroke="#0284c7" stroke-width="2" marker-end="url(#arrSky)"/>
+    <line x1="620" y1="188" x2="620" y2="212" stroke="#0284c7" stroke-width="2" marker-end="url(#arrSky)"/>
+    <line x1="860" y1="188" x2="860" y2="212" stroke="#0284c7" stroke-width="2" marker-end="url(#arrSky)"/>
+    <text x="880" y="206" text-anchor="start" class="edge-label">R12 宫格 + 深链统一入口</text>
+
+    <!-- ===== 业务应用层 ===== -->
+    <rect x="40" y="216" width="1160" height="360" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+    <text x="60" y="240" class="group-label">业务应用层</text>
+
+    <!-- 企业管理平台 -->
+    <rect x="70" y="260" width="240" height="96" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="190" y="288" text-anchor="middle" class="box-title">🏢 企业管理平台</text>
+    <text x="190" y="312" text-anchor="middle" class="box-sub">企业主数据 · 企业×区划关系表</text>
+    <text x="190" y="330" text-anchor="middle" class="box-sub">数据管道/需求单 · 电子围栏 · 画像组装</text>
+
+    <!-- 标签系统 -->
+    <rect x="420" y="260" width="240" height="96" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="540" y="288" text-anchor="middle" class="box-title">🏷️ 标签系统</text>
+    <text x="540" y="312" text-anchor="middle" class="box-sub">多维标签（客户×体系×版本）· 打标任务</text>
+    <text x="540" y="330" text-anchor="middle" class="box-sub">证据链溯源 · 人工修正留痕</text>
+
+    <!-- 看板管理系统 -->
+    <rect x="930" y="260" width="240" height="96" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="1050" y="288" text-anchor="middle" class="box-title">📊 看板管理系统</text>
+    <text x="1050" y="312" text-anchor="middle" class="box-sub">看板导航 · 发布管理 · 逐块授权自建（v0.4）</text>
+    <text x="1050" y="330" text-anchor="middle" class="box-sub">数据源绑定 · 访问日志（同时埋点上报）</text>
+
+    <!-- 公司日报管理系统 -->
+    <rect x="70" y="444" width="240" height="96" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="190" y="472" text-anchor="middle" class="box-title">📰 公司日报管理系统</text>
+    <text x="190" y="496" text-anchor="middle" class="box-sub">原始日报库 · 日报库</text>
+    <text x="190" y="514" text-anchor="middle" class="box-sub">日报规则管理</text>
+
+    <!-- 用户反馈管理系统 -->
+    <rect x="420" y="444" width="240" height="96" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="540" y="466" text-anchor="middle" class="box-title">💬 用户反馈管理系统</text>
+    <text x="540" y="487" text-anchor="middle" class="box-sub">客服对话操作台 · 原始笔记/原始文件双库</text>
+    <text x="540" y="503" text-anchor="middle" class="box-sub">大模型拆解（实体挂接·双目标路由）· 人工审核</text>
+    <text x="540" y="519" text-anchor="middle" class="box-sub">待分类库 · 锦囊推送 · 回报感（事件驱动）</text>
+
+    <!-- 万能框 -->
+    <rect x="930" y="468" width="240" height="48" rx="24" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <text x="1050" y="488" text-anchor="middle" font-size="13.5" font-weight="600" fill="#92400e">📥 万能框</text>
+    <text x="1050" y="505" text-anchor="middle" font-size="10.5" fill="#a16207">嵌入所有系统 · 配置在大模型管理系统</text>
+
+    <!-- ===== 横向能力层 ===== -->
+    <rect x="40" y="616" width="1160" height="280" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+    <text x="60" y="640" class="group-label">横向能力层</text>
+
+    <!-- 统一知识库 -->
+    <rect x="220" y="664" width="320" height="150" rx="10" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <text x="380" y="698" text-anchor="middle" class="box-title" fill="#0f766e">📚 统一知识库</text>
+    <text x="380" y="724" text-anchor="middle" class="box-sub" font-weight="600">一企一库（信用代码为键·逻辑分区）+ 通用分库</text>
+    <text x="380" y="744" text-anchor="middle" class="box-sub">知识点管理 · 异常监测（巡检+入库校验）· 入库事件</text>
+    <text x="380" y="764" text-anchor="middle" class="box-sub" font-weight="600">调用关联管理 · 统一入库接口（唯一写入口）</text>
+
+    <!-- 大模型管理系统 -->
+    <rect x="700" y="664" width="320" height="150" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5"/>
+    <text x="860" y="692" text-anchor="middle" class="box-title" fill="#6d28d9">🤖 大模型管理系统</text>
+    <text x="860" y="718" text-anchor="middle" class="box-sub">fastGPT 引擎管理 · Skill / Agent 管理</text>
+    <text x="860" y="738" text-anchor="middle" class="box-sub">工具资产变更记录/版本/回滚 · 统一调用日志</text>
+    <text x="860" y="758" text-anchor="middle" class="box-sub">提示词资产管理 · 万能框配置 · 注入过滤</text>
+    <text x="860" y="782" text-anchor="middle" class="box-sub" font-weight="600" fill="#6d28d9">R10 全平台大模型调用统一收口（不直连引擎）</text>
+
+    <!-- ===== 关系连线 ===== -->
+    <!-- R1 企业信息 ENT->TAG -->
+    <line x1="310" y1="288" x2="416" y2="288" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="363" y="280" text-anchor="middle" class="edge-label">R1 企业信息</text>
+    <!-- R2 TAG->ENT -->
+    <line x1="420" y1="332" x2="314" y2="332" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="363" y="348" text-anchor="middle" class="edge-label">R2 标签结果（只消费不复制）</text>
+    <!-- R3 ENT->BI 绕行 -->
+    <polyline points="190,356 190,402 1050,402 1050,360" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="620" y="394" text-anchor="middle" class="edge-label">R3 街道分表 / 企业场景数据支撑</text>
+    <!-- R4 TAG->BI -->
+    <line x1="660" y1="292" x2="926" y2="292" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="793" y="284" text-anchor="middle" class="edge-label">R4 圈选名单（招商/稳商/潜力）</text>
+    <!-- R5 万能框->FB -->
+    <line x1="930" y1="492" x2="664" y2="492" stroke="#d97706" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="795" y="484" text-anchor="middle" class="edge-label">R5 原始上报统一落库（带来源标识）</text>
+    <!-- R6 FB<->KB -->
+    <line x1="540" y1="540" x2="484" y2="660" stroke="#0d9488" stroke-width="1.5" marker-start="url(#arrTeal)" marker-end="url(#arrTeal)"/>
+    <text x="545" y="599" text-anchor="middle" class="edge-label">R6 提炼入库 ⇄ 锦囊引用/有用度回流</text>
+    <!-- R8 DR->KB 虚线 -->
+    <line x1="190" y1="540" x2="296" y2="660" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+    <text x="200" y="607" text-anchor="middle" class="edge-label">R8 日报经验提取（预留）</text>
+    <!-- R1 知识点 KB->TAG（R13 入库事件同路） -->
+    <polyline points="380,664 380,382 450,360" fill="none" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arrTeal)"/>
+    <text x="380" y="652" text-anchor="middle" class="edge-label">R1 知识点引用 · R13 入库事件触发打标</text>
+    <!-- R13 飞轮：FB<->ENT -->
+    <line x1="270" y1="360" x2="470" y2="444" stroke="#d97706" stroke-width="1.5" stroke-dasharray="5 4" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="315" y="416" text-anchor="middle" class="edge-label">R13 数据要素→数据管道</text>
+    <text x="440" y="436" text-anchor="middle" class="edge-label">画像更新事件→回报感</text>
+    <!-- R1 工作流 GPT->TAG -->
+    <polyline points="860,664 860,374 664,324" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="872" y="572" text-anchor="start" class="edge-label">R1 打标工作流（经统一调用入口）</text>
+    <!-- R10 所有系统->大模型管理系统 统一收口 -->
+    <line x1="990" y1="540" x2="990" y2="660" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+    <text x="1002" y="602" text-anchor="start" class="edge-label">R10 调用统一收口</text>
+    <!-- R7 KB<->GPT -->
+    <line x1="544" y1="739" x2="696" y2="739" stroke="#0d9488" stroke-width="2" marker-start="url(#arrTeal)" marker-end="url(#arrTeal)"/>
+    <text x="620" y="727" text-anchor="middle" class="edge-label" font-weight="600">R7 使用即训练闭环</text>
+    <text x="620" y="760" text-anchor="middle" class="edge-label">引用回写 ⇄ 提示词/Skill/Agent 增强</text>
+
+    <!-- ===== 图例 ===== -->
+    <g transform="translate(60, 932)">
+      <line x1="0" y1="0" x2="36" y2="0" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="44" y="4" class="legend">主数据流</text>
+      <line x1="130" y1="0" x2="166" y2="0" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+      <text x="174" y="4" class="legend">预留 / 收口 / 上报</text>
+      <line x1="290" y1="0" x2="326" y2="0" stroke="#0d9488" stroke-width="2" marker-start="url(#arrTeal)" marker-end="url(#arrTeal)"/>
+      <text x="334" y="4" class="legend">双向闭环</text>
+      <line x1="420" y1="0" x2="456" y2="0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrBlue)"/>
+      <text x="464" y="4" class="legend">身份下发（R9）</text>
+      <line x1="580" y1="0" x2="616" y2="0" stroke="#0284c7" stroke-width="2" marker-end="url(#arrSky)"/>
+      <text x="624" y="4" class="legend">门户入口（R12）</text>
+      <text x="760" y="4" class="legend">铁律：企业只传信用代码 · 唯一真源 · 身份统一/授权下放 · 调用收口 · 埋点上报 · 门户只做入口</text>
+    </g>
+  </svg>
+  </div>
+</div>
+</body>
+</html>
