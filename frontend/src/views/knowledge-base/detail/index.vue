@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { ExistingAnswer } from './WriteAnswerDialog.vue'
 // 知识点详情页：头部（标题/元信息/操作）+ 五个 tab（当前答案 / 答案关联 /
-// 立体全景 / 版本历史 / 变更留痕）。立体全景仍是 P2（issue #16），按 IA 对齐
-// demo 保留 tab 位、内容为占位——与 issue #7 对未建统计卡的处理一致。
+// 立体全景 / 版本历史 / 变更留痕）。
 import type { AnswerGroup } from '@/api/knowledgePoint'
 import type { AnswerRelation } from '@/api/relation'
 import type { Filters } from '@/utils/dimension'
@@ -24,6 +23,7 @@ import EditRelationDialog from './EditRelationDialog.vue'
 import EditTitleDialog from './EditTitleDialog.vue'
 import RelationsPane from './RelationsPane.vue'
 import TimelinePane from './TimelinePane.vue'
+import TreePane from './TreePane.vue'
 import WriteAnswerDialog from './WriteAnswerDialog.vue'
 
 defineOptions({ name: 'KnowledgePointDetail' })
@@ -48,7 +48,9 @@ const kbReady = computed(() => kb.value?.status === 'active' && Number.isFinite(
 
 useCrumb(computed(() => (kb.value ? `${kb.value.name} / 知识点列表 / 详情` : undefined)))
 
-const tab = ref<TabKey>('now')
+// ?tab= 深链（对齐 frontend-mock 的 detail.html?tab=）：非法值回落默认 tab
+const initialTab = String(route.query.tab ?? '')
+const tab = ref<TabKey>(TABS.some(([key]) => key === initialTab) ? initialTab as TabKey : 'now')
 const filters = ref<Filters>({})
 const qMode = ref<'now' | 'day'>('now')
 const qTime = ref(today())
@@ -340,9 +342,7 @@ function reloadAfterKpMutation() {
           @auto-relate="startAnalyze()"
         />
 
-        <div v-else-if="tab === 'tree'" class="empty-block">
-          立体全景开发中，见 Issue #16
-        </div>
+        <TreePane v-else-if="tab === 'tree'" :kb-id="kbId" :kp-id="kpId" :dimensions="dimensions" />
 
         <TimelinePane v-else-if="tab === 'timeline'" :kb-id="kbId" :kp-id="kpId" :dimensions="dimensions" />
 

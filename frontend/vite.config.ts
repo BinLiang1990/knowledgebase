@@ -47,5 +47,16 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    // vite preview（本地验证生产构建）复用同一套代理；正式环境由 nginx 承担
+    preview: {
+      port: 3388,
+      proxy: {
+        [env.VITE_APP_BASE_API]: {
+          target: env.VITE_PROXY_TARGET || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          rewrite: path => path.replace(new RegExp(`^${env.VITE_APP_BASE_API}`), ''),
+        },
+      },
+    },
   }
 })
