@@ -41,7 +41,10 @@ RUN uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh
+# 防御性去 CRLF：文件若经 Windows 检出/scp 上传，行尾是 \r\n，shebang 会变成
+# "/bin/sh\r" → 容器起不来只报 "no such file or directory"（2026-08-14 生产踩坑；
+# .gitattributes 已强制 *.sh 用 LF，这里是第二道保险）。
+RUN sed -i 's/\r$//' ./docker-entrypoint.sh && chmod +x ./docker-entrypoint.sh
 
 EXPOSE 8000
 ENTRYPOINT ["./docker-entrypoint.sh"]

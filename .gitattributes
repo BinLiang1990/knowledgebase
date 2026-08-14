@@ -1,0 +1,6 @@
+# Shell 脚本强制 LF：Windows 检出（autocrlf=true）再 scp 到 Linux 服务器时，
+# CRLF 会让 shebang 变成 "/bin/sh\r"，容器报 "no such file or directory"
+# （2026-08-14 生产部署实际踩坑，见 backend/Dockerfile 内的防御性 sed）。
+*.sh text eol=lf
+# uv.lock 由 uv 生成、跨平台共享，同样固定 LF 避免无意义的整文件 diff
+uv.lock text eol=lf
