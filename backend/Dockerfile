@@ -17,8 +17,9 @@ FROM docker.m.daocloud.io/library/python:3.10-slim-bookworm
 # （2026-08-14 踩坑：装依赖的源真正由 uv.lock 里记录的 registry 决定——见
 # pyproject.toml 的 [[tool.uv.index]] 注释——当年的 UV_INDEX_URL 环境变量在新版
 # uv 里对 `uv sync --frozen` 不生效，导致国内服务器 build 直连 pypi.org 卡死）。
-# 升级 uv 时同步用同版本重新 `uv lock`。
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple "uv==0.12.4"
+# 升级 uv 时同步用同版本重新 `uv lock`，并确认阿里云镜像已同步该版本——
+# 刚发布一两天的 uv 新版可能还没进镜像（0.12.4 就因此装不到，退回 0.12.3）。
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple "uv==0.12.3"
 
 WORKDIR /app
 
