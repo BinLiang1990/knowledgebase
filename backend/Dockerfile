@@ -13,17 +13,18 @@
 # Windows/macOS 搬 .venv 过去装不上"的问题（对比 运维.md）。
 FROM docker.m.daocloud.io/library/python:3.10-slim-bookworm
 
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple uv
+# uv 版本锁死：不锁的话每次 build 拉最新版，lock 文件格式/镜像源行为可能变化
+# （2026-08-14 踩坑：装依赖的源真正由 uv.lock 里记录的 registry 决定——见
+# pyproject.toml 的 [[tool.uv.index]] 注释——当年的 UV_INDEX_URL 环境变量在新版
+# uv 里对 `uv sync --frozen` 不生效，导致国内服务器 build 直连 pypi.org 卡死）。
+# 升级 uv 时同步用同版本重新 `uv lock`。
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple "uv==0.12.4"
 
 WORKDIR /app
 
-# UV_INDEX_URL 只影响 `uv sync`/`uv pip` 装项目依赖走的源，跟上面装 uv 本身用的
-# `-i` 是两件事——漏配这个的话，uv sync 会去连默认的 pypi.org，国内服务器上
-# fastapi/sqlalchemy/uvloop 这些包会慢到像卡住。
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON=python3.10 \
-    UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+    UV_PYTHON=python3.10
 
 # 先只拷依赖清单再 uv sync，代码改动不会让这一层缓存失效，重复 build 更快。
 COPY pyproject.toml uv.lock ./
