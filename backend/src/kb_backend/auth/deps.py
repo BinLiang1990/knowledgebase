@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..db import get_db
 from ..envelope import BusinessError
-from .roles import required_role, role_at_least
+from .roles import required_role, role_at_least, service_source_allowed
 from .sync import sync_identity
 from .unified_client import (
     SystemAccessDenied,
@@ -37,10 +37,14 @@ from .unified_client import (
     fetch_identity,
     fetch_role_codes,
     normalize_app_type,
+    verify_service_token,
 )
 
 _NOT_LOGGED_IN = "登录已过期，请重新登录"
 _NO_PERMISSION = "暂无权限，请联系系统管理员分配权限"
+_MIXED_TOKENS = "请求不能同时携带用户 Token 与服务 Token"
+_SERVICE_INVALID = "服务凭证无效或已过期"
+_SERVICE_FORBIDDEN = "该来源系统无权访问此接口"
 
 
 @dataclass(frozen=True)
@@ -48,7 +52,8 @@ class CurrentUser:
     id: int
     display_name: str
     role: str
-    auth_source: str  # unified | dev
+    auth_source: str  # unified | dev | service
+    source_system: str = ""  # 仅 auth_source=service：服务 Token 绑定的来源系统
 
 
 # off 模式的内置身份：display_name 与接入前写死的 operator="admin" 一致
@@ -121,6 +126,53 @@ def _verify_remote(db: Session, token: str, app_type: str) -> CurrentUser:
     )
 
 
+# ---------------------------------------------- 服务间机器凭证（系统侧）----
+
+def _service_cache_ttl(expires_at_ms: object, now_seconds: float, default_ttl: float) -> float:
+    """校验结果缓存 TTL：不得超过 Token 剩余有效期，且以常规 TTL 为较短
+    上限（平台《服务Token接口对接文档》§4.2-3）。已过期返回 0（不缓存）。"""
+    ttl = float(default_ttl)
+    if isinstance(expires_at_ms, (int, float)) and expires_at_ms > 0:
+        ttl = min(ttl, expires_at_ms / 1000.0 - now_seconds)
+    return max(ttl, 0.0)
+
+
+async def _service_gate(request: Request, token: str) -> None:
+    """系统侧鉴权：校验 X-Service-Token 并检查来源系统接口白名单。
+    平台校验不可达/不确定时拒绝（fail-closed），与用户侧同一原则。"""
+    settings = get_settings()
+    key = _cache_key(token, "X-SERVICE-TOKEN")
+    user = _cache_get(key)
+    if user is None:
+        try:
+            data = await run_in_threadpool(verify_service_token, token)
+        except UnifiedAuthError as exc:
+            raise BusinessError(str(exc) or _SERVICE_INVALID, status_code=401) from exc
+        source = str(data.get("sourceSystem") or "").strip()
+        # §4.2-4：仅 active=true 且 targetSystem 等于自身系统编码时接受身份
+        if (
+            not data.get("active")
+            or str(data.get("targetSystem") or "") != settings.auth_system_code
+            or not source
+        ):
+            raise BusinessError(_SERVICE_INVALID, status_code=401)
+        user = CurrentUser(
+            id=0,
+            display_name=f"{source}-service",
+            role="none",
+            auth_source="service",
+            source_system=source,
+        )
+        ttl = _service_cache_ttl(data.get("expiresAt"), time.time(), settings.auth_cache_ttl_seconds)
+        if ttl > 0:
+            _cache_put(key, user, ttl)
+    _current_user.set(user)
+
+    # §4.2-5/6：来源系统可访问面由本系统自管，凭证有效 ≠ 接口有权
+    if not service_source_allowed(user.source_system, request.method, request.url.path):
+        raise BusinessError(_SERVICE_FORBIDDEN, status_code=403)
+
+
 # ------------------------------------------------------------ 全局依赖 ----
 
 async def auth_gate(request: Request, db: Session = Depends(get_db)) -> None:
@@ -128,6 +180,15 @@ async def auth_gate(request: Request, db: Session = Depends(get_db)) -> None:
 
     if not settings.unified_auth_enabled:
         _current_user.set(_DEV_USER)
+        return
+
+    # §4.2-7：鉴权入口优先识别系统侧凭证，携带 X-Service-Token 的请求
+    # 不得被用户 SSO 拦截层提前拒绝；§4.2-9：双 Token 同带拒绝，避免身份混用
+    service_token = (request.headers.get("X-Service-Token") or "").strip()
+    if service_token:
+        if (request.headers.get("IDENTITYTOKEN") or "").strip():
+            raise BusinessError(_MIXED_TOKENS, status_code=400)
+        await _service_gate(request, service_token)
         return
 
     minimum = required_role(request.method, request.url.path)

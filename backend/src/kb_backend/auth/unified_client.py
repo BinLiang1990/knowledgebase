@@ -28,6 +28,7 @@ EXCHANGE_PATH = "/core/sso/exchange"
 CROSS_DOMAIN_PATH = "/core/cross-domain/session/login"
 USERINFO_PATH = "/core/user/userInfo"
 ROLE_LIST_PATH = "/core/user/roleList"
+SERVICE_VERIFY_PATH = "/core/service-auth/verify"
 
 
 class UnifiedAuthError(Exception):
@@ -158,6 +159,21 @@ def exchange_ticket(ticket: str, ticket_type: str = "SAME_DOMAIN") -> dict[str, 
     if not token_info.get("tokenValue"):
         raise UnifiedAuthError("统一身份认证平台未返回统一 Token")
     return {"tokenInfo": token_info, "exchangeUser": data}
+
+
+def verify_service_token(service_token: str) -> dict[str, Any]:
+    """校验来自其他系统的服务 Token（平台《服务Token接口对接文档》2026-08-18
+    §3.2）。用本系统自身密钥签名调用，返回平台 data：
+    {"active": bool, "sourceSystem", "targetSystem", "issuedAt", "expiresAt"}；
+    无效 Token 平台统一返回 {"active": false}，不暴露原因。"""
+    settings = get_settings()
+    service_token = (service_token or "").strip()
+    if not service_token:
+        return {"active": False}
+    body_bytes = compact_json_bytes({"serviceToken": service_token})
+    url = settings.identity_base_url.rstrip("/") + SERVICE_VERIFY_PATH
+    body = _post(url, content=body_bytes, headers=_hmac_headers(SERVICE_VERIFY_PATH, body_bytes))
+    return unwrap(body)
 
 
 def _identity_headers(token: str, app_type: str | None) -> dict[str, str]:

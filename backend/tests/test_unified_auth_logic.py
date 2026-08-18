@@ -9,10 +9,12 @@ from __future__ import annotations
 import hashlib
 import hmac as hmac_mod
 
+from kb_backend.auth.deps import _service_cache_ttl
 from kb_backend.auth.roles import (
     is_platform_super_admin,
     required_role,
     role_at_least,
+    service_source_allowed,
 )
 from kb_backend.auth.unified_client import (
     UnifiedAuthError,
@@ -183,3 +185,41 @@ def test_write_levels():
     # 用户管理 = sysadmin
     assert required_role("GET", "/users") == "sysadmin"
     assert required_role("PATCH", "/users/3/role") == "sysadmin"
+
+
+# ---------------------------------------- 服务间机器凭证（X-Service-Token）----
+
+def test_service_source_surface_bqxt_is_readonly_contract_set():
+    """bqxt 的机器凭证可访问面 = 基准版 §5 只读面全集（含 v1.1 §5.7 库列表）。"""
+    for path in [
+        "/dimensions",
+        "/knowledge-bases",
+        "/knowledge-bases/2/enabled-dimensions",
+        "/knowledge-bases/2/knowledge-points",
+        "/knowledge-bases/2/knowledge-points/5/resolve",
+        "/knowledge-bases/2/knowledge-points/5/answer-groups",
+        "/change-log",
+        "/knowledge-bases/2/stats",
+    ]:
+        assert service_source_allowed("bqxt", "GET", path), path
+    # 写操作与运营侧独有接口不在机器面内（平台文档 §4.2-5/6：目标系统自管）
+    assert not service_source_allowed("bqxt", "POST", "/knowledge-bases")
+    assert not service_source_allowed("bqxt", "PUT", "/knowledge-bases/2/enabled-dimensions")
+    assert not service_source_allowed("bqxt", "GET", "/admin/dimensions")
+    assert not service_source_allowed("bqxt", "GET", "/users")
+    # 未登记的来源系统一律拒绝
+    assert not service_source_allowed("other-sys", "GET", "/dimensions")
+    assert not service_source_allowed("", "GET", "/dimensions")
+
+
+def test_service_cache_ttl_capped_by_token_expiry():
+    """校验结果缓存不得超过 Token 剩余有效期，常规 TTL 为较短上限（§4.2-3）。"""
+    assert _service_cache_ttl(None, 1_000.0, 60) == 60.0        # 平台没回 expiresAt：用常规 TTL
+    assert _service_cache_ttl(1_030_000, 1_000.0, 60) == 30.0   # 剩余 30s < 60s：以剩余期为准
+    assert _service_cache_ttl(2_000_000, 1_000.0, 60) == 60.0   # 剩余充足：取常规上限
+    assert _service_cache_ttl(900_000, 1_000.0, 60) == 0.0      # 已过期：不缓存
+
+
+def test_service_verify_body_is_compact_fixed_order():
+    """校验请求体必须是紧凑 JSON 且字段顺序固定（平台文档 §2.2）。"""
+    assert compact_json_bytes({"serviceToken": "abc"}) == b'{"serviceToken":"abc"}'
