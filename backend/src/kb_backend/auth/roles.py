@@ -41,6 +41,7 @@ _PUBLIC = [
 # 全部答案版本、admin/dimensions 等)仍要求 viewer+。
 THIRD_PARTY_EXEMPT = [
     re.compile(r"^/dimensions$"),                                                # §5.1
+    re.compile(r"^/knowledge-bases$"),                                           # §5.7（v1.1 增补：库列表，2026-08-18 反馈单问题 3）
     re.compile(r"^/knowledge-bases/\d+/enabled-dimensions$"),                    # §5.1
     re.compile(r"^/knowledge-bases/\d+/knowledge-points$"),                      # §5.3
     re.compile(r"^/knowledge-bases/\d+/knowledge-points/\d+/(resolve|answer-groups|change-log)$"),  # §5.2/5.4/5.5

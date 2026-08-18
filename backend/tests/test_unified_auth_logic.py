@@ -138,6 +138,7 @@ def test_third_party_readonly_exempt_matches_contract_doc():
     """《对接接口文档-约定基准版》§5 全集逐条豁免（GET only）。"""
     for path in [
         "/dimensions",
+        "/knowledge-bases",  # §5.7（v1.1 增补：库列表，2026-08-18 反馈单问题 3）
         "/knowledge-bases/1/enabled-dimensions",
         "/knowledge-bases/1/knowledge-points",
         "/knowledge-bases/1/knowledge-points/2/resolve",
@@ -153,8 +154,9 @@ def test_exemption_is_get_only_and_exact():
     # 同路径的写操作不豁免
     assert required_role("POST", "/dimensions") == "admin"
     assert required_role("PUT", "/knowledge-bases/1/enabled-dimensions") == "admin"
+    # 同路径的写操作不豁免（库列表 GET 已豁免，POST 建库仍需 admin）
+    assert required_role("POST", "/knowledge-bases") == "admin"
     # 运营侧独有读接口不豁免（需 viewer+）
-    assert required_role("GET", "/knowledge-bases") == "viewer"
     assert required_role("GET", "/knowledge-bases/1/knowledge-points/2/answers") == "viewer"
     assert required_role("GET", "/knowledge-bases/1/knowledge-points/2/answer-relations") == "viewer"
     assert required_role("GET", "/admin/dimensions") == "viewer"
