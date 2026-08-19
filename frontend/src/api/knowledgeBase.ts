@@ -10,6 +10,9 @@ export interface KnowledgeBase {
   description: string | null
   status: 'active' | 'deprecated'
   active_knowledge_point_count: number
+  /** 所属分类（PRD §4.11）：两者皆 null = 未分类 */
+  category_id: number | null
+  category_name: string | null
   created_at: string
   updated_at: string
 }
@@ -17,6 +20,8 @@ export interface KnowledgeBase {
 export interface KnowledgeBaseInput {
   name: string
   description?: string
+  /** 所属分类：null = 未分类。编辑时始终显式传（后端区分「未传」与「传 null」） */
+  category_id?: number | null
 }
 
 export interface KnowledgeBaseCreateInput extends KnowledgeBaseInput {

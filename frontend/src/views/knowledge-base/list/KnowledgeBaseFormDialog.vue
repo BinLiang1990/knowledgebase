@@ -3,8 +3,10 @@
 // 新增模式下可直接勾选启用维度（与建库同一事务）——省去"建完还要去
 // 知识库设置勾维度"的二段式操作；编辑模式刻意不出现维度区（调整已建库的
 // 维度是设置页的职责，那里有"使用中"的保留链路语义）。
+import type { Category } from '@/api/category'
 import type { Dimension } from '@/api/dimension'
 import type { KnowledgeBase } from '@/api/knowledgeBase'
+import { listCategories } from '@/api/category'
 import { listAdminDimensions } from '@/api/dimension'
 import { createKnowledgeBase, updateKnowledgeBase } from '@/api/knowledgeBase'
 
@@ -25,6 +27,33 @@ const dimensionsLoading = ref(false)
 const dimensionsFailed = ref(false)
 const selectedDimensionKeys = ref<string[]>([])
 
+// 所属分类（PRD §4.11，issue #40）：新增/编辑都可挂分类；el-tree-select
+// 清空时值为 undefined，提交时统一转 null（后端 null = 未分类）
+const categories = ref<Category[]>([])
+const categoryId = ref<number | undefined>(undefined)
+
+interface CategoryTreeOption {
+  value: number
+  label: string
+  children: CategoryTreeOption[]
+}
+const categoryOptions = computed<CategoryTreeOption[]>(() => {
+  const build = (parentId: number | null): CategoryTreeOption[] =>
+    categories.value
+      .filter(c => c.parent_id === parentId)
+      .map(c => ({ value: c.id, label: c.name, children: build(c.id) }))
+  return build(null)
+})
+
+async function loadCategories() {
+  try {
+    categories.value = await listCategories()
+  }
+  catch {
+    // 分类加载失败不阻塞建库/编辑（下拉为空 = 只能选未分类），错误已由拦截器提示
+  }
+}
+
 const isEdit = computed(() => target.value !== null)
 const title = computed(() => (isEdit.value ? `编辑知识库 · ${target.value!.name}` : '新增知识库'))
 
@@ -43,13 +72,16 @@ async function loadDimensions() {
   }
 }
 
-function open(kb?: KnowledgeBase) {
+function open(kb?: KnowledgeBase, defaults?: { categoryId?: number | null }) {
   target.value = kb ?? null
   name.value = kb?.name ?? ''
   description.value = kb?.description ?? ''
+  // 编辑回填当前分类；新增预填父页当前选中的分类（可清空 = 未分类）
+  categoryId.value = (kb ? kb.category_id : defaults?.categoryId) ?? undefined
   error.value = ''
   selectedDimensionKeys.value = []
   visible.value = true
+  loadCategories()
   if (!kb)
     loadDimensions()
 }
@@ -65,12 +97,17 @@ async function submit() {
   submitting.value = true
   try {
     if (target.value) {
-      await updateKnowledgeBase(target.value.id, { name: trimmedName, description: description.value.trim() })
+      await updateKnowledgeBase(target.value.id, {
+        name: trimmedName,
+        description: description.value.trim(),
+        category_id: categoryId.value ?? null,
+      })
     }
     else {
       await createKnowledgeBase({
         name: trimmedName,
         description: description.value.trim(),
+        category_id: categoryId.value ?? null,
         enabled_dimension_keys: selectedDimensionKeys.value.length ? selectedDimensionKeys.value : undefined,
       })
     }
@@ -98,6 +135,21 @@ async function submit() {
     <div class="mf">
       <label>描述(可选)</label>
       <textarea v-model="description" rows="2" placeholder="这个知识库用来存放什么类型的知识点" maxlength="2000" />
+    </div>
+    <div class="mf">
+      <label>所属分类</label>
+      <el-tree-select
+        v-model="categoryId"
+        :data="categoryOptions"
+        check-strictly
+        default-expand-all
+        clearable
+        placeholder="未分类（可选）"
+        style="width: 100%"
+      />
+      <div class="hint">
+        不选 = 未分类；可随时在「编辑」里改挂分类，左侧分类树上按分类（含子分类）筛选。
+      </div>
     </div>
     <div v-if="!isEdit" class="mf">
       <label>启用维度(可选)</label>
