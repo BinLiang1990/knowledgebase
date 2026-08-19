@@ -12,8 +12,10 @@ from ..envelope import BusinessError, envelope
 from ..models.answer import Answer
 from ..models.dimension import DimensionDefinition, KnowledgeBaseEnabledDimension
 from ..models.knowledge_base import KnowledgeBase
+from ..models.knowledge_base_category import KnowledgeBaseCategory
 from ..models.knowledge_point import KnowledgePoint
 from ..schemas.dimension import DimensionOut, EnabledDimensionsUpdate
+from .category import descendant_ids
 from ..schemas.knowledge_base import (
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
@@ -52,16 +54,36 @@ def _get_active_point_count(db: Session, knowledge_base_id: int) -> int:
     )
 
 
-def _to_out(kb: KnowledgeBase, active_point_count: int) -> KnowledgeBaseOut:
+def _to_out(
+    kb: KnowledgeBase, active_point_count: int, category_name: str | None = None
+) -> KnowledgeBaseOut:
     return KnowledgeBaseOut(
         id=kb.id,
         name=kb.name,
         description=kb.description,
         status=kb.status,
         active_knowledge_point_count=active_point_count,
+        category_id=kb.category_id,
+        category_name=category_name,
         created_at=kb.created_at,
         updated_at=kb.updated_at,
     )
+
+
+def _category_or_404(db: Session, category_id: int) -> KnowledgeBaseCategory:
+    """写知识库/按分类过滤时的 category_id 存在性校验（PRD §4.11：报错
+    拒绝，不做静默忽略/静默空列表）。"""
+    category = db.get(KnowledgeBaseCategory, category_id)
+    if category is None:
+        raise BusinessError("分类不存在", status_code=404)
+    return category
+
+
+def _category_name(db: Session, category_id: int | None) -> str | None:
+    if category_id is None:
+        return None
+    category = db.get(KnowledgeBaseCategory, category_id)
+    return category.name if category is not None else None
 
 
 def _get_or_404(db: Session, kb_id: int) -> KnowledgeBase:
@@ -109,10 +131,18 @@ def _resolve_dimension_keys(db: Session, requested_keys: list[str]) -> list[str]
 @router.post("")
 def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(get_db)) -> dict:
     _ensure_name_available(db, payload.name)
-    # 维度校验放在建库之前：任何一个 key 不合法都不应留下半成品知识库
+    # 维度/分类校验都放在建库之前：任何一个不合法都不应留下半成品知识库
     keys = _resolve_dimension_keys(db, payload.enabled_dimension_keys or [])
+    category_name: str | None = None
+    if payload.category_id is not None:
+        category_name = _category_or_404(db, payload.category_id).name
 
-    kb = KnowledgeBase(name=payload.name, description=payload.description, status="active")
+    kb = KnowledgeBase(
+        name=payload.name,
+        description=payload.description,
+        status="active",
+        category_id=payload.category_id,
+    )
     db.add(kb)
     try:
         # 建库 + 启用维度同一事务（本功能的意义所在：不再需要建完后
@@ -126,13 +156,14 @@ def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(ge
         _raise_if_duplicate_name(exc)
     db.refresh(kb)
 
-    out = _to_out(kb, active_point_count=0)
+    out = _to_out(kb, active_point_count=0, category_name=category_name)
     return envelope(out.model_dump(mode="json"))
 
 
 @router.get("")
 def list_knowledge_bases(
     status: Literal["active", "deprecated"] | None = Query(default=None),
+    category_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
     count_by_kb = dict(
@@ -146,9 +177,21 @@ def list_knowledge_bases(
     stmt = select(KnowledgeBase).order_by(KnowledgeBase.id)
     if status is not None:
         stmt = stmt.where(KnowledgeBase.status == status)
+    if category_id is not None:
+        # PRD §4.11：过滤语义固定为「该分类及其全部子孙」，不提供仅直属
+        # 开关；不存在的分类 id 报错而不是静默空列表。对外与界面同参数。
+        _category_or_404(db, category_id)
+        scope_ids = {category_id, *descendant_ids(db, category_id)}
+        stmt = stmt.where(KnowledgeBase.category_id.in_(scope_ids))
 
+    name_by_category = dict(
+        db.execute(select(KnowledgeBaseCategory.id, KnowledgeBaseCategory.name)).all()
+    )
     rows = db.execute(stmt).scalars().all()
-    out = [_to_out(kb, count_by_kb.get(kb.id, 0)) for kb in rows]
+    out = [
+        _to_out(kb, count_by_kb.get(kb.id, 0), name_by_category.get(kb.category_id))
+        for kb in rows
+    ]
     return envelope([o.model_dump(mode="json") for o in out])
 
 
@@ -168,6 +211,11 @@ def update_knowledge_base(
     # Found by the Codex outer-gate review on PR #18.
     if "description" in fields_set:
         kb.description = payload.description
+    # 同上：category_id 也要区分「未传(不改)」与「显式 null(置为未分类)」
+    if "category_id" in fields_set:
+        if payload.category_id is not None:
+            _category_or_404(db, payload.category_id)
+        kb.category_id = payload.category_id
 
     try:
         db.commit()
@@ -176,7 +224,7 @@ def update_knowledge_base(
         _raise_if_duplicate_name(exc)
     db.refresh(kb)
 
-    out = _to_out(kb, _get_active_point_count(db, kb_id))
+    out = _to_out(kb, _get_active_point_count(db, kb_id), _category_name(db, kb.category_id))
     return envelope(out.model_dump(mode="json"))
 
 
@@ -187,7 +235,7 @@ def _set_status(db: Session, kb_id: int, target_status: Literal["active", "depre
         db.commit()
         db.refresh(kb)
 
-    out = _to_out(kb, _get_active_point_count(db, kb_id))
+    out = _to_out(kb, _get_active_point_count(db, kb_id), _category_name(db, kb.category_id))
     return envelope(out.model_dump(mode="json"))
 
 

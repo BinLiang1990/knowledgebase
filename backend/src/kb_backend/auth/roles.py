@@ -73,12 +73,16 @@ _AUTHENTICATED_ONLY = [
     ("POST", re.compile(r"^/auth/logout$")),
 ]
 
-# ---- 需要 admin+ 的写操作：维度配置、建/改/停知识库 ----
+# ---- 需要 admin+ 的写操作：维度配置、建/改/停知识库、分类管理 ----
 _ADMIN_WRITE = [
     re.compile(r"^/dimensions(/.*)?$"),                       # POST/PATCH/activate/deactivate
     re.compile(r"^/knowledge-bases$"),                        # POST 建库
-    re.compile(r"^/knowledge-bases/\d+$"),                    # PATCH 改名/描述
+    re.compile(r"^/knowledge-bases/\d+$"),                    # PATCH 改名/描述/改挂分类
     re.compile(r"^/knowledge-bases/\d+/(activate|deactivate|enabled-dimensions)$"),
+    # 知识库分类树 (issue #39)：组织知识库的管理动作，与建/改库同级。
+    # GET /categories 不在此列（走 GET 兜底的 viewer），也不进第三方
+    # 豁免面——对外列表接口已随知识库带回分类信息，第三方不需要拉树
+    re.compile(r"^/categories(/.*)?$"),                       # POST/PATCH/DELETE/move
 ]
 
 _USERS = re.compile(r"^/users(/.*)?$")

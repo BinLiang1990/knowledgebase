@@ -21,6 +21,8 @@ class KnowledgeBaseCreate(BaseModel):
     enabled_dimension_keys: list[Annotated[str, Field(max_length=100)]] | None = Field(
         default=None, max_length=200
     )
+    # 所属分类 (PRD §4.11, issue #39)：省略/None = 未分类
+    category_id: int | None = None
 
     @field_validator("name")
     @classmethod
@@ -31,6 +33,9 @@ class KnowledgeBaseCreate(BaseModel):
 class KnowledgeBaseUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
+    # 同 description：区分「未传(不改)」与「显式 null(置为未分类)」，
+    # 路由层用 model_fields_set 判断
+    category_id: int | None = None
 
     @field_validator("name")
     @classmethod
@@ -46,6 +51,10 @@ class KnowledgeBaseOut(BaseModel):
     description: str | None
     status: Literal["active", "deprecated"]
     active_knowledge_point_count: int
+    # 所属分类 (PRD §4.11)：对外列表接口也返回，第三方可据此自行判断
+    # "未分类"(两者皆 null)；名称随 id 一并给出，免得对接方再拉分类树
+    category_id: int | None = None
+    category_name: str | None = None
     created_at: datetime
     updated_at: datetime
 

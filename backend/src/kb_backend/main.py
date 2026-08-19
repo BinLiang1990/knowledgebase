@@ -13,6 +13,7 @@ from kb_backend.envelope import BusinessError, envelope, register_exception_hand
 from kb_backend.relation_worker import start_relation_worker
 from kb_backend.routers.audit_log import router as audit_log_router
 from kb_backend.routers.auth import router as auth_router
+from kb_backend.routers.category import router as category_router
 from kb_backend.routers.dimension import router as dimension_router
 from kb_backend.routers.knowledge_base import router as knowledge_base_router
 from kb_backend.routers.knowledge_point import router as knowledge_point_router
@@ -67,6 +68,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(knowledge_base_router)
+app.include_router(category_router)
 app.include_router(dimension_router)
 app.include_router(knowledge_point_router)
 app.include_router(audit_log_router)
