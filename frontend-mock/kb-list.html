@@ -24,38 +24,55 @@
 
     <main class="content">
       <div class="notice">
-        <b>知识库</b>是知识点的容器，不同知识库之间的知识点互不影响；<b>维度定义</b>是全局的，所有知识库共享同一套维度（在「维度管理」里统一维护）。点击知识库名称进入其知识点列表。
+        <b>知识库</b>是知识点的容器，不同知识库之间的知识点互不影响；左侧<b>分类树</b>把知识库按业务归属分层组织（PRD §4.11）——点击分类节点，右侧只展示该分类<b>及其全部子孙分类</b>下的知识库；节点可<b>拖拽</b>：拖到上/下边缘调排序，拖到中部挂为子分类。节点数字为「直属数(子树合计)」，只统计启用中的知识库。
       </div>
 
-      <div class="card ov">
-        <div class="card-head">
-          <span class="tick"></span>
-          <h3>知识库列表</h3>
-          <span class="sub">全部知识库</span>
-          <span class="spacer"></span>
-          <span class="ops"><button class="btn primary" onclick="openAddKbModal()">+ 新增知识库</button></span>
+      <div class="kb-layout">
+        <!-- 左：分类树 -->
+        <div class="card tree-panel">
+          <div class="tree-search">
+            <input type="text" id="catKeyword" placeholder="按分类名称搜索" oninput="onCatSearch()" />
+            <button class="btn sm" onclick="clearCatSearch()" title="清空搜索">✕</button>
+          </div>
+          <div class="tree-scroll tree" id="treeBox"></div>
+          <div class="tree-foot">
+            <button class="btn sm" style="width:100%;justify-content:center" onclick="openCatModal(null,null)">＋ 新增顶级分类</button>
+            <div class="tree-hint">同一父分类下名称唯一（≤50 字）；仅允许删除<b>空分类</b>（无子分类且无知识库）。拖拽不能落到自己或子孙下（防成环），落点重名会被拒绝；搜索过滤时暂停拖拽。</div>
+          </div>
         </div>
 
-        <div class="form-row">
-          <input type="text" id="fKeyword" placeholder="搜索知识库名称或描述" onkeydown="if(event.key==='Enter'){applyKbFilters()}" />
-          <button class="btn primary sm" onclick="applyKbFilters()">查 询</button>
-          <button class="btn sm" onclick="resetKbFilters()">重 置</button>
-        </div>
+        <!-- 右：知识库列表 -->
+        <div class="card ov list-panel">
+          <div class="card-head">
+            <span class="tick"></span>
+            <h3>知识库列表</h3>
+            <span class="sub" id="listScope">全部</span>
+            <span class="spacer"></span>
+            <span class="ops"><button class="btn primary" onclick="openAddKbModal()">+ 新增知识库</button></span>
+          </div>
 
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>描述</th>
-              <th>知识点数</th>
-              <th>状态</th>
-              <th>创建时间</th>
-              <th class="op-col">操作</th>
-            </tr>
-          </thead>
-          <tbody id="kbBody"></tbody>
-        </table>
-        <div class="pager" id="kbPager"></div>
+          <div class="form-row">
+            <input type="text" id="fKeyword" placeholder="搜索知识库名称或描述" onkeydown="if(event.key==='Enter'){applyKbFilters()}" />
+            <button class="btn primary sm" onclick="applyKbFilters()">查 询</button>
+            <button class="btn sm" onclick="resetKbFilters()">重 置</button>
+          </div>
+
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>描述</th>
+                <th>分类</th>
+                <th>知识点数</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th class="op-col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="kbBody"></tbody>
+          </table>
+          <div class="pager" id="kbPager"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -74,6 +91,11 @@
       <div class="mf">
         <label>描述(可选)</label>
         <textarea id="kbDesc" rows="2" placeholder="这个知识库用来存放什么类型的知识点"></textarea>
+      </div>
+      <div class="mf">
+        <label>所属分类</label>
+        <select id="kbCat" style="width:100%"></select>
+        <div class="hint">不选 = 未分类；可随时在「编辑」里改挂分类。</div>
       </div>
       <div class="mf" id="kbDimsField">
         <label>启用维度(可选)</label>
@@ -105,6 +127,46 @@
   </div>
 </div>
 
+<!-- 新增/编辑分类 -->
+<div class="mask" id="catMask">
+  <div class="modal">
+    <div class="mo-head"><h3 id="catModalTitle">新增分类</h3><button class="mo-close" onclick="closeModal('catMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="catId" />
+      <div class="mf">
+        <label><span class="req">*</span>分类名称</label>
+        <input type="text" id="catName" placeholder="例如：研发实验小组（去首尾空格后 ≤50 字）" />
+      </div>
+      <div class="mf">
+        <label>所属父分类</label>
+        <select id="catParent" style="width:100%"></select>
+        <div class="hint">编辑时更换父分类 = 移动节点（子树整体随迁）；不能移动到自己或自己的子孙分类下。</div>
+      </div>
+      <p class="hint" id="catFormHint" style="color:var(--red)"></p>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('catMask')">取 消</button>
+      <button class="btn primary" onclick="submitCat()">确 定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 删除分类 -->
+<div class="mask" id="delCatMask">
+  <div class="modal">
+    <div class="mo-head"><h3>删除分类</h3><button class="mo-close" onclick="closeModal('delCatMask')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="delCatId" />
+      <p id="delCatBody" style="font-size:13.5px;color:var(--ink-2);line-height:1.8"></p>
+      <div class="risk" id="delCatRisk" style="display:none"></div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn" onclick="closeModal('delCatMask')">取 消</button>
+      <button class="btn danger" id="delCatBtn" onclick="confirmDelCat()">删 除</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="assets/app.js"></script>
@@ -112,6 +174,11 @@
   let kbPage = 1;
   const KB_PAGE_SIZE = 8;
   let kbFilters = { keyword: "" };
+
+  // ---------------- 分类树状态 ----------------
+  let selectedCat = "all";                                       // 'all' | 'none' | 分类id
+  let expanded = new Set(getCategories().map(c => c.id));        // 默认全展开
+  let catSearchKw = "";
 
   function applyKbFilters() {
     kbFilters.keyword = document.getElementById("fKeyword").value.trim().toLowerCase();
@@ -125,9 +192,244 @@
     renderKbList();
   }
 
+  // ---------------- 分类树渲染 ----------------
+  function onCatSearch() { catSearchKw = document.getElementById("catKeyword").value.trim(); renderTree(); }
+  function clearCatSearch() { document.getElementById("catKeyword").value = ""; catSearchKw = ""; renderTree(); }
+
+  // 搜索命中节点 + 其全部祖先路径一并展示
+  function visibleSetForSearch(cats) {
+    if (!catSearchKw) return null;
+    const kw = catSearchKw.toLowerCase();
+    const vis = new Set();
+    cats.forEach(c => {
+      if (c.name.toLowerCase().includes(kw)) {
+        vis.add(c.id);
+        let p = cats.find(x => x.id === c.parentId);
+        while (p) { vis.add(p.id); p = cats.find(x => x.id === p.parentId); }
+      }
+    });
+    return vis;
+  }
+
+  function markKw(name) {
+    if (!catSearchKw) return escapeHtml(name);
+    const i = name.toLowerCase().indexOf(catSearchKw.toLowerCase());
+    if (i < 0) return escapeHtml(name);
+    return escapeHtml(name.slice(0, i)) + "<mark>" + escapeHtml(name.slice(i, i + catSearchKw.length)) + "</mark>" + escapeHtml(name.slice(i + catSearchKw.length));
+  }
+
+  function nodeHtml(c, cats, vis) {
+    const kids = categoryChildren(c.id, cats).filter(k => !vis || vis.has(k.id));
+    const hasKids = categoryChildren(c.id, cats).length > 0;
+    const isOpen = catSearchKw ? true : expanded.has(c.id);      // 搜索态强制展开祖先路径
+    const dc = categoryDirectKbCount(c.id), sc = categorySubtreeKbCount(c.id);
+    const cnt = hasKids ? `(${dc})(${sc})` : `(${dc})`;
+    const caret = hasKids
+      ? `<span class="caret ${isOpen ? "open" : ""}" onclick="toggleNode(event,'${c.id}')">▶</span>`
+      : `<span class="caret"></span>`;
+    const dnd = catSearchKw ? "" : `draggable="true"
+        ondragstart="onCatDragStart(event,'${c.id}')" ondragover="onCatDragOver(event,'${c.id}')"
+        ondragleave="onCatDragLeave(event)" ondrop="onCatDrop(event,'${c.id}')" ondragend="onCatDragEnd()"`;
+    return `<li>
+      <div class="tnode ${selectedCat === c.id ? "sel" : ""}" ${dnd} onclick="selectCatNode('${c.id}')" title="${escapeHtml(categoryPath(c.id))}">
+        <span class="grip" title="拖拽调整排序 / 层级">⠿</span>
+        ${caret}
+        <span class="nm">${markKw(c.name)}</span>
+        <span class="cnt num">${cnt}</span>
+        <span class="acts">
+          <a title="编辑分类" onclick="event.stopPropagation();openCatModal('${c.id}')">✎</a>
+          <a title="新增子分类" onclick="event.stopPropagation();openCatModal(null,'${c.id}')">＋</a>
+          <a class="danger" title="删除分类" onclick="event.stopPropagation();openDelCat('${c.id}')">－</a>
+        </span>
+      </div>
+      ${kids.length && isOpen ? `<ul style="padding-left:18px">${kids.map(k => nodeHtml(k, cats, vis)).join("")}</ul>` : ""}
+    </li>`;
+  }
+
+  function renderTree() {
+    const box = document.getElementById("treeBox");
+    const cats = getCategories();
+    const vis = visibleSetForSearch(cats);
+
+    if (vis && vis.size === 0) {
+      box.innerHTML = `<div class="tree-empty">无匹配分类<br>换个关键字，或清空搜索恢复完整树</div>`;
+      return;
+    }
+
+    const roots = categoryChildren(null, cats).filter(c => !vis || vis.has(c.id));
+    const virtual = catSearchKw ? "" : `
+      <li><div class="tnode virtual ${selectedCat === "all" ? "sel" : ""}" onclick="selectCatNode('all')">
+        <span class="grip"></span><span class="caret"></span><span class="nm">全部</span><span class="cnt num">(${getActiveKnowledgeBases().length})</span>
+      </div></li>
+      <li><div class="tnode virtual ${selectedCat === "none" ? "sel" : ""}" onclick="selectCatNode('none')">
+        <span class="grip"></span><span class="caret"></span><span class="nm">未分类</span><span class="cnt num">(${uncategorizedKbCount()})</span>
+      </div></li>`;
+    box.innerHTML = `<ul>${virtual}${roots.map(c => nodeHtml(c, cats, vis)).join("")}</ul>`;
+  }
+
+  function toggleNode(ev, id) {
+    ev.stopPropagation();
+    expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+    renderTree();
+  }
+  function selectCatNode(id) {
+    selectedCat = id;
+    kbPage = 1;
+    renderTree();
+    renderKbList();
+  }
+
+  // ---------------- 分类树拖拽：上/下边缘 = 调同级排序，中部 = 挂为子分类 ----------------
+  let catDragId = null;
+
+  function onCatDragStart(ev, id) {
+    catDragId = id;
+    ev.dataTransfer.effectAllowed = "move";
+    ev.currentTarget.classList.add("dragging");
+  }
+  function clearDropCls() {
+    document.querySelectorAll(".tnode.drop-before,.tnode.drop-after,.tnode.drop-inside")
+      .forEach(el => el.classList.remove("drop-before", "drop-after", "drop-inside"));
+  }
+  function catDropZone(ev) {
+    const r = ev.currentTarget.getBoundingClientRect();
+    const y = ev.clientY - r.top;
+    return y < r.height * .3 ? "before" : (y > r.height * .7 ? "after" : "inside");
+  }
+  // 防成环：不能落到自己或自己的子孙上
+  const canCatDrop = id => catDragId && id !== catDragId && !categoryDescendants(catDragId).includes(id);
+
+  function onCatDragOver(ev, id) {
+    if (!canCatDrop(id)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    clearDropCls();
+    ev.currentTarget.classList.add("drop-" + catDropZone(ev));
+  }
+  function onCatDragLeave(ev) {
+    ev.currentTarget.classList.remove("drop-before", "drop-after", "drop-inside");
+  }
+  function onCatDrop(ev, id) {
+    if (!canCatDrop(id)) return;
+    ev.preventDefault();
+    const zone = catDropZone(ev);
+    const dragged = getCategory(catDragId);
+    const target = getCategory(id);
+    const r = moveCategoryByDrag(catDragId, id, zone);
+    clearDropCls();
+    if (!r.ok) { toast(r.error, "err"); return; }
+    if (zone === "inside") {
+      expanded.add(id);
+      toast(`已将「${dragged.name}」移动到「${target.name}」之下`, "ok");
+    } else if (r.movedParent) {
+      toast(`已将「${dragged.name}」移动到「${r.parentName}」下并排序`, "ok");
+    } else {
+      toast(`已调整「${dragged.name}」的同级排序`, "ok");
+    }
+    renderTree();
+    renderKbList();
+  }
+  function onCatDragEnd() {
+    catDragId = null;
+    clearDropCls();
+    document.querySelectorAll(".tnode.dragging").forEach(el => el.classList.remove("dragging"));
+  }
+
+  // ---------------- 分类 新增/编辑/删除 ----------------
+  // 缩进的分类下拉；excludeId = 编辑中的分类(连同其子孙一起排除，防成环)
+  function fillCatSelect(sel, excludeId, emptyLabel) {
+    const cats = getCategories();
+    const banned = excludeId ? new Set([excludeId, ...categoryDescendants(excludeId, cats)]) : new Set();
+    const opts = [`<option value="">${emptyLabel}</option>`];
+    (function walk(pid, depth) {
+      categoryChildren(pid, cats).forEach(c => {
+        if (banned.has(c.id)) return;
+        opts.push(`<option value="${c.id}">${"　".repeat(depth)}${escapeHtml(c.name)}</option>`);
+        walk(c.id, depth + 1);
+      });
+    })(null, 0);
+    sel.innerHTML = opts.join("");
+  }
+
+  function openCatModal(editId, parentId) {
+    document.getElementById("catId").value = editId || "";
+    document.getElementById("catFormHint").textContent = "";
+    const sel = document.getElementById("catParent");
+    if (editId) {
+      const c = getCategory(editId);
+      document.getElementById("catModalTitle").textContent = `编辑分类 · ${c.name}`;
+      document.getElementById("catName").value = c.name;
+      fillCatSelect(sel, editId, "（顶级分类）");
+      sel.value = c.parentId || "";
+    } else {
+      document.getElementById("catModalTitle").textContent = parentId ? `新增子分类 · ${getCategory(parentId).name} 之下` : "新增顶级分类";
+      document.getElementById("catName").value = "";
+      fillCatSelect(sel, null, "（顶级分类）");
+      sel.value = parentId || "";
+    }
+    openModal("catMask");
+  }
+
+  function submitCat() {
+    const id = document.getElementById("catId").value;
+    const name = document.getElementById("catName").value;
+    const parentId = document.getElementById("catParent").value || null;
+    const hint = document.getElementById("catFormHint");
+    const r = id ? updateCategory(id, { name, parentId }) : addCategory({ name, parentId });
+    if (!r.ok) { hint.textContent = r.error; return; }
+    if (!id) { if (parentId) expanded.add(parentId); expanded.add(r.id); }
+    toast(id ? `已更新分类「${name.trim()}」` : `已新增分类「${name.trim()}」`, "ok");
+    closeModal("catMask");
+    renderTree();
+    renderKbList();
+  }
+
+  function openDelCat(id) {
+    const c = getCategory(id);
+    const childCount = categoryChildren(id).length;
+    const kbCount = getKnowledgeBases().filter(b => b.categoryId === id).length;   // 含已停用：占用即阻塞删除
+    document.getElementById("delCatId").value = id;
+    document.getElementById("delCatBody").innerHTML = `即将删除分类 <b>${escapeHtml(c.name)}</b>（${escapeHtml(categoryPath(id))}）。`;
+    const risk = document.getElementById("delCatRisk");
+    const btn = document.getElementById("delCatBtn");
+    if (childCount || kbCount) {
+      risk.style.display = "";
+      risk.innerHTML = `无法删除（category_not_empty）：该分类下仍有 <b>${childCount} 个子分类、${kbCount} 个知识库</b>（含已停用）。请先把知识库改挂到其他分类或置为未分类、并清空子分类后再删。`;
+      btn.disabled = true; btn.style.opacity = .45; btn.style.cursor = "not-allowed";
+    } else {
+      risk.style.display = "none";
+      btn.disabled = false; btn.style.opacity = 1; btn.style.cursor = "pointer";
+    }
+    openModal("delCatMask");
+  }
+  function confirmDelCat() {
+    const id = document.getElementById("delCatId").value;
+    const c = getCategory(id);
+    const r = deleteCategory(id);
+    if (!r.ok) { toast(`无法删除：仍有 ${r.childCount} 个子分类、${r.kbCount} 个知识库（category_not_empty）`, "err"); return; }
+    if (selectedCat === id) selectedCat = "all";
+    toast(`已删除分类「${c.name}」`, "ok");
+    closeModal("delCatMask");
+    renderTree();
+    renderKbList();
+  }
+
+  // ---------------- 知识库列表 ----------------
+  function scopeLabel() {
+    if (selectedCat === "all") return "全部";
+    if (selectedCat === "none") return "未分类";
+    return categoryPath(selectedCat) + "（含子分类）";
+  }
+
   function renderKbList() {
+    document.getElementById("listScope").textContent = scopeLabel();
     const all = getKnowledgeBases();
+    const scopeSet = (selectedCat !== "all" && selectedCat !== "none")
+      ? new Set([selectedCat, ...categoryDescendants(selectedCat)])
+      : null;
     const filtered = all.filter(b => {
+      if (selectedCat === "none" && b.categoryId) return false;
+      if (scopeSet && !scopeSet.has(b.categoryId)) return false;
       if (!kbFilters.keyword) return true;
       const hay = (b.name + " " + b.description).toLowerCase();
       return hay.includes(kbFilters.keyword);
@@ -138,10 +440,14 @@
     const pageItems = filtered.slice(start, start + KB_PAGE_SIZE);
 
     if (!pageItems.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">暂无符合条件的知识库${kbFilters.keyword ? "，试试调整搜索关键词" : "，点击右上角「+ 新增知识库」创建"}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">暂无符合条件的知识库${kbFilters.keyword ? "，试试调整搜索关键词" : "，点击右上角「+ 新增知识库」创建"}</td></tr>`;
     } else {
       tbody.innerHTML = pageItems.map(b => {
         const count = knowledgeBaseKpCount(b.id);
+        const cat = b.categoryId && getCategory(b.categoryId);
+        const catHtml = cat
+          ? `<span class="cat-tag" title="${escapeHtml(categoryPath(cat.id))}">${escapeHtml(cat.name)}</span>`
+          : `<span class="cat-tag none">未分类</span>`;
         const statusHtml = b.status === "active"
           ? `<span class="status-dot ok"><i></i>启用中</span>`
           : `<span class="status-dot off"><i></i>已停用</span>`;
@@ -150,6 +456,7 @@
         return `<tr>
           <td>${enterLink}</td>
           <td>${escapeHtml(b.description || "—")}</td>
+          <td>${catHtml}</td>
           <td class="num" style="font-weight:400">${count}</td>
           <td>${statusHtml}</td>
           <td class="num" style="font-weight:400">${escapeHtml(b.created_at.slice(0, 10))}</td>
@@ -187,6 +494,10 @@
     document.getElementById("kbDesc").value = "";
     document.getElementById("kbFormHint").textContent = "";
     document.getElementById("kbDimsField").style.display = "";
+    const sel = document.getElementById("kbCat");
+    fillCatSelect(sel, null, "（未分类）");
+    // 预填当前选中的分类，省去建库后再改挂
+    sel.value = (selectedCat !== "all" && selectedCat !== "none") ? selectedCat : "";
     renderKbDimRows();
     openModal("kbMask");
   }
@@ -199,6 +510,9 @@
     document.getElementById("kbDesc").value = b.description || "";
     document.getElementById("kbFormHint").textContent = "";
     document.getElementById("kbDimsField").style.display = "none";
+    const sel = document.getElementById("kbCat");
+    fillCatSelect(sel, null, "（未分类）");
+    sel.value = b.categoryId || "";
     openModal("kbMask");
   }
 
@@ -206,18 +520,20 @@
     const id = document.getElementById("kbId").value;
     const name = document.getElementById("kbName").value.trim();
     const description = document.getElementById("kbDesc").value.trim();
+    const categoryId = document.getElementById("kbCat").value || null;
     const hint = document.getElementById("kbFormHint");
     if (!name) { hint.textContent = "请填写知识库名称。"; return; }
 
     if (id) {
-      updateKnowledgeBase(id, { name, description });
+      updateKnowledgeBase(id, { name, description, categoryId });
       toast(`已更新知识库「${name}」`, "ok");
     } else {
       const enabledDimKeys = [...document.querySelectorAll(".kb-dim-check:checked")].map(el => el.value);
-      addKnowledgeBase({ name, description, enabledDimKeys });
-      toast(`已创建知识库「${name}」${enabledDimKeys.length ? `，已启用 ${enabledDimKeys.length} 个维度` : ""}`, "ok");
+      addKnowledgeBase({ name, description, enabledDimKeys, categoryId });
+      toast(`已创建知识库「${name}」${enabledDimKeys.length ? `，已启用 ${enabledDimKeys.length} 个维度` : ""}${categoryId ? `，已挂到「${getCategory(categoryId).name}」` : ""}`, "ok");
     }
     closeModal("kbMask");
+    renderTree();
     renderKbList();
   }
 
@@ -243,10 +559,12 @@
     toggleKnowledgeBaseStatus(id);
     toast("已更新知识库状态", "ok");
     closeModal("toggleKbMask");
+    renderTree();     // 停用/启用影响节点计数（只统计启用中）
     renderKbList();
   }
 
   initShell("kb-list");
+  renderTree();
   renderKbList();
 </script>
 </body>

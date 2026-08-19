@@ -22,6 +22,7 @@ const LS_DIMENSIONS = "kb_mock_dimensions";
 const LS_KPS = "kb_mock_kps";
 const LS_ANSWERS = "kb_mock_answers";
 const LS_RELATIONS = "kb_mock_relations";
+const LS_CATEGORIES = "kb_mock_categories";
 const LS_SEEDED = "kb_mock_seeded_v7";
 
 const FIELD_TYPE_LABEL = { text: "文本", number: "数值", date: "时间", boolean: "布尔" };
@@ -35,8 +36,8 @@ function seedIfEmpty() {
   if (localStorage.getItem(LS_SEEDED)) return;
 
   const bases = [
-    { id: "1", name: "产品知识库", description: "产品功能说明、变更记录等知识点", status: "active", created_at: "2026-08-01T09:00:00", enabledDimKeys: ["tenant"] },
-    { id: "2", name: "运维知识库", description: "运维排障手册、值班交接事项", status: "active", created_at: "2026-08-04T09:00:00", enabledDimKeys: ["tenant"] },
+    { id: "1", name: "产品知识库", description: "产品功能说明、变更记录等知识点", status: "active", created_at: "2026-08-01T09:00:00", enabledDimKeys: ["tenant"], categoryId: "c1" },
+    { id: "2", name: "运维知识库", description: "运维排障手册、值班交接事项", status: "active", created_at: "2026-08-04T09:00:00", enabledDimKeys: ["tenant"], categoryId: "c4" },
   ];
 
   // 维度先只保留"租户"一个，后续需要别的维度(如 Priority、姓名)时，到「维度管理」里按需新增即可
@@ -98,6 +99,7 @@ function seedIfEmpty() {
   localStorage.setItem(LS_KPS, JSON.stringify(kps));
   localStorage.setItem(LS_ANSWERS, JSON.stringify(answers));
   localStorage.setItem(LS_RELATIONS, JSON.stringify(relations));
+  localStorage.setItem(LS_CATEGORIES, JSON.stringify(CATEGORY_SEED));
   localStorage.setItem(LS_SEEDED, "1");
 }
 
@@ -107,6 +109,7 @@ function resetDemoData() {
   localStorage.removeItem(LS_KPS);
   localStorage.removeItem(LS_ANSWERS);
   localStorage.removeItem(LS_RELATIONS);
+  localStorage.removeItem(LS_CATEGORIES);
   localStorage.removeItem(LS_SEEDED);
   seedIfEmpty();
 }
@@ -141,12 +144,12 @@ function setKbEnabledDims(kbId, keys) {
   saveKnowledgeBases(bases);
 }
 
-function addKnowledgeBase({ name, description, enabledDimKeys }) {
+function addKnowledgeBase({ name, description, enabledDimKeys, categoryId }) {
   const bases = getKnowledgeBases();
   const id = nextKbId();
   // enabledDimKeys：创建时直接启用维度（与真实后端 POST /knowledge-bases 的
   // enabled_dimension_keys 对齐），省去建库后再进「知识库设置」勾选的二段式操作
-  bases.push({ id, name, description: description || "", status: "active", created_at: new Date().toISOString(), enabledDimKeys: enabledDimKeys || [] });
+  bases.push({ id, name, description: description || "", status: "active", created_at: new Date().toISOString(), enabledDimKeys: enabledDimKeys || [], categoryId: categoryId || null });
   saveKnowledgeBases(bases);
   return id;
 }
@@ -167,6 +170,118 @@ function toggleKnowledgeBaseStatus(id) {
   b.status = b.status === "active" ? "deprecated" : "active";
   saveKnowledgeBases(bases);
 }
+
+// ---------------- storage access: 知识库分类(树形，PRD §4.11) ----------------
+// 数组顺序即同级排序(sort_order)；parentId=null 为顶级。「全部」「未分类」是界面上的虚拟节点，不落库。
+const CATEGORY_SEED = [
+  { id: "c1", parentId: null, name: "对外服务" },
+  { id: "c2", parentId: null, name: "公司运营" },
+  { id: "c3", parentId: "c2", name: "部门工作" },
+  { id: "c4", parentId: "c3", name: "研发实验小组" },
+];
+
+function getCategories() {
+  const raw = localStorage.getItem(LS_CATEGORIES);
+  if (raw) return JSON.parse(raw);
+  // 兼容已播种过旧版数据的浏览器：懒播种分类表；存量知识库保持未分类
+  localStorage.setItem(LS_CATEGORIES, JSON.stringify(CATEGORY_SEED));
+  return JSON.parse(JSON.stringify(CATEGORY_SEED));
+}
+function saveCategories(list) { localStorage.setItem(LS_CATEGORIES, JSON.stringify(list)); }
+function getCategory(id) { return getCategories().find(c => c.id === id); }
+function categoryChildren(pid, list) { return (list || getCategories()).filter(c => (c.parentId || null) === (pid || null)); }
+function categoryDescendants(id, list) {
+  const all = list || getCategories();
+  const out = [];
+  (function walk(p) { all.filter(c => c.parentId === p).forEach(c => { out.push(c.id); walk(c.id); }); })(id);
+  return out;
+}
+function categoryPath(id) {
+  const all = getCategories();
+  const parts = [];
+  let c = all.find(x => x.id === id);
+  while (c) { parts.unshift(c.name); c = all.find(x => x.id === c.parentId); }
+  return parts.join(" / ");
+}
+function nextCategoryId() {
+  const max = getCategories().reduce((m, c) => Math.max(m, parseInt(String(c.id).replace(/\D/g, ""), 10) || 0), 0);
+  return "c" + (max + 1);
+}
+
+// 名称校验：去首尾空格后非空、≤50 字、同一父分类下唯一(category_name_duplicated)
+function validateCategoryName(name, parentId, selfId) {
+  if (!name) return "分类名称不能为空（去首尾空格后）。";
+  if (name.length > 50) return `名称超长：${name.length} 字 > 50 字上限（category_name_too_long）。`;
+  const dup = getCategories().find(c => (c.parentId || null) === (parentId || null) && c.name === name && c.id !== selfId);
+  if (dup) return `同一父分类下已存在「${name}」（category_name_duplicated）。`;
+  return null;
+}
+
+function addCategory({ name, parentId }) {
+  name = (name || "").trim();
+  parentId = parentId || null;
+  const err = validateCategoryName(name, parentId, null);
+  if (err) return { ok: false, error: err };
+  const list = getCategories();
+  const id = nextCategoryId();
+  list.push({ id, parentId, name });   // 默认排同级末尾
+  saveCategories(list);
+  return { ok: true, id };
+}
+
+function updateCategory(id, { name, parentId }) {
+  name = (name || "").trim();
+  parentId = parentId || null;
+  if (parentId === id || categoryDescendants(id).includes(parentId))
+    return { ok: false, error: "不能移动到自己或自己的子孙分类下（category_cycle_detected）。" };
+  const err = validateCategoryName(name, parentId, id);
+  if (err) return { ok: false, error: err };
+  const list = getCategories();
+  const c = list.find(x => x.id === id);
+  if (!c) return { ok: false, error: "分类不存在。" };
+  c.name = name; c.parentId = parentId;
+  saveCategories(list);
+  return { ok: true };
+}
+
+// 仅允许删除空分类：无子分类、且无知识库(含已停用)归属(category_not_empty)；空分类为物理删除
+function deleteCategory(id) {
+  const childCount = categoryChildren(id).length;
+  const kbCount = getKnowledgeBases().filter(b => b.categoryId === id).length;
+  if (childCount || kbCount) return { ok: false, code: "category_not_empty", childCount, kbCount };
+  saveCategories(getCategories().filter(c => c.id !== id));
+  return { ok: true };
+}
+
+// 拖拽落点：zone = before/after(插入为目标的前/后同级) | inside(挂为目标的子分类，排子级末尾)
+function moveCategoryByDrag(dragId, targetId, zone) {
+  if (dragId === targetId || categoryDescendants(dragId).includes(targetId))
+    return { ok: false, error: "不能拖到自己或自己的子孙分类下（category_cycle_detected）。" };
+  let list = getCategories();
+  const dragged = list.find(c => c.id === dragId);
+  const target = list.find(c => c.id === targetId);
+  if (!dragged || !target) return { ok: false, error: "分类不存在。" };
+  const newParent = zone === "inside" ? targetId : (target.parentId || null);
+  const parentName = newParent ? (list.find(c => c.id === newParent) || {}).name : "顶级";
+  const dup = list.find(c => (c.parentId || null) === newParent && c.name === dragged.name && c.id !== dragId);
+  if (dup) return { ok: false, error: `「${parentName}」下已存在同名分类「${dragged.name}」，无法移动（category_name_duplicated）。` };
+  const oldParent = dragged.parentId || null;
+  list = list.filter(c => c.id !== dragId);
+  dragged.parentId = newParent;
+  if (zone === "inside") {
+    list.push(dragged);
+  } else {
+    const idx = list.findIndex(c => c.id === targetId);
+    list.splice(zone === "before" ? idx : idx + 1, 0, dragged);
+  }
+  saveCategories(list);
+  return { ok: true, movedParent: newParent !== oldParent, parentName };
+}
+
+// 计数口径：只统计启用中的知识库(PRD §4.11 未决 #1 的建议默认)
+function categoryDirectKbCount(id) { return getActiveKnowledgeBases().filter(b => b.categoryId === id).length; }
+function categorySubtreeKbCount(id) { return categoryDirectKbCount(id) + categoryDescendants(id).reduce((s, d) => s + categoryDirectKbCount(d), 0); }
+function uncategorizedKbCount() { return getActiveKnowledgeBases().filter(b => !b.categoryId).length; }
 
 // ---------------- storage access: 维度定义(全局) ----------------
 function getDimensions() { return JSON.parse(localStorage.getItem(LS_DIMENSIONS) || "[]"); }
