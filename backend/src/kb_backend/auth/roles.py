@@ -84,13 +84,21 @@ _ADMIN_WRITE = [
 _USERS = re.compile(r"^/users(/.*)?$")
 
 
-def required_role(method: str, path: str) -> str | None:
-    """返回该请求要求的最低角色；None = 公开（无需凭证）。"""
+def required_role(method: str, path: str, *, third_party_exempt: bool = True) -> str | None:
+    """返回该请求要求的最低角色；None = 公开（无需凭证）。
+
+    third_party_exempt=False 时关闭 §5 只读面的过渡期免鉴权（切服务 Token
+    强制后的形态）：这些路径回落到 GET 兜底的 viewer——用户登录态仍可访问，
+    机器调用则须走 auth_gate 的 X-Service-Token 分支（不经过本函数）。"""
     method = method.upper()
     for m, pattern in _PUBLIC:
         if (m == "*" or m == method) and pattern.match(path):
             return None
-    if method in ("GET", "HEAD") and any(p.match(path) for p in THIRD_PARTY_EXEMPT):
+    if (
+        third_party_exempt
+        and method in ("GET", "HEAD")
+        and any(p.match(path) for p in THIRD_PARTY_EXEMPT)
+    ):
         return None
     for m, pattern in _AUTHENTICATED_ONLY:
         if m == method and pattern.match(path):

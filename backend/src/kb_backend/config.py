@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     identity_app_type: str = "ADMIN"  # 换票未返回 loginDeviceType 时的兜底
     identity_sso_timeout: float = 10.0
     auth_cache_ttl_seconds: int = 60  # Token 校验的进程内缓存（手册 §6.4）
+    # 基准版 §5 只读对接面的过渡期免鉴权开关。true=维持契约现状（免鉴权）；
+    # 与 bqxt 书面约定切换日期后改 false：只读面纳入服务 Token 强制校验，
+    # 未携带有效 X-Service-Token 一律拒绝（"发凭证→联调→约定日期强制"的最后一步）。
+    # 只影响第三方只读面，运营前端登录态不受影响。
+    third_party_exempt_enabled: bool = True
 
     @property
     def unified_auth_enabled(self) -> bool:

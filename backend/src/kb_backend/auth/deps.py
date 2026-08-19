@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..db import get_db
 from ..envelope import BusinessError
-from .roles import required_role, role_at_least, service_source_allowed
+from .roles import THIRD_PARTY_EXEMPT, required_role, role_at_least, service_source_allowed
 from .sync import sync_identity
 from .unified_client import (
     SystemAccessDenied,
@@ -45,6 +45,7 @@ _NO_PERMISSION = "暂无权限，请联系系统管理员分配权限"
 _MIXED_TOKENS = "请求不能同时携带用户 Token 与服务 Token"
 _SERVICE_INVALID = "服务凭证无效或已过期"
 _SERVICE_FORBIDDEN = "该来源系统无权访问此接口"
+_SERVICE_REQUIRED = "本接口需携带服务凭证（X-Service-Token）"
 
 
 @dataclass(frozen=True)
@@ -191,13 +192,23 @@ async def auth_gate(request: Request, db: Session = Depends(get_db)) -> None:
         await _service_gate(request, service_token)
         return
 
-    minimum = required_role(request.method, request.url.path)
+    minimum = required_role(
+        request.method,
+        request.url.path,
+        third_party_exempt=settings.third_party_exempt_enabled,
+    )
     if minimum is None:
         _current_user.set(None)
         return
 
     token = (request.headers.get("IDENTITYTOKEN") or "").strip()
     if not token:
+        # 免鉴权关闭后，机器面路径上无凭证的调用方大概率是没升级的第三方——
+        # 给出指向服务 Token 的明确文案，而不是误导性的"登录已过期"
+        if not settings.third_party_exempt_enabled and any(
+            p.match(request.url.path) for p in THIRD_PARTY_EXEMPT
+        ):
+            raise BusinessError(_SERVICE_REQUIRED, status_code=401)
         raise BusinessError(_NOT_LOGGED_IN, status_code=401)
     app_type = normalize_app_type(
         request.headers.get("X-Identity-App-Type"), settings.identity_app_type

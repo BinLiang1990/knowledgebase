@@ -212,6 +212,16 @@ def test_service_source_surface_bqxt_is_readonly_contract_set():
     assert not service_source_allowed("", "GET", "/dimensions")
 
 
+def test_exemption_switch_off_forces_auth_on_readonly_surface():
+    """third_party_exempt=False（约定日期切强制后）：§5 只读面回落 viewer——
+    用户登录态仍可读，无凭证机器调用被拒；_PUBLIC 面（/health 等）不受影响。"""
+    for path in ["/dimensions", "/knowledge-bases", "/knowledge-bases/2/stats"]:
+        assert required_role("GET", path, third_party_exempt=False) == "viewer", path
+    assert required_role("GET", "/health", third_party_exempt=False) is None
+    # 默认参数保持契约现状：免鉴权
+    assert required_role("GET", "/dimensions") is None
+
+
 def test_service_cache_ttl_capped_by_token_expiry():
     """校验结果缓存不得超过 Token 剩余有效期，常规 TTL 为较短上限（§4.2-3）。"""
     assert _service_cache_ttl(None, 1_000.0, 60) == 60.0        # 平台没回 expiresAt：用常规 TTL
