@@ -319,9 +319,11 @@ def test_edit_answer_via_older_non_latest_version_id_still_migrates_whole_chain(
 
 
 def test_edit_revoked_answer_revives_the_chain(client: TestClient, migrated_schema, db_engine: Engine) -> None:
-    """2026-08-10 revision: revocation is no longer a terminal state —
-    editing an answer whose chain was revoked writes a new version and
-    un-revokes the whole chain, rather than being rejected."""
+    """issue #32 (2026-08-12，取代 2026-08-10 的过渡行为)：编辑撤回链不再
+    被拒绝，但复活必须显式给出重新启用原因（PRD §4.5）——缺 reason 报 400，
+    带 reason 整链复活；撤回记录保留为历史（revoke_reason 不清空），另落
+    reactivate_* 三件套。本测试曾停留在 08-10 的"隐式复活"行为，因套件
+    长期无法运行（清库风险）未被发现，2026-08-19 随测试库隔离一并修正。"""
     kb = _create_kb(client, "kb-edit-revoked")
     kp = _create_kp(client, kb["id"], "kp-edit-revoked")
     v1 = client.post(
@@ -332,19 +334,33 @@ def test_edit_revoked_answer_revives_the_chain(client: TestClient, migrated_sche
             text("UPDATE answer SET revoked = 1, revoke_reason = 'old reason' WHERE id = :id"), {"id": v1["id"]}
         )
 
+    # 缺 reactivate_reason -> 拒绝
     resp = client.post(
         _edit_url(kb["id"], kp["id"], v1["id"]),
         json={"content": "v2", "effective_time": "2026-08-09"},
+    )
+    assert resp.status_code == 400
+    assert "重新启用" in resp.json()["msg"]
+
+    resp = client.post(
+        _edit_url(kb["id"], kp["id"], v1["id"]),
+        json={"content": "v2", "effective_time": "2026-08-09", "reactivate_reason": "误撤恢复"},
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["revoked"] is False
 
     with db_engine.connect() as conn:
         rows = conn.execute(
-            text("SELECT revoked, revoke_reason FROM answer WHERE knowledge_point_id = :kp"), {"kp": kp["id"]}
+            text(
+                "SELECT revoked, revoke_reason, reactivate_reason "
+                "FROM answer WHERE knowledge_point_id = :kp ORDER BY id"
+            ),
+            {"kp": kp["id"]},
         ).all()
     assert all(row[0] == 0 for row in rows)
-    assert all(row[1] is None for row in rows)
+    # 撤回历史保留在原行上，不被复活清掉（PRD §4.5：撤回记录保留为历史）
+    assert rows[0][1] == "old reason"
+    assert rows[0][2] == "误撤恢复"
 
 
 def test_edit_answer_explicit_null_coord_is_rejected_with_422(client: TestClient, migrated_schema) -> None:
@@ -374,11 +390,9 @@ def test_edit_answer_nonexistent_answer_id_returns_404(client: TestClient, migra
 def test_write_answer_into_revoked_chain_revives_it(
     client: TestClient, migrated_schema, db_engine: Engine
 ) -> None:
-    """2026-08-10 revision: revocation is no longer a terminal state — a
-    fresh write under an already-revoked coord_hash now un-revokes every
-    row in that chain (not just the new one), keeping the "whole chain
-    shares one revoked value" invariant intact rather than leaving a
-    mixed-state chain."""
+    """issue #32 (2026-08-12，取代 2026-08-10 的过渡行为)：往撤回链写新版本
+    可以整链复活（保持"整条链共享同一撤回状态"不变量），但必须显式给出
+    重新启用原因——缺 reason 报 400（PRD §4.5）。"""
     kb = _create_kb(client, "kb-answer-revoked-chain")
     kp = _create_kp(client, kb["id"], "kp-answer-revoked-chain")
     v1 = client.post(
@@ -387,8 +401,16 @@ def test_write_answer_into_revoked_chain_revives_it(
     with db_engine.begin() as conn:
         conn.execute(text("UPDATE answer SET revoked = 1 WHERE id = :id"), {"id": v1["id"]})
 
+    # 缺 reactivate_reason -> 拒绝
     resp = client.post(
         _answers_url(kb["id"], kp["id"]), json={"content": "revival", "effective_time": "2026-08-09"}
+    )
+    assert resp.status_code == 400
+    assert "重新启用" in resp.json()["msg"]
+
+    resp = client.post(
+        _answers_url(kb["id"], kp["id"]),
+        json={"content": "revival", "effective_time": "2026-08-09", "reactivate_reason": "整链恢复"},
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["revoked"] is False
@@ -419,6 +441,7 @@ def test_edit_answer_migrating_into_a_revoked_chain_revives_it(
         json={"content": "live chain", "effective_time": "2026-08-08", "coord": {"tenant": "live"}},
     ).json()["data"]
 
+    # issue #32：迁移进撤回链同样要求显式重新启用原因，缺 reason 报 400
     resp = client.post(
         _edit_url(kb["id"], kp["id"], live["id"]),
         json={
@@ -426,6 +449,19 @@ def test_edit_answer_migrating_into_a_revoked_chain_revives_it(
             "effective_time": "2026-08-09",
             "coord": {"tenant": "dead"},
             "migration_reason": "reviving the dead chain on purpose",
+        },
+    )
+    assert resp.status_code == 400
+    assert "重新启用" in resp.json()["msg"]
+
+    resp = client.post(
+        _edit_url(kb["id"], kp["id"], live["id"]),
+        json={
+            "content": "migrating into dead chain",
+            "effective_time": "2026-08-09",
+            "coord": {"tenant": "dead"},
+            "migration_reason": "reviving the dead chain on purpose",
+            "reactivate_reason": "迁入即恢复",
         },
     )
     assert resp.status_code == 200

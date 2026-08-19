@@ -121,15 +121,24 @@ def test_promote_to_default_rejects_when_knowledge_point_is_deleted(client: Test
 def test_promote_to_default_revives_an_already_revoked_default_chain(
     client: TestClient, migrated_schema, db_engine: Engine
 ) -> None:
-    """2026-08-10 revision: revocation is no longer a terminal state —
-    promoting into a revoked default chain succeeds and un-revokes it."""
+    """issue #32 (2026-08-12，取代 2026-08-10 的过渡行为)：设为默认可以把
+    已撤回的默认链复活，但必须显式给出重新启用原因——缺 reason 报 400
+    （PRD §4.5）。"""
     kb = _create_kb(client, "kb-promote-revoked-default")
     kp = _create_kp(client, kb["id"], "kp-1")
     default_answer = _write_answer(client, kb["id"], kp["id"], "default content", "2026-08-01")
     other_source = _write_answer(client, kb["id"], kp["id"], "other content", "2026-08-01")
     client.post(_revoke_url(kb["id"], kp["id"], default_answer["id"]), json={"revoke_reason": "x"})
 
+    # 缺 reactivate_reason -> 拒绝
     resp = client.post(_promote_url(kb["id"], kp["id"], other_source["id"]), json={"effective_time": "2026-08-05"})
+    assert resp.status_code == 400
+    assert "重新启用" in resp.json()["msg"]
+
+    resp = client.post(
+        _promote_url(kb["id"], kp["id"], other_source["id"]),
+        json={"effective_time": "2026-08-05", "reactivate_reason": "默认口径恢复"},
+    )
     assert resp.status_code == 200
     assert resp.json()["data"]["revoked"] is False
 
