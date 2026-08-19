@@ -27,6 +27,17 @@ class Settings(BaseSettings):
     db_user: str
     db_password: str
     db_name: str = "knowledgebase"
+
+    # ---- 测试目标库（tests/conftest.py 强制使用，见该文件顶部说明） ----
+    # 测试套件会对目标库做 downgrade base（drop 全部表）再 upgrade head。
+    # TEST_DB_NAME 必填（未配置 pytest 拒绝启动）；名字含 "pro" 的库（正式
+    # 环境 knowledgebase_pro）一律拒绝。其余字段留空 = 沿用上面 DB_* 的
+    # 连接参数（当前约定：RDS 上 knowledgebase 即测试环境）。
+    test_db_host: str = ""
+    test_db_port: int = 0
+    test_db_user: str = ""
+    test_db_password: str = ""
+    test_db_name: str = ""
     # Comma-separated origins allowed to call this API cross-origin — the
     # React dev server (issue #6) runs on a different port than the
     # backend, so without this the browser blocks every request outright.
