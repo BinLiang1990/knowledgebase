@@ -47,6 +47,19 @@ export function listEnabledDimensions(kbId: number) {
   return request.get<Dimension[]>(`/knowledge-bases/${kbId}/enabled-dimensions`)
 }
 
+/**
+ * 某维度在该知识库现存答案条件里出现过的全部取值（条件选择器的下拉候选，
+ * 仅对 text 维度调用）。dimension_key 走 axios params 自动编码——维度 key
+ * 是任意文本，裸拼 URL 的坑同 updateDimension 注释。silent：候选只是输入
+ * 辅助，拉取失败不弹全局错误提示，由选择器内联降级为纯手输。
+ */
+export function listDimensionValues(kbId: number, dimensionKey: string) {
+  return request.get<string[]>(`/knowledge-bases/${kbId}/dimension-values`, {
+    params: { dimension_key: dimensionKey },
+    silent: true,
+  })
+}
+
 /** 管理侧维度全量列表（含已停用） */
 export function listAdminDimensions() {
   return request.get<AdminDimension[]>('/admin/dimensions')

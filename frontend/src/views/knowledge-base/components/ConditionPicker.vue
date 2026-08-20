@@ -4,9 +4,11 @@
 // 锁定一个 维度=取值 用于查询过滤。
 import type { Dimension } from '@/api/dimension'
 import type { Filters } from '@/utils/dimension'
+import { listDimensionValues } from '@/api/dimension'
 import { displayValue, FIELD_TYPE_LABEL, toFilterValue } from '@/utils/dimension'
 
 const props = defineProps<{
+  kbId: number
   dimensions: Dimension[]
   filters: Filters
   qMode: 'now' | 'day'
@@ -33,6 +35,38 @@ onClickOutside(rootRef, () => {
 
 const activeDimension = computed(() => props.dimensions.find(d => d.key === activeDim.value))
 
+// text 维度的候选取值（既有答案条件里出现过的值）：undefined = 未加载/
+// 加载中，[] = 确认无候选。按维度 key 缓存一次拉取的结果——选择器一次
+// 打开期间反复切维度不重复请求，页面级新鲜度足够（写答案改了取值集合后
+// 刷新/重进页面即可见）。
+const suggestions = ref<string[]>()
+const suggestionsLoading = ref(false)
+const suggestionsError = ref(false)
+const valueCache = new Map<string, string[]>()
+
+async function loadSuggestions(dim: Dimension) {
+  suggestions.value = valueCache.get(dim.key)
+  suggestionsError.value = false
+  if (suggestions.value !== undefined || dim.field_type !== 'text')
+    return
+  suggestionsLoading.value = true
+  try {
+    const values = await listDimensionValues(props.kbId, dim.key)
+    valueCache.set(dim.key, values)
+    // 请求返回前用户可能已切到别的维度，不要把候选塞给错的输入框
+    if (activeDim.value === dim.key)
+      suggestions.value = values
+  }
+  catch {
+    // 请求已 silent（api/dimension.ts）：候选拉不到就内联提示 + 纯手输降级
+    if (activeDim.value === dim.key)
+      suggestionsError.value = true
+  }
+  finally {
+    suggestionsLoading.value = false
+  }
+}
+
 function removeFilter(key: string) {
   const next = { ...props.filters }
   delete next[key]
@@ -46,6 +80,9 @@ function toggleMenu() {
 
 function openDimension(key: string) {
   activeDim.value = key
+  const dim = props.dimensions.find(d => d.key === key)
+  if (dim)
+    loadSuggestions(dim)
   const existing = props.filters[key]
   if (existing !== undefined) {
     draft.value = String(existing)
@@ -54,7 +91,6 @@ function openDimension(key: string) {
   // boolean <select> 原生总会显示一个选中项（浏览器画不出「什么都没选」），
   // 视觉默认是「是」/true。不同步 draft 的话，用户不碰下拉直接点确定会因
   // `!draft` 守卫静默无操作，与界面显示的选中项矛盾（本组件测试期发现）。
-  const dim = props.dimensions.find(d => d.key === key)
   draft.value = dim?.field_type === 'boolean' ? 'true' : ''
 }
 
@@ -108,7 +144,21 @@ function onDayInput(event: Event) {
       <template v-if="activeDimension">
         <div class="dd-group">「{{ activeDimension.label }}」= ?</div>
         <div style="padding: 2px 12px 10px">
-          <ValueInput v-model="draft" :dim="activeDimension" />
+          <ValueInput v-model="draft" :dim="activeDimension" :suggestions="suggestions" />
+          <div v-if="activeDimension.field_type === 'text'" class="mini-note" style="margin-top: 6px">
+            <template v-if="suggestionsLoading">
+              <span class="spin" /> 正在加载既有取值…
+            </template>
+            <template v-else-if="suggestionsError">
+              既有取值加载失败，可直接输入
+            </template>
+            <template v-else-if="suggestions && !suggestions.length">
+              本库暂无该维度的既有取值，直接输入即可
+            </template>
+            <template v-else-if="suggestions">
+              共 {{ suggestions.length }} 个既有取值，输入关键字可筛选
+            </template>
+          </div>
           <button type="button" class="btn primary sm" style="margin-top: 8px" @click="commit">
             确 定
           </button>

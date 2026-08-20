@@ -218,6 +218,7 @@ function reloadAfterKpMutation() {
         </span>
         <ConditionPicker
           v-else
+          :kb-id="kbId"
           :dimensions="dimensions"
           :filters="filters"
           :q-mode="qMode"

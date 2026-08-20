@@ -896,6 +896,32 @@ textarea:disabled {
   padding: 7px 12px 3px;
 }
 
+// text 维度取值的候选列表（ValueInput 的 suggestions 分支）：输入框下方
+// 可点选的既有取值，输入内容即筛选关键字
+.suggest-list {
+  margin-top: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--line-weak);
+  border-radius: var(--r-md);
+}
+
+.suggest-item {
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--ink-3);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--pale);
+  }
+
+  &.on {
+    color: var(--blue);
+    font-weight: 600;
+  }
+}
+
 // ---------------------------------------------------------------
 // 3.14 进度与加载
 // ---------------------------------------------------------------

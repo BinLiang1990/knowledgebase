@@ -360,6 +360,52 @@ def set_enabled_dimensions(
     return _enabled_dimensions_envelope(db, kb_id)
 
 
+@router.get("/{kb_id}/dimension-values")
+def list_dimension_values(
+    kb_id: int,
+    dimension_key: str = Query(min_length=1, max_length=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    """条件筛选下拉的候选取值：`dimension_key` 在本库现存答案条件里出现过的
+    全部取值，去重后按字面排序。「现存」= 未撤回且知识点未删——与查询路径
+    resolve 的可命中范围一致；详情页答案树虽然会展示已撤回分组，但候选只是
+    输入辅助，手动输入仍然畅通，不为它扩大口径。
+
+    dimension_key 走 query 参数而不进 path——维度 key 是管理员输入的任意
+    文本（"?"/"#" 都合法），进 path 需要调用方逐处 encodeURIComponent
+    （updateDimension 的教训，Codex PR #29）。取值在 Python 侧遍历 coord
+    收集，不拼 JSON path 表达式（同 list_dimensions_admin 的理由，设计文档
+    §4.4：key 里的 '.'/'"'/'$' 对 path 语法全都有含义）。"""
+    _get_or_404(db, kb_id)
+
+    # 与 _resolve_dimension_keys 同理的 collation 解析：先把请求拼写解析成
+    # DB 规范 key（utf8mb4_0900_ai_ci 大小写/重音不敏感），再校验启用状态——
+    # coord 里存的永远是规范拼写，用原始拼写直接查会静默漏配。
+    dim = db.execute(
+        select(DimensionDefinition).where(DimensionDefinition.key == dimension_key)
+    ).scalar_one_or_none()
+    if dim is None or dim.key not in get_enabled_dimension_types(db, kb_id):
+        raise BusinessError(f"维度 {dimension_key} 未在本知识库启用", status_code=400)
+
+    coords = (
+        db.execute(
+            select(Answer.coord)
+            .join(KnowledgePoint, Answer.knowledge_point_id == KnowledgePoint.id)
+            .where(
+                Answer.knowledge_base_id == kb_id,
+                Answer.revoked.is_(False),
+                KnowledgePoint.status == "active",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    values = {coord[dim.key] for coord in coords if dim.key in coord}
+    # field_type 不可变（DimensionUpdate 没有该字段），同一 key 的取值类型
+    # 同构；str.lower 排序对 text 是自然序，对其他类型也不至于抛 TypeError。
+    return envelope(sorted(values, key=lambda v: (str(v).lower(), str(v))))
+
+
 @router.get("/{kb_id}/stats")
 def get_knowledge_base_stats(kb_id: int, db: Session = Depends(get_db)) -> dict:
     """知识库统计卡 (issue #12, design doc §4.5) — matches frontend-mock's

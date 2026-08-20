@@ -4,7 +4,7 @@
 // ConditionPicker、CoordEditor、维度管理页共用，转换规则不允许再出现第二份拷贝。
 import type { Dimension } from '@/api/dimension'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   dim: Dimension
   /**
    * 现有调用方（筛选条件、答案条件）渲染本组件时字段必已加入条件，没有
@@ -15,9 +15,26 @@ withDefaults(defineProps<{
    * （Codex 结论，PR #29）。
    */
   allowUnset?: boolean
-}>(), { allowUnset: false })
+  /**
+   * text 分支的候选取值（该维度在库内既有答案条件里出现过的值）：传入后
+   * 输入框下方渲染可点选的候选列表，输入内容即筛选关键字——文本条件靠手输
+   * 容易打错，点选既有值保证精确命中。不传则保持纯文本框，其余调用方
+   * （CoordEditor、维度管理页）不受影响。
+   */
+  suggestions?: string[]
+}>(), { allowUnset: false, suggestions: undefined })
 
 const model = defineModel<string>({ required: true })
+
+const filteredSuggestions = computed(() => {
+  const list = props.suggestions
+  if (!list?.length)
+    return []
+  const kw = model.value.trim().toLowerCase()
+  if (!kw)
+    return list
+  return list.filter(v => v.toLowerCase().includes(kw))
+})
 
 function onBooleanChange(event: Event) {
   model.value = (event.target as HTMLSelectElement).value
@@ -42,5 +59,18 @@ function onBooleanChange(event: Event) {
       否
     </option>
   </select>
-  <input v-else v-model="model" type="text" placeholder="输入取值">
+  <template v-else>
+    <input v-model="model" type="text" :placeholder="suggestions?.length ? '输入筛选或直接点选' : '输入取值'">
+    <div v-if="filteredSuggestions.length" class="suggest-list">
+      <div
+        v-for="v in filteredSuggestions"
+        :key="v"
+        class="suggest-item"
+        :class="{ on: v === model }"
+        @click="model = v"
+      >
+        {{ v }}
+      </div>
+    </div>
+  </template>
 </template>
