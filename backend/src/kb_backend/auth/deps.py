@@ -17,6 +17,7 @@ sync 端点（threadpool 会复制当前 context）还是 async 端点都能读�
 from __future__ import annotations
 
 import hashlib
+import secrets
 import threading
 import time
 from contextvars import ContextVar
@@ -46,6 +47,9 @@ _MIXED_TOKENS = "请求不能同时携带用户 Token 与服务 Token"
 _SERVICE_INVALID = "服务凭证无效或已过期"
 _SERVICE_FORBIDDEN = "该来源系统无权访问此接口"
 _SERVICE_REQUIRED = "本接口需携带服务凭证（X-Service-Token）"
+_READONLY_INVALID = "万能只读 Token 无效"
+_READONLY_WRITE_FORBIDDEN = "万能只读 Token 仅支持查询接口（GET/HEAD），不允许任何写操作"
+_MIXED_READONLY = "请求不能同时携带万能只读 Token 与其他凭证"
 
 
 @dataclass(frozen=True)
@@ -53,7 +57,7 @@ class CurrentUser:
     id: int
     display_name: str
     role: str
-    auth_source: str  # unified | dev | service
+    auth_source: str  # unified | dev | service | readonly
     source_system: str = ""  # 仅 auth_source=service：服务 Token 绑定的来源系统
 
 
@@ -174,6 +178,34 @@ async def _service_gate(request: Request, token: str) -> None:
         raise BusinessError(_SERVICE_FORBIDDEN, status_code=403)
 
 
+# ---------------------------------------------- 万能只读 Token（自管凭证）----
+
+# 万能只读身份：role=viewer 走既有角色梯度——全部查询面可读，/users 等
+# sysadmin 面照旧拒绝；display_name 仅用于审计展示（GET-only，永不落库）
+_READONLY_USER = CurrentUser(
+    id=0, display_name="readonly-token", role="viewer", auth_source="readonly"
+)
+
+
+def _readonly_gate(method: str, path: str, token: str) -> None:
+    """万能只读 Token 校验：本地常量时间比对，不经统一平台。
+
+    只读约束是双保险：先硬性拒绝非 GET/HEAD（给出明确文案，而不是角色
+    不足的笼统 403），再按 viewer 走 required_role 规则表兜底。"""
+    settings = get_settings()
+    configured = settings.readonly_token.strip()
+    if not configured or not secrets.compare_digest(token.encode(), configured.encode()):
+        raise BusinessError(_READONLY_INVALID, status_code=401)
+    if method.upper() not in ("GET", "HEAD"):
+        raise BusinessError(_READONLY_WRITE_FORBIDDEN, status_code=403)
+    _current_user.set(_READONLY_USER)
+    minimum = required_role(
+        method, path, third_party_exempt=settings.third_party_exempt_enabled
+    )
+    if minimum is not None and not role_at_least(_READONLY_USER.role, minimum):
+        raise BusinessError(_NO_PERMISSION, status_code=403)
+
+
 # ------------------------------------------------------------ 全局依赖 ----
 
 async def auth_gate(request: Request, db: Session = Depends(get_db)) -> None:
@@ -186,10 +218,18 @@ async def auth_gate(request: Request, db: Session = Depends(get_db)) -> None:
     # §4.2-7：鉴权入口优先识别系统侧凭证，携带 X-Service-Token 的请求
     # 不得被用户 SSO 拦截层提前拒绝；§4.2-9：双 Token 同带拒绝，避免身份混用
     service_token = (request.headers.get("X-Service-Token") or "").strip()
+    readonly_token = (request.headers.get("X-Readonly-Token") or "").strip()
+    if readonly_token and (
+        service_token or (request.headers.get("IDENTITYTOKEN") or "").strip()
+    ):
+        raise BusinessError(_MIXED_READONLY, status_code=400)
     if service_token:
         if (request.headers.get("IDENTITYTOKEN") or "").strip():
             raise BusinessError(_MIXED_TOKENS, status_code=400)
         await _service_gate(request, service_token)
+        return
+    if readonly_token:
+        _readonly_gate(request.method, request.url.path, readonly_token)
         return
 
     minimum = required_role(

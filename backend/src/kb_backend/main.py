@@ -63,7 +63,16 @@ app.add_middleware(
     # IDENTITYTOKEN / X-Identity-App-Type 是统一身份认证(#36)的自定义请求
     # 头——同上面 methods 的教训：不显式列出，浏览器预检直接失败，而
     # TestClient/curl 看不出任何问题。
-    allow_headers=["Content-Type", "IDENTITYTOKEN", "X-Identity-App-Type"],
+    # X-Readonly-Token（万能只读 Token）与 X-Service-Token（服务间机器凭证）
+    # 的主要调用方是服务端脚本（不经浏览器、无预检），列进来是为了浏览器侧
+    # 联调/演示也能直接带头调用。
+    allow_headers=[
+        "Content-Type",
+        "IDENTITYTOKEN",
+        "X-Identity-App-Type",
+        "X-Service-Token",
+        "X-Readonly-Token",
+    ],
 )
 app.include_router(auth_router)
 app.include_router(user_router)

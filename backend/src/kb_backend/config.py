@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # 未携带有效 X-Service-Token 一律拒绝（"发凭证→联调→约定日期强制"的最后一步）。
     # 只影响第三方只读面，运营前端登录态不受影响。
     third_party_exempt_enabled: bool = True
+    # ---- 万能只读 Token ----
+    # 静态长期凭证：请求头 X-Readonly-Token 与此值匹配即以 viewer 只读身份
+    # 放行全部查询接口（GET/HEAD；/users 等 sysadmin 面除外），写操作一律
+    # 403。空（默认）= 功能关闭。与统一平台无关，本系统自管；只放服务器
+    # .env，绝不提交仓库/进前端/进日志。
+    readonly_token: str = ""
 
     @property
     def unified_auth_enabled(self) -> bool:
