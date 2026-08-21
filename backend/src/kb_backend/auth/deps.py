@@ -21,7 +21,8 @@ import secrets
 import threading
 import time
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from urllib.parse import unquote
 
 from fastapi import Depends, Request
 from fastapi.concurrency import run_in_threadpool
@@ -47,6 +48,10 @@ _MIXED_TOKENS = "请求不能同时携带用户 Token 与服务 Token"
 _SERVICE_INVALID = "服务凭证无效或已过期"
 _SERVICE_FORBIDDEN = "该来源系统无权访问此接口"
 _SERVICE_REQUIRED = "本接口需携带服务凭证（X-Service-Token）"
+_SERVICE_OPERATOR_REQUIRED = (
+    "服务凭证的写操作必须携带 X-Service-Operator 请求头（操作人姓名或账号，"
+    "用于审计留痕；中文请 URL 编码）"
+)
 _READONLY_INVALID = "万能只读 Token 无效"
 _READONLY_WRITE_FORBIDDEN = "万能只读 Token 仅支持查询接口（GET/HEAD），不允许任何写操作"
 _MIXED_READONLY = "请求不能同时携带万能只读 Token 与其他凭证"
@@ -142,6 +147,22 @@ def _service_cache_ttl(expires_at_ms: object, now_seconds: float, default_ttl: f
     return max(ttl, 0.0)
 
 
+def _decode_operator_header(raw: str) -> str:
+    """解析 X-Service-Operator：HTTP 头是 latin-1 语义，调用方传中文时要么
+    URL 编码（推荐、对接文档口径），要么原样发 UTF-8 字节（starlette 会
+    按 latin-1 解出乱码）——两种都兜住，解不出就保留原值。"""
+    value = raw.strip()
+    if "%" in value:
+        value = unquote(value).strip()
+    else:
+        try:
+            value = value.encode("latin-1").decode("utf-8").strip()
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    # operator 落库列宽 100（含 "系统编码:" 前缀），操作人部分截到 80 保险
+    return value[:80]
+
+
 async def _service_gate(request: Request, token: str) -> None:
     """系统侧鉴权：校验 X-Service-Token 并检查来源系统接口白名单。
     平台校验不可达/不确定时拒绝（fail-closed），与用户侧同一原则。"""
@@ -171,6 +192,15 @@ async def _service_gate(request: Request, token: str) -> None:
         ttl = _service_cache_ttl(data.get("expiresAt"), time.time(), settings.auth_cache_ttl_seconds)
         if ttl > 0:
             _cache_put(key, user, ttl)
+
+    # 审计留痕：写操作必须报操作人（同一 Token 会被多人共用，缓存里只存
+    # 系统身份，操作人逐请求解析）。operator 落库值 = "系统编码:操作人"，
+    # current_operator() 取 display_name，change_log/answer 等全部沿用。
+    operator = _decode_operator_header(request.headers.get("X-Service-Operator") or "")
+    if operator:
+        user = replace(user, display_name=f"{user.source_system}:{operator}")
+    elif request.method.upper() not in ("GET", "HEAD"):
+        raise BusinessError(_SERVICE_OPERATOR_REQUIRED, status_code=400)
     _current_user.set(user)
 
     # §4.2-5/6：来源系统可访问面由本系统自管，凭证有效 ≠ 接口有权

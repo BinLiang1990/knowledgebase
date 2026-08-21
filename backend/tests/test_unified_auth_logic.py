@@ -189,27 +189,78 @@ def test_write_levels():
 
 # ---------------------------------------- 服务间机器凭证（X-Service-Token）----
 
-def test_service_source_surface_bqxt_is_readonly_contract_set():
-    """bqxt 的机器凭证可访问面 = 基准版 §5 只读面全集（含 v1.1 §5.7 库列表）。"""
-    for path in [
-        "/dimensions",
-        "/knowledge-bases",
-        "/knowledge-bases/2/enabled-dimensions",
-        "/knowledge-bases/2/knowledge-points",
-        "/knowledge-bases/2/knowledge-points/5/resolve",
-        "/knowledge-bases/2/knowledge-points/5/answer-groups",
-        "/change-log",
-        "/knowledge-bases/2/stats",
-    ]:
-        assert service_source_allowed("bqxt", "GET", path), path
-    # 写操作与运营侧独有接口不在机器面内（平台文档 §4.2-5/6：目标系统自管）
-    assert not service_source_allowed("bqxt", "POST", "/knowledge-bases")
-    assert not service_source_allowed("bqxt", "PUT", "/knowledge-bases/2/enabled-dimensions")
-    assert not service_source_allowed("bqxt", "GET", "/admin/dimensions")
-    assert not service_source_allowed("bqxt", "GET", "/users")
+def test_service_source_surface_readonly_set_for_all_registered():
+    """所有已登记来源系统都至少有基准版 §5 只读面全集（含 v1.1 §5.7 库列表）。"""
+    for source in ("bqxt", "yhfkglxt"):
+        for path in [
+            "/dimensions",
+            "/knowledge-bases",
+            "/knowledge-bases/2/enabled-dimensions",
+            "/knowledge-bases/2/knowledge-points",
+            "/knowledge-bases/2/knowledge-points/5/resolve",
+            "/knowledge-bases/2/knowledge-points/5/answer-groups",
+            "/change-log",
+            "/knowledge-bases/2/stats",
+        ]:
+            assert service_source_allowed(source, "GET", path), f"{source} {path}"
+        # 运营侧独有接口对任何来源系统都不开放
+        assert not service_source_allowed(source, "GET", "/admin/dimensions")
+        assert not service_source_allowed(source, "GET", "/users")
+        assert not service_source_allowed(source, "POST", "/dimensions")
+        assert not service_source_allowed(source, "POST", "/categories")
     # 未登记的来源系统一律拒绝
     assert not service_source_allowed("other-sys", "GET", "/dimensions")
     assert not service_source_allowed("", "GET", "/dimensions")
+
+
+def test_service_source_bqxt_stays_readonly():
+    """bqxt（打标系统）登记的是只读面：任何写方法一律拒绝。"""
+    assert not service_source_allowed("bqxt", "POST", "/knowledge-bases")
+    assert not service_source_allowed("bqxt", "PATCH", "/knowledge-bases/2")
+    assert not service_source_allowed("bqxt", "PUT", "/knowledge-bases/2/enabled-dimensions")
+    assert not service_source_allowed("bqxt", "POST", "/knowledge-bases/2/knowledge-points")
+    assert not service_source_allowed("bqxt", "POST", "/knowledge-bases/2/knowledge-points/5/answers")
+
+
+def test_service_source_yhfkglxt_management_surface():
+    """yhfkglxt 开放知识库/知识点/答案三块管理面（2026-08-21 确认），
+    但维度全局配置、分类树、用户管理仍拒绝。"""
+    allowed = [
+        # 知识库管理
+        ("POST", "/knowledge-bases"),
+        ("PATCH", "/knowledge-bases/2"),
+        ("POST", "/knowledge-bases/2/activate"),
+        ("POST", "/knowledge-bases/2/deactivate"),
+        ("PUT", "/knowledge-bases/2/enabled-dimensions"),
+        ("GET", "/knowledge-bases/2/dimension-values"),
+        # 知识点管理
+        ("POST", "/knowledge-bases/2/knowledge-points"),
+        ("POST", "/knowledge-bases/2/knowledge-points/batch-import"),
+        ("GET", "/knowledge-bases/2/knowledge-points/5"),
+        ("PATCH", "/knowledge-bases/2/knowledge-points/5"),
+        ("POST", "/knowledge-bases/2/knowledge-points/5/delete"),
+        ("POST", "/knowledge-bases/2/knowledge-points/5/restore"),
+        # 答案管理
+        ("GET", "/knowledge-bases/2/knowledge-points/5/answers"),
+        ("POST", "/knowledge-bases/2/knowledge-points/5/answers"),
+        ("POST", "/knowledge-bases/2/knowledge-points/5/answers/7/edit"),
+        ("POST", "/knowledge-bases/2/knowledge-points/5/answers/7/promote-to-default"),
+        ("POST", "/knowledge-bases/2/knowledge-points/5/answers/7/revoke"),
+    ]
+    for method, path in allowed:
+        assert service_source_allowed("yhfkglxt", method, path), f"{method} {path}"
+    denied = [
+        ("DELETE", "/knowledge-bases/2"),                 # 没有物理删除接口
+        ("POST", "/dimensions"),                          # 维度全局配置
+        ("PATCH", "/dimensions/city"),
+        ("POST", "/categories"),                          # 分类树管理
+        ("DELETE", "/categories/3"),
+        ("GET", "/users"),                                # 用户管理
+        ("PATCH", "/users/3/role"),
+        ("POST", "/knowledge-bases/2/knowledge-points/5/relations"),  # 答案关联未开放
+    ]
+    for method, path in denied:
+        assert not service_source_allowed("yhfkglxt", method, path), f"{method} {path}"
 
 
 def test_exemption_switch_off_forces_auth_on_readonly_surface():

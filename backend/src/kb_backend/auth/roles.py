@@ -51,20 +51,50 @@ THIRD_PARTY_EXEMPT = [
 
 # ---- 服务间机器凭证（X-Service-Token）可访问面：按来源系统自管 ----
 # 平台《服务Token接口对接文档》（2026-08-18）§4.2-5/6：平台不维护系统间
-# 授权关系，来源系统能访问哪些接口由目标系统自行决定。当前唯一登记的
-# 来源系统 bqxt（打标系统）= 基准版 §5 只读面全集，与免鉴权豁免清单同源，
-# 将来对接面切服务 Token 时只需摘掉 THIRD_PARTY_EXEMPT 的免鉴权语义。
-SERVICE_SOURCE_SURFACES: dict[str, list[re.Pattern[str]]] = {
-    "bqxt": THIRD_PARTY_EXEMPT,
+# 授权关系，来源系统能访问哪些接口由目标系统自行决定。表结构：每来源
+# 系统一组 (允许方法集, 路径正则)，方法与路径都命中才放行。
+
+# 只读面 = 基准版 §5 全集，与免鉴权豁免清单同源，将来对接面切服务 Token
+# 时只需摘掉 THIRD_PARTY_EXEMPT 的免鉴权语义。
+_SURFACE_READONLY: list[tuple[frozenset[str], re.Pattern[str]]] = [
+    (frozenset({"GET", "HEAD"}), p) for p in THIRD_PARTY_EXEMPT
+]
+
+# 业务管理面（2026-08-21 应 yhfkglxt 对接需求开放）：知识库管理、知识点
+# 管理、答案管理三块的读写。维度全局配置、分类树、用户管理不开放；写
+# 操作要求携带 X-Service-Operator 记录操作人（auth.deps._service_gate 强制）。
+_SURFACE_MANAGEMENT: list[tuple[frozenset[str], re.Pattern[str]]] = [
+    # 知识库管理：建库 / 改名描述分类 / 启停 / 配置启用维度
+    (frozenset({"POST"}), re.compile(r"^/knowledge-bases$")),
+    (frozenset({"PATCH"}), re.compile(r"^/knowledge-bases/\d+$")),
+    (frozenset({"POST"}), re.compile(r"^/knowledge-bases/\d+/(activate|deactivate)$")),
+    (frozenset({"PUT"}), re.compile(r"^/knowledge-bases/\d+/enabled-dimensions$")),
+    (frozenset({"GET"}), re.compile(r"^/knowledge-bases/\d+/dimension-values$")),
+    # 知识点管理：新建 / 批量导入 / 改标题维度 / 软删恢复；详情读取
+    (frozenset({"POST"}), re.compile(r"^/knowledge-bases/\d+/knowledge-points(/batch-import)?$")),
+    (frozenset({"GET", "PATCH"}), re.compile(r"^/knowledge-bases/\d+/knowledge-points/\d+$")),
+    (frozenset({"POST"}), re.compile(r"^/knowledge-bases/\d+/knowledge-points/\d+/(delete|restore)$")),
+    # 答案管理：全部版本读取 / 新增 / 编辑 / 设默认 / 撤销
+    (frozenset({"GET", "POST"}), re.compile(r"^/knowledge-bases/\d+/knowledge-points/\d+/answers$")),
+    (
+        frozenset({"POST"}),
+        re.compile(r"^/knowledge-bases/\d+/knowledge-points/\d+/answers/\d+/(edit|promote-to-default|revoke)$"),
+    ),
+]
+
+SERVICE_SOURCE_SURFACES: dict[str, list[tuple[frozenset[str], re.Pattern[str]]]] = {
+    "bqxt": _SURFACE_READONLY,                            # 打标系统（2026-08-18 登记，只读）
+    "yhfkglxt": _SURFACE_READONLY + _SURFACE_MANAGEMENT,  # 2026-08-20 登记；08-21 开放管理面
 }
 
 
 def service_source_allowed(source_system: str, method: str, path: str) -> bool:
     """携带有效服务 Token 的来源系统能否访问该接口；未登记的来源一律拒绝。"""
-    patterns = SERVICE_SOURCE_SURFACES.get((source_system or "").strip())
-    if patterns is None:
+    entries = SERVICE_SOURCE_SURFACES.get((source_system or "").strip())
+    if entries is None:
         return False
-    return method.upper() in ("GET", "HEAD") and any(p.match(path) for p in patterns)
+    method = method.upper()
+    return any(method in methods and pattern.match(path) for methods, pattern in entries)
 
 
 # ---- 已登录即可（role=none 也放行）：查自己 / 退出 ----
