@@ -7,7 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth.deps import current_operator
+from ..auth.deps import current_operator, current_source_system
 from ..change_log import build_change_log
 from ..coord import CoordValueError, compute_coord_hash, normalize_coord
 from ..db import get_db
@@ -64,8 +64,10 @@ def _batch_item_failure_reason(exc: IntegrityError) -> str:
 
 
 def _get_kb_or_404(db: Session, kb_id: int) -> KnowledgeBase:
+    # 已删除（回收站/已彻底删除）的知识库整库隐身：其下知识点与答案的
+    # 全部读写入口都从这里 404（migration 0009 两级软删）。
     kb = db.get(KnowledgeBase, kb_id)
-    if kb is None:
+    if kb is None or kb.deleted_at is not None:
         raise BusinessError(_KB_NOT_FOUND_MSG, status_code=404)
     return kb
 
@@ -210,7 +212,8 @@ def create_knowledge_point(
             effective_time=payload.default_answer.effective_time,
             note=payload.default_answer.note,
             operator=current_operator(),
-            source="人工填报",
+            source=payload.default_answer.source,
+            source_system=current_source_system(),
         )
         db.add(answer)
         active_answer_count = 1
@@ -269,7 +272,9 @@ def batch_import_knowledge_points(
                             effective_time=item.default_answer.effective_time,
                             note=item.default_answer.note,
                             operator=current_operator(),
-                            source="人工填报",
+                            # 批量导入端点固定写"批量导入"，不采纳 item 自报值
+                            source="批量导入",
+                            source_system=current_source_system(),
                         )
                     )
                     db.flush()
@@ -567,7 +572,8 @@ def create_answer(kb_id: int, kp_id: int, payload: AnswerCreate, db: Session = D
         effective_time=payload.effective_time,
         note=payload.note,
         operator=current_operator(),
-        source="人工填报",
+        source=payload.source,
+        source_system=current_source_system(),
     )
     db.add(answer)
     db.commit()
@@ -643,7 +649,9 @@ def edit_answer(
         effective_time=payload.effective_time,
         note=payload.note,
         operator=current_operator(),
-        source="人工编辑",
+        # 不传 = 继承被编辑答案的产生方式（含"批量导入"）；显式传值可改写
+        source=payload.source or target.source,
+        source_system=current_source_system(),
     )
     db.add(new_answer)
     db.commit()
@@ -693,7 +701,9 @@ def promote_answer_to_default(
         effective_time=payload.effective_time,
         note=payload.note,
         operator=current_operator(),
-        source="人工填报",
+        # 内容是复制的，产生方式随源答案走，不因复制而改变
+        source=source.source,
+        source_system=current_source_system(),
     )
     db.add(promoted)
     db.commit()

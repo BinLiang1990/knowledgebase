@@ -84,6 +84,16 @@ def current_operator() -> str:
     return user.display_name if user is not None and user.display_name else "admin"
 
 
+def current_source_system() -> str:
+    """写操作落库的 source_system（操作系统）：服务凭证 = 平台校验返回的
+    来源系统编码（鉴权上下文自动取，调用方不可自报、不可伪造）；其余
+    （运营登录 / off 模式 / worker 线程）= 本系统编码。"""
+    user = _current_user.get()
+    if user is not None and user.auth_source == "service" and user.source_system:
+        return user.source_system
+    return get_settings().auth_system_code
+
+
 # ---------------------------------------------------- Token 校验 TTL 缓存 ----
 
 _cache_lock = threading.Lock()

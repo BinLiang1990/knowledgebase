@@ -35,7 +35,12 @@ class Answer(Base):
     content: Mapped[str] = mapped_column(LONGTEXT, nullable=False)
     effective_time: Mapped[date] = mapped_column(nullable=False)
     operator: Mapped[str] = mapped_column(String(100), nullable=False, server_default="admin")
+    # 数据来源（产生方式）：人工填报 / AI生成 / 批量导入（migration 0008 起
+    # 收敛为三值；历史值"人工编辑"已归一为"人工填报"）
     source: Mapped[str] = mapped_column(String(100), nullable=False, server_default="人工填报")
+    # 操作系统（写入方系统编码）：服务凭证写入 = 平台来源系统编码（bqxt/
+    # yhfkglxt…），运营端/本系统写入 = tyzsk。取值见 auth.deps.current_source_system
+    source_system: Mapped[str] = mapped_column(String(100), nullable=False, server_default="tyzsk")
     note: Mapped[str | None] = mapped_column(LONGTEXT, nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -14,6 +14,8 @@ export interface Category {
   sort_order: number
   /** 直属的启用中知识库数（不含子孙，不含已停用——PRD §4.11 计数口径） */
   active_knowledge_base_count: number
+  /** 直属的全部状态知识库数（删除拦截口径：含已停用与回收站，占用即阻塞） */
+  total_knowledge_base_count: number
   created_at: string
   updated_at: string
 }

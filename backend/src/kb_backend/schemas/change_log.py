@@ -14,6 +14,7 @@ class ChangeLogEntryOut(BaseModel):
     before_content: str | None
     after_content: str | None
     source: str
+    source_system: str
     revoke_reason: str | None
     status: Literal["live", "superseded", "revoked", "reactivated"]
     revocable: bool

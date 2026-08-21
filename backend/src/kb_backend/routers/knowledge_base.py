@@ -1,11 +1,12 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..auth.deps import current_operator
 from ..db import get_db
 from ..dimensions import get_enabled_dimension_types
 from ..envelope import BusinessError, envelope
@@ -19,6 +20,7 @@ from .category import descendant_ids
 from ..schemas.knowledge_base import (
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
+    KnowledgeBaseRecycleOut,
     KnowledgeBaseStatsOut,
     KnowledgeBaseUpdate,
 )
@@ -87,9 +89,20 @@ def _category_name(db: Session, category_id: int | None) -> str | None:
 
 
 def _get_or_404(db: Session, kb_id: int) -> KnowledgeBase:
+    # 已删除（含回收站内与已彻底删除）的知识库对常规接口一律"不存在"——
+    # 回收站相关操作走 _get_recycled_or_404，不经此函数。
     kb = db.get(KnowledgeBase, kb_id)
-    if kb is None:
+    if kb is None or kb.deleted_at is not None:
         raise BusinessError(_NOT_FOUND_MSG, status_code=404)
+    return kb
+
+
+def _get_recycled_or_404(db: Session, kb_id: int) -> KnowledgeBase:
+    """回收站内的知识库：已删除且未彻底删除。彻底删除（purged）后不可再
+    还原，与从未存在同样报 404。"""
+    kb = db.get(KnowledgeBase, kb_id)
+    if kb is None or kb.deleted_at is None or kb.purged_at is not None:
+        raise BusinessError("回收站中不存在该知识库", status_code=404)
     return kb
 
 
@@ -164,17 +177,28 @@ def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(ge
 def list_knowledge_bases(
     status: Literal["active", "deprecated"] | None = Query(default=None),
     category_id: int | None = Query(default=None),
+    uncategorized: bool = Query(default=False),
+    keyword: str | None = Query(default=None, max_length=255),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> dict:
-    count_by_kb = dict(
-        db.execute(
-            select(KnowledgePoint.knowledge_base_id, func.count())
-            .where(KnowledgePoint.status == "active")
-            .group_by(KnowledgePoint.knowledge_base_id)
-        ).all()
-    )
+    """知识库列表。过滤（分类/未分类/关键词/状态）全部在服务端做——列表页
+    最初是全量拉取 + 前端内存过滤（设计文档 §5 的旧口径），数据量增长后
+    不成立，2026-08-21 改为服务端过滤 + 可选分页。
 
-    stmt = select(KnowledgeBase).order_by(KnowledgeBase.id)
+    - keyword：名称或描述包含（列 collation 为 ai_ci，天然大小写不敏感）；
+    - uncategorized=true：仅未分类（category_id 为空），与 category_id 互斥；
+    - page 省略 = 不分页，data 返回数组——对外 §5.7 的既有契约不变，
+      第三方无感；page 给定时 data 变为 {list, total, page, page_size,
+      summary}，summary 是分类树虚拟节点（全部/未分类）需要的全局计数，
+      与当前过滤条件无关。
+    """
+    if uncategorized and category_id is not None:
+        raise BusinessError("category_id 与 uncategorized 不能同时使用", status_code=400)
+
+    # 回收站里的（含已彻底删除的）不进列表——对内界面与对外 §5.7 同口径
+    stmt = select(KnowledgeBase).where(KnowledgeBase.deleted_at.is_(None))
     if status is not None:
         stmt = stmt.where(KnowledgeBase.status == status)
     if category_id is not None:
@@ -183,16 +207,82 @@ def list_knowledge_bases(
         _category_or_404(db, category_id)
         scope_ids = {category_id, *descendant_ids(db, category_id)}
         stmt = stmt.where(KnowledgeBase.category_id.in_(scope_ids))
+    if uncategorized:
+        stmt = stmt.where(KnowledgeBase.category_id.is_(None))
+    if keyword is not None and keyword.strip():
+        # autoescape：用户输入里的 %/_ 按字面匹配，不当通配符
+        kw = keyword.strip()
+        stmt = stmt.where(
+            or_(
+                KnowledgeBase.name.contains(kw, autoescape=True),
+                KnowledgeBase.description.contains(kw, autoescape=True),
+            )
+        )
 
+    if page is None:
+        rows = db.execute(stmt.order_by(KnowledgeBase.id)).scalars().all()
+    else:
+        total = db.execute(
+            select(func.count()).select_from(stmt.subquery())
+        ).scalar_one()
+        rows = (
+            db.execute(
+                stmt.order_by(KnowledgeBase.id)
+                .limit(page_size)
+                .offset((page - 1) * page_size)
+            )
+            .scalars()
+            .all()
+        )
+
+    # 知识点计数只查当前返回行的（不分页时 in_ 也无妨——行集就是全量）
+    row_ids = [kb.id for kb in rows]
+    count_by_kb = (
+        dict(
+            db.execute(
+                select(KnowledgePoint.knowledge_base_id, func.count())
+                .where(
+                    KnowledgePoint.status == "active",
+                    KnowledgePoint.knowledge_base_id.in_(row_ids),
+                )
+                .group_by(KnowledgePoint.knowledge_base_id)
+            ).all()
+        )
+        if row_ids
+        else {}
+    )
     name_by_category = dict(
         db.execute(select(KnowledgeBaseCategory.id, KnowledgeBaseCategory.name)).all()
     )
-    rows = db.execute(stmt).scalars().all()
     out = [
         _to_out(kb, count_by_kb.get(kb.id, 0), name_by_category.get(kb.category_id))
         for kb in rows
     ]
-    return envelope([o.model_dump(mode="json") for o in out])
+    if page is None:
+        return envelope([o.model_dump(mode="json") for o in out])
+
+    # summary：分类树「全部/未分类」节点的启用中计数（PRD §4.11 计数口径，
+    # 与各分类节点来自 GET /categories 的 active_knowledge_base_count 同源），
+    # 全局值、不随过滤条件变化——随分页响应带回，省一次独立请求
+    active_base = select(func.count()).select_from(KnowledgeBase).where(
+        KnowledgeBase.deleted_at.is_(None), KnowledgeBase.status == "active"
+    )
+    active_total = db.execute(active_base).scalar_one()
+    active_uncategorized = db.execute(
+        active_base.where(KnowledgeBase.category_id.is_(None))
+    ).scalar_one()
+    return envelope(
+        {
+            "list": [o.model_dump(mode="json") for o in out],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "summary": {
+                "active_total": active_total,
+                "active_uncategorized": active_uncategorized,
+            },
+        }
+    )
 
 
 @router.patch("/{kb_id}")
@@ -247,6 +337,74 @@ def activate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
 @router.post("/{kb_id}/deactivate")
 def deactivate_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
     return _set_status(db, kb_id, "deprecated")
+
+
+# ---------------------------------------------------- 删除 / 回收站 ----
+# 两级软删（migration 0009）：删除 = 进回收站（仅限已停用的库）；回收站里
+# 可还原（回到"已停用"），也可"彻底删除"——同样是软删（置 purged_at），
+# 数据永久保留在表里，仅从回收站消失、不可再还原。没有硬删路径。
+#
+# 名称唯一约束不放松：回收站/已彻底删除的库仍占用名称，重名建库照常报
+# "名称已存在"——放开唯一索引会让还原产生撞名死局，占用是更简单的一致语义。
+
+
+def _to_recycle_out(db: Session, kb: KnowledgeBase) -> KnowledgeBaseRecycleOut:
+    base = _to_out(kb, _get_active_point_count(db, kb.id), _category_name(db, kb.category_id))
+    return KnowledgeBaseRecycleOut(
+        **base.model_dump(), deleted_at=kb.deleted_at, deleted_by=kb.deleted_by
+    )
+
+
+@router.post("/{kb_id}/delete")
+def delete_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    """删除知识库（进回收站）。仅允许已停用（deprecated）的库——启用中的
+    库必须先走停用，保证"删除"永远是两步操作，降低误删面。"""
+    kb = _get_or_404(db, kb_id)
+    if kb.status != "deprecated":
+        raise BusinessError("仅允许删除已停用的知识库，请先停用", status_code=400)
+    kb.deleted_at = datetime.now()
+    kb.deleted_by = current_operator()
+    db.commit()
+    db.refresh(kb)
+    return envelope(_to_recycle_out(db, kb).model_dump(mode="json"))
+
+
+@router.get("/recycle-bin")
+def list_recycle_bin(db: Session = Depends(get_db)) -> dict:
+    """回收站列表：已删除且未彻底删除的知识库，最近删除的在前。"""
+    rows = (
+        db.execute(
+            select(KnowledgeBase)
+            .where(KnowledgeBase.deleted_at.is_not(None), KnowledgeBase.purged_at.is_(None))
+            .order_by(KnowledgeBase.deleted_at.desc(), KnowledgeBase.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return envelope([_to_recycle_out(db, kb).model_dump(mode="json") for kb in rows])
+
+
+@router.post("/{kb_id}/restore")
+def restore_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    """从回收站还原：清除删除标记，回到"已停用"状态（删除的前置就是停用），
+    需要继续使用再手动启用。"""
+    kb = _get_recycled_or_404(db, kb_id)
+    kb.deleted_at = None
+    kb.deleted_by = None
+    db.commit()
+    db.refresh(kb)
+    out = _to_out(kb, _get_active_point_count(db, kb_id), _category_name(db, kb.category_id))
+    return envelope(out.model_dump(mode="json"))
+
+
+@router.post("/{kb_id}/purge")
+def purge_knowledge_base(kb_id: int, db: Session = Depends(get_db)) -> dict:
+    """回收站内"彻底删除"：仍是软删（置 purged_at），数据保留但从回收站
+    消失、不可再还原。不提供硬删，误操作永远有 DB 层救回的余地。"""
+    kb = _get_recycled_or_404(db, kb_id)
+    kb.purged_at = datetime.now()
+    db.commit()
+    return envelope(None)
 
 
 def _enabled_dimensions(db: Session, kb_id: int) -> list[DimensionDefinition]:

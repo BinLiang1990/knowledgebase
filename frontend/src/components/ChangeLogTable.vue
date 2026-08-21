@@ -58,7 +58,12 @@ const rows = computed<RowView[]>(() => props.entries.map((entry) => {
   return { entry, kbId: props.kbId!, kpId: props.kpId!, location: null }
 }))
 
-const colCount = computed(() => (props.showLocation ? 11 : 9))
+const colCount = computed(() => (props.showLocation ? 12 : 10))
+
+/** 操作系统展示：本系统编码显示「本系统」，外部系统显示其编码 */
+function sourceSystemLabel(code: string) {
+  return code === 'tyzsk' ? '本系统' : code
+}
 
 const revokeDialogRef = ref<InstanceType<typeof RevokeAnswerDialog>>()
 
@@ -85,11 +90,12 @@ function requestRevoke(row: RowView) {
             知识点
           </th>
           <th>操作人</th>
+          <th>操作系统</th>
           <th>动作</th>
           <th>条件</th>
           <th>变更前</th>
           <th>变更后</th>
-          <th>来源</th>
+          <th>数据来源</th>
           <th>状态</th>
           <th class="op-col">
             操作
@@ -115,6 +121,11 @@ function requestRevoke(row: RowView) {
             </td>
           </template>
           <td>{{ row.entry.operator }}</td>
+          <td>
+            <span class="tag" :class="row.entry.source_system === 'tyzsk' ? 'gray' : 'blue'">
+              {{ sourceSystemLabel(row.entry.source_system) }}
+            </span>
+          </td>
           <td>{{ ACTION_LABEL[row.entry.action] }}</td>
           <td style="color: var(--ink-4)">
             {{ describeCoord(row.entry.coord, dimensions) }}

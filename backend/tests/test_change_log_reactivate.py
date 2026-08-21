@@ -22,6 +22,7 @@ def _answer(
     reactivate_reason: str | None = None,
     operator: str = "admin",
     source: str = "人工填报",
+    source_system: str = "tyzsk",
 ) -> Answer:
     coord = coord or {}
     return Answer(
@@ -34,6 +35,7 @@ def _answer(
         effective_time=created_at.date(),
         operator=operator,
         source=source,
+        source_system=source_system,
         note=None,
         revoked=revoked,
         revoked_at=revoked_at,

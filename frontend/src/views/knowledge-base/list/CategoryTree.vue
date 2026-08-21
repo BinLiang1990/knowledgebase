@@ -13,12 +13,10 @@ import CategoryFormDialog from './CategoryFormDialog.vue'
 import DeleteCategoryDialog from './DeleteCategoryDialog.vue'
 
 const props = defineProps<{
-  /** 启用中知识库总数（「全部」节点的数字） */
+  /** 启用中知识库总数（「全部」节点的数字，来自分页接口的全局 summary） */
   totalActiveCount: number
-  /** category_id 为空的启用中知识库数（「未分类」节点的数字） */
+  /** category_id 为空的启用中知识库数（「未分类」节点的数字，同上） */
   uncategorizedCount: number
-  /** 各分类下**全部状态**的知识库数（删除拦截口径：含已停用，占用即阻塞） */
-  kbCountByCategory: Record<number, number>
 }>()
 
 const emit = defineEmits<{
@@ -209,9 +207,11 @@ function openEdit(data: TreeNodeData) {
     formDialogRef.value?.open(category)
 }
 function openDelete(data: TreeNodeData) {
+  // 删除拦截提示数用全部状态口径（含已停用与回收站，占用即阻塞），
+  // 由 /categories 的 total_knowledge_base_count 提供
   deleteDialogRef.value?.open(
     { id: data.id!, name: data.name, path: categoryPath(data.id!) },
-    { childCount: data.children.length, kbCount: props.kbCountByCategory[data.id!] ?? 0 },
+    { childCount: data.children.length, kbCount: catById.value.get(data.id!)?.total_knowledge_base_count ?? 0 },
   )
 }
 async function onMutated() {

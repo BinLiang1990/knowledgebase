@@ -190,8 +190,9 @@ def list_relations(
 # ---------------- 手动添加 / 编辑 / 删除 ----------------
 
 def _resolve_live_endpoint(db: Session, ref: EndpointRef) -> ChainEndpoint:
+    # 已软删的知识库（回收站/已彻底删除）不允许作为新关联的端点
     kb = db.get(KnowledgeBase, ref.kb_id)
-    if kb is None:
+    if kb is None or kb.deleted_at is not None:
         raise BusinessError("知识库不存在", status_code=404)
     kp = db.execute(
         select(KnowledgePoint).where(

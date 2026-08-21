@@ -18,6 +18,7 @@ from kb_backend.auth.deps import (
     _decode_operator_header,
     _service_gate,
     current_operator,
+    current_source_system,
     get_current_user,
     invalidate_token_cache,
 )
@@ -54,7 +55,7 @@ def _gate(method: str, path: str, headers: dict[str, str] | None = None):
 
     async def run():
         await _service_gate(_make_request(method, path, headers), TOKEN)
-        return get_current_user(), current_operator()
+        return get_current_user(), current_operator(), current_source_system()
 
     return asyncio.run(run())
 
@@ -96,27 +97,35 @@ def test_write_without_operator_header_rejected_400(service_env):
 
 
 def test_write_with_operator_header_passes_and_stamps_identity(service_env):
-    user, operator = _gate("POST", "/knowledge-bases", {"X-Service-Operator": "zhangsan"})
+    user, operator, source_system = _gate("POST", "/knowledge-bases", {"X-Service-Operator": "zhangsan"})
     assert user is not None
     assert user.auth_source == "service"
     assert user.source_system == "yhfkglxt"
-    # 落库 operator = "系统编码:操作人"
+    # 落库 operator = "系统编码:操作人"；source_system = 平台来源系统编码
     assert operator == "yhfkglxt:zhangsan"
+    assert source_system == "yhfkglxt"
 
 
 def test_read_without_operator_header_keeps_system_identity(service_env):
-    _user, operator = _gate("GET", "/knowledge-bases")
+    _user, operator, source_system = _gate("GET", "/knowledge-bases")
     assert operator == "yhfkglxt-service"
+    assert source_system == "yhfkglxt"
 
 
 def test_read_with_operator_header_also_stamped(service_env):
-    _user, operator = _gate("GET", "/knowledge-bases", {"X-Service-Operator": "lisi"})
+    _user, operator, _source_system = _gate("GET", "/knowledge-bases", {"X-Service-Operator": "lisi"})
     assert operator == "yhfkglxt:lisi"
 
 
 def test_operator_header_urlencoded_chinese(service_env):
-    _user, operator = _gate("POST", "/knowledge-bases", {"X-Service-Operator": "%E5%BC%A0%E4%B8%89"})
+    _user, operator, _source_system = _gate("POST", "/knowledge-bases", {"X-Service-Operator": "%E5%BC%A0%E4%B8%89"})
     assert operator == "yhfkglxt:张三"
+
+
+def test_current_source_system_defaults_to_own_system(service_env):
+    """无鉴权上下文（运营 off 模式 / worker 线程）：source_system = 本系统编码。"""
+    _current_user.set(None)
+    assert current_source_system() == "tyzsk"
 
 
 # ------------------------------------------------------------ 白名单 ----

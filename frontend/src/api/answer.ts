@@ -14,7 +14,10 @@ export interface Answer {
   content: string
   effective_time: string
   operator: string
+  /** 数据来源（产生方式）：人工填报 / AI生成 / 批量导入 */
   source: string
+  /** 操作系统（写入方系统编码）：tyzsk = 本系统，其他为外部系统编码 */
+  source_system: string
   note: string | null
   revoked: boolean
   revoked_at: string | null

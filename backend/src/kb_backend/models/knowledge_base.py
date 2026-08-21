@@ -1,5 +1,7 @@
+from datetime import datetime
+
 from sqlalchemy import Enum, ForeignKey, String, Text
-from sqlalchemy.dialects.mysql import BIGINT
+from sqlalchemy.dialects.mysql import BIGINT, DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, created_at_column, updated_at_column
@@ -27,5 +29,11 @@ class KnowledgeBase(Base):
         nullable=False,
         server_default="active",
     )
+    # 两级软删（migration 0009）：deleted_at 非空 = 在回收站（仅 deprecated
+    # 可删，还原后回到 deprecated）；purged_at 非空 = 回收站内"彻底删除"——
+    # 同样是软删，数据保留，仅从回收站消失、不可再还原。status 不感知删除。
+    deleted_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    purged_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
     created_at = created_at_column()
     updated_at = updated_at_column()

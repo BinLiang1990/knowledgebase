@@ -61,6 +61,14 @@ class KnowledgeBaseOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class KnowledgeBaseRecycleOut(KnowledgeBaseOut):
+    """回收站条目：在 KnowledgeBaseOut 之上补删除留痕。status 恒为
+    deprecated（仅停用库可删，还原后也回到停用）。"""
+
+    deleted_at: datetime
+    deleted_by: str | None
+
+
 class KnowledgeBaseStatsOut(BaseModel):
     subject_count: int
     active_answer_count: int

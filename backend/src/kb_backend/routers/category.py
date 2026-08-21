@@ -111,42 +111,62 @@ def _next_sort_order(db: Session, parent_id: int | None, exclude_id: int | None 
     return siblings[-1].sort_order + 1
 
 
-def _to_out(category: KnowledgeBaseCategory, active_kb_count: int) -> CategoryOut:
+def _to_out(
+    category: KnowledgeBaseCategory, active_kb_count: int, total_kb_count: int
+) -> CategoryOut:
     return CategoryOut(
         id=category.id,
         parent_id=category.parent_id,
         name=category.name,
         sort_order=category.sort_order,
         active_knowledge_base_count=active_kb_count,
+        total_knowledge_base_count=total_kb_count,
         created_at=category.created_at,
         updated_at=category.updated_at,
     )
 
 
 def _single_out_envelope(db: Session, category: KnowledgeBaseCategory) -> dict:
-    count = db.execute(
+    active_count = db.execute(
         select(func.count())
         .select_from(KnowledgeBase)
         .where(
             KnowledgeBase.category_id == category.id,
             KnowledgeBase.status == "active",
+            KnowledgeBase.deleted_at.is_(None),
         )
     ).scalar_one()
-    return envelope(_to_out(category, count).model_dump(mode="json"))
+    # 全部状态数是删除拦截口径：含已停用与回收站（占用即阻塞，
+    # 与 delete_category 的校验、DB RESTRICT 外键一致），刻意不过滤软删
+    total_count = db.execute(
+        select(func.count())
+        .select_from(KnowledgeBase)
+        .where(KnowledgeBase.category_id == category.id)
+    ).scalar_one()
+    return envelope(_to_out(category, active_count, total_count).model_dump(mode="json"))
 
 
 @router.get("")
 def list_categories(db: Session = Depends(get_db)) -> dict:
     """全量扁平列表（不分页，PRD §4.11 性能口径），按 (parent_id 分组内的
-    sort_order, id) 排序；树形组装与子树合计数由前端完成。每条附带直属的
-    启用中知识库数——只统计 active（PRD §4.11 未决 #1 的建议口径）。"""
-    count_by_category = dict(
+    sort_order, id) 排序；树形组装与子树合计数由前端完成。每条附带两个直属
+    计数：启用中知识库数（树节点数字，只统计 active 且未删除——PRD §4.11
+    未决 #1 的建议口径）与全部状态数（删除拦截提示，含已停用与回收站）。"""
+    active_by_category = dict(
         db.execute(
             select(KnowledgeBase.category_id, func.count())
             .where(
                 KnowledgeBase.status == "active",
+                KnowledgeBase.deleted_at.is_(None),
                 KnowledgeBase.category_id.is_not(None),
             )
+            .group_by(KnowledgeBase.category_id)
+        ).all()
+    )
+    total_by_category = dict(
+        db.execute(
+            select(KnowledgeBase.category_id, func.count())
+            .where(KnowledgeBase.category_id.is_not(None))
             .group_by(KnowledgeBase.category_id)
         ).all()
     )
@@ -159,7 +179,10 @@ def list_categories(db: Session = Depends(get_db)) -> dict:
         .scalars()
         .all()
     )
-    out = [_to_out(c, count_by_category.get(c.id, 0)) for c in rows]
+    out = [
+        _to_out(c, active_by_category.get(c.id, 0), total_by_category.get(c.id, 0))
+        for c in rows
+    ]
     return envelope([o.model_dump(mode="json") for o in out])
 
 

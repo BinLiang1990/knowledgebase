@@ -1,8 +1,12 @@
 from datetime import datetime
 
+import pytest
+from pydantic import ValidationError
+
 from kb_backend.change_log import build_change_log
 from kb_backend.coord import compute_coord_hash
 from kb_backend.models.answer import Answer
+from kb_backend.schemas.knowledge_point import AnswerCreate, AnswerEdit
 
 
 def _answer(
@@ -17,6 +21,7 @@ def _answer(
     revoke_reason: str | None = None,
     operator: str = "admin",
     source: str = "人工填报",
+    source_system: str = "tyzsk",
 ) -> Answer:
     coord = coord or {}
     return Answer(
@@ -29,6 +34,7 @@ def _answer(
         effective_time=created_at.date(),
         operator=operator,
         source=source,
+        source_system=source_system,
         note=None,
         revoked=revoked,
         revoked_at=revoked_at,
@@ -176,3 +182,37 @@ def test_identical_created_at_ties_broken_by_answer_id_deterministically() -> No
     entries_2 = build_change_log([a2, a1])
 
     assert [e.answer_id for e in entries_1] == [e.answer_id for e in entries_2]
+
+
+def test_source_and_source_system_pass_through_all_entry_kinds() -> None:
+    """留痕三元组：source（产生方式）与 source_system（操作系统）逐条透传，
+    包括版本行与撤回/恢复的合成行。"""
+    a = _answer(
+        1, kp_id=10, created_at=datetime(2026, 8, 1, 10, 0),
+        source="AI生成", source_system="yhfkglxt",
+        revoked=False,
+        revoked_at=datetime(2026, 8, 2, 9, 0), revoked_by="yhfkglxt:zhangsan",
+        revoke_reason="口径作废",
+    )
+    a.reactivated_at = datetime(2026, 8, 3, 9, 0)
+    a.reactivated_by = "yhfkglxt:zhangsan"
+    a.reactivate_reason = "恢复使用"
+
+    entries = build_change_log([a])
+    # create 版本行 + 撤回合成行 + 恢复合成行
+    assert {e.action for e in entries} == {"create", "revoke", "reactivate"}
+    for e in entries:
+        assert e.source == "AI生成"
+        assert e.source_system == "yhfkglxt"
+
+
+def test_answer_source_input_enum() -> None:
+    """写入侧 source 只接受自报的两种产生方式；"批量导入"由服务端固定写，
+    不接受自报；编辑不传 = None（继承被编辑答案的值）。"""
+    assert AnswerCreate(content="c", effective_time="2026-08-21").source == "人工填报"
+    assert AnswerCreate(content="c", effective_time="2026-08-21", source="AI生成").source == "AI生成"
+    with pytest.raises(ValidationError):
+        AnswerCreate(content="c", effective_time="2026-08-21", source="批量导入")
+    with pytest.raises(ValidationError):
+        AnswerCreate(content="c", effective_time="2026-08-21", source="爬虫抓取")
+    assert AnswerEdit(content="c", effective_time="2026-08-21").source is None

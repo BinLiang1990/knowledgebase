@@ -21,6 +21,7 @@ export function makeAnswer(overrides: Partial<Answer> = {}): Answer {
     effective_time: '2026-08-08',
     operator: 'admin',
     source: '人工填报',
+    source_system: 'tyzsk',
     note: null,
     revoked: false,
     revoked_at: null,

@@ -108,7 +108,10 @@ _ADMIN_WRITE = [
     re.compile(r"^/dimensions(/.*)?$"),                       # POST/PATCH/activate/deactivate
     re.compile(r"^/knowledge-bases$"),                        # POST 建库
     re.compile(r"^/knowledge-bases/\d+$"),                    # PATCH 改名/描述/改挂分类
-    re.compile(r"^/knowledge-bases/\d+/(activate|deactivate|enabled-dimensions)$"),
+    # delete/restore/purge：知识库软删与回收站（migration 0009）——删库
+    # 与建库同级 admin+；GET /knowledge-bases/recycle-bin 走 GET 兜底的
+    # viewer，不进第三方豁免面（回收站是运营侧管理视图）
+    re.compile(r"^/knowledge-bases/\d+/(activate|deactivate|enabled-dimensions|delete|restore|purge)$"),
     # 知识库分类树 (issue #39)：组织知识库的管理动作，与建/改库同级。
     # GET /categories 不在此列（走 GET 兜底的 viewer），也不进第三方
     # 豁免面——对外列表接口已随知识库带回分类信息，第三方不需要拉树

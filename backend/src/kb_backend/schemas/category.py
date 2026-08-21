@@ -58,6 +58,10 @@ class CategoryOut(BaseModel):
     # 直属的启用中知识库数（PRD §4.11 未决 #1 的建议口径：不含已停用）；
     # 子树合计由前端聚合，避免后端重复算整棵树
     active_knowledge_base_count: int
+    # 直属的全部状态知识库数（删除拦截口径：含已停用与回收站——「占用即
+    # 阻塞」，与 DELETE /categories 的校验及 DB RESTRICT 外键一致）。
+    # 知识库列表改服务端过滤后前端拿不到全量列表，该数字改由这里提供。
+    total_knowledge_base_count: int
     created_at: datetime
     updated_at: datetime
 

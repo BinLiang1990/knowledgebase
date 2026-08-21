@@ -12,7 +12,10 @@ export interface ChangeLogEntry {
   coord: Record<string, string | number | boolean>
   before_content: string | null
   after_content: string | null
+  /** 数据来源（产生方式）：人工填报 / AI生成 / 批量导入 */
   source: string
+  /** 操作系统（写入方系统编码）：tyzsk = 本系统，其他为外部系统编码 */
+  source_system: string
   revoke_reason: string | null
   /** reactivated 只出现在撤回条目上：这次撤回后来被恢复、已不再生效（issue #32） */
   status: 'live' | 'superseded' | 'revoked' | 'reactivated'

@@ -38,6 +38,7 @@ class ChangeLogEntry:
     before_content: str | None
     after_content: str | None
     source: str
+    source_system: str
     revoke_reason: str | None
     status: ChangeLogStatus
     revocable: bool
@@ -94,6 +95,7 @@ def build_change_log(answers: list[Answer]) -> list[ChangeLogEntry]:
                     before_content=None if i == 0 else chain[i - 1].content,
                     after_content=a.content,
                     source=a.source,
+                    source_system=a.source_system,
                     revoke_reason=None,
                     status=status,
                     revocable=is_last and not a.revoked,
@@ -135,6 +137,7 @@ def build_change_log(answers: list[Answer]) -> list[ChangeLogEntry]:
                     before_content=_content_as_of(last.revoked_at),
                     after_content=None,
                     source=last.source,
+                    source_system=last.source_system,
                     revoke_reason=last.revoke_reason,
                     status="revoked" if last.revoked else "reactivated",
                     revocable=False,
@@ -156,6 +159,7 @@ def build_change_log(answers: list[Answer]) -> list[ChangeLogEntry]:
                     before_content=None,
                     after_content=_content_as_of(last.reactivated_at),
                     source=last.source,
+                    source_system=last.source_system,
                     revoke_reason=None,
                     status="superseded" if last.revoked else "live",
                     revocable=False,

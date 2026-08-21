@@ -12,6 +12,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '知识库列表', icon: 'Grid', order: 1, crumb: '知识库管理 / 知识库列表' },
   },
   {
+    // 静态段路由优先于下面的 :kbId 参数路由（vue-router 按具体度匹配）
+    path: '/knowledge-bases/recycle-bin',
+    name: 'KnowledgeBaseRecycleBin',
+    component: () => import('@/views/knowledge-base/recycle-bin/index.vue'),
+    meta: { title: '知识库回收站', crumb: '知识库管理 / 回收站', hidden: true },
+  },
+  {
     path: '/knowledge-bases/:kbId/knowledge-points',
     name: 'KnowledgePointList',
     component: () => import('@/views/knowledge-base/points/index.vue'),

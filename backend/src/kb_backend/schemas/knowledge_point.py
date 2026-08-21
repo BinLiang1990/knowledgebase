@@ -11,10 +11,16 @@ def _stripped_non_empty(v: str, field_label: str) -> str:
     return v
 
 
+# 数据来源（产生方式）：调用方可自报的两种。第三种"批量导入"由
+# batch-import 端点服务端固定写入，不接受自报。
+AnswerSourceInput = Literal["人工填报", "AI生成"]
+
+
 class DefaultAnswerInput(BaseModel):
     content: str = Field(min_length=1)
     effective_time: date
     note: str | None = None
+    source: AnswerSourceInput = "人工填报"
 
 
 class KnowledgePointCreate(BaseModel):
@@ -88,6 +94,7 @@ class AnswerCreate(BaseModel):
     effective_time: date
     coord: dict[str, Any] = Field(default_factory=dict)
     note: str | None = None
+    source: AnswerSourceInput = "人工填报"
     # issue #32：目标条件组合当前是撤回态时必填（接口层校验，见
     # _reactivate_chain_if_revoked）；其余情况可不传/被忽略
     reactivate_reason: str | None = Field(default=None, max_length=500)
@@ -101,6 +108,9 @@ class AnswerEdit(BaseModel):
     # unchanged) — see the validator below for why an explicit JSON `null`
     # is rejected rather than silently treated the same way.
     coord: dict[str, Any] | None = None
+    # None = 继承被编辑答案的 source（含"批量导入"）；显式传值可改写——
+    # 例如把 AI 生成的内容人工核对后自报"人工填报"
+    source: AnswerSourceInput | None = None
     migration_reason: str | None = Field(default=None, max_length=500)
     # issue #32：编辑落点的链（迁移后的新条件，或原条件本身）处于撤回态时必填
     reactivate_reason: str | None = Field(default=None, max_length=500)
@@ -127,6 +137,7 @@ class AnswerOut(BaseModel):
     effective_time: date
     operator: str
     source: str
+    source_system: str
     note: str | None
     revoked: bool
     revoked_at: datetime | None

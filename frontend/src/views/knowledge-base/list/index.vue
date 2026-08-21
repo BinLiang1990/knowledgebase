@@ -1,16 +1,16 @@
 <script setup lang="ts">
-// 知识库列表页。列表接口无关键词/分页参数，搜索与分页在前端内存中完成
-// （设计文档 §5，见 api/knowledgeBase.ts 的注释）。
-// 2026-08-19（issue #40）：左侧新增分类树（PRD §4.11）——点击分类节点，
-// 右侧只展示该分类及其全部子孙下的知识库；分类过滤同样在前端内存中做
-// （后端虽提供 ?category_id= 过滤，但列表本来就是全量拉取 + 客户端过滤，
-// 保持同一套口径；对外接口的服务端过滤面向第三方）。
+// 知识库列表页。2026-08-21 起分类切换、关键词搜索、分页全部走服务端参数
+// （GET /knowledge-bases?category_id/uncategorized/keyword/page）——最初是
+// 全量拉取 + 前端内存过滤（设计文档 §5 的旧口径），数据量增长后不成立。
+// 左侧分类树（PRD §4.11，issue #40）：点击分类节点，右侧只展示该分类及其
+// 全部子孙下的知识库（含子孙语义由服务端实现，前端只传选中分类 id）。
 import type { CategoryScope } from '@/api/category'
 import type { KnowledgeBase } from '@/api/knowledgeBase'
-import { listKnowledgeBases } from '@/api/knowledgeBase'
+import { pageKnowledgeBases } from '@/api/knowledgeBase'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { formatDate } from '@/utils/format'
 import CategoryTree from './CategoryTree.vue'
+import DeleteKbDialog from './DeleteKbDialog.vue'
 import KnowledgeBaseFormDialog from './KnowledgeBaseFormDialog.vue'
 import ToggleKbStatusDialog from './ToggleKbStatusDialog.vue'
 
@@ -18,45 +18,44 @@ defineOptions({ name: 'KnowledgeBaseList' })
 
 const PAGE_SIZE = 8
 
-const kbQuery = useAsyncData(listKnowledgeBases)
-
 const keywordInput = ref('')
 const keyword = ref('')
 const page = ref(1)
 const scope = ref<CategoryScope>({ type: 'all' })
 
-const scopeIds = computed(() => (scope.value.type === 'category' ? new Set(scope.value.ids) : null))
+const kbQuery = useAsyncData(
+  () =>
+    pageKnowledgeBases({
+      page: page.value,
+      page_size: PAGE_SIZE,
+      keyword: keyword.value || undefined,
+      category_id: scope.value.type === 'category' ? scope.value.id : undefined,
+      uncategorized: scope.value.type === 'none' || undefined,
+    }),
+  // 同一次交互里 keyword/page/scope 可能一起变（如查询时重置回第 1 页），
+  // watch 在同一 tick 内合并触发，只发一次请求；竞态由 useAsyncData 兜底
+  { watch: [keyword, page, scope] },
+)
+
 const scopeLabel = computed(() => {
   if (scope.value.type === 'none')
     return '未分类'
   return scope.value.type === 'category' ? scope.value.label : '全部知识库'
 })
 
-const filtered = computed(() => {
-  const list = kbQuery.data.value ?? []
-  return list.filter((kb) => {
-    if (scope.value.type === 'none' && kb.category_id !== null)
-      return false
-    if (scopeIds.value && (kb.category_id === null || !scopeIds.value.has(kb.category_id)))
-      return false
-    if (!keyword.value)
-      return true
-    return `${kb.name} ${kb.description ?? ''}`.toLowerCase().includes(keyword.value)
-  })
-})
+const pageItems = computed(() => kbQuery.data.value?.list ?? [])
+const total = computed(() => kbQuery.data.value?.total ?? 0)
 
-const pageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE)))
-// 变更（编辑/停用）可能把当前页从 filtered 底下抽空——比如搜索结果第 2 页
-// 仅剩的一条被停用后 page 还停在 2，分页会显示无效的「第 2/1 页」。夹回
-// 合法范围（Codex 结论，PR #22）。
+// 变更（删除/停用后重载）可能把当前页抽空——总数缩到当前页码之前时夹回
+// 合法范围（Codex 结论，PR #22 的服务端分页版），watch 触发重新取数
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 watch(pageCount, (count) => {
   if (page.value > count)
     page.value = count
 })
-const pageItems = computed(() => filtered.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
 
 function applyFilter() {
-  keyword.value = keywordInput.value.trim().toLowerCase()
+  keyword.value = keywordInput.value.trim()
   page.value = 1
 }
 function resetFilter() {
@@ -69,24 +68,16 @@ function onScopeSelect(next: CategoryScope) {
   page.value = 1
 }
 
-// ---- 分类树的计数口径（PRD §4.11）：节点数字只统计启用中的知识库；
-// 删除拦截按「占用即阻塞」统计全部状态（含已停用） ----
-const totalActiveCount = computed(() => (kbQuery.data.value ?? []).filter(kb => kb.status === 'active').length)
-const uncategorizedCount = computed(() =>
-  (kbQuery.data.value ?? []).filter(kb => kb.status === 'active' && kb.category_id === null).length,
-)
-const kbCountByCategory = computed(() => {
-  const counts: Record<number, number> = {}
-  for (const kb of kbQuery.data.value ?? []) {
-    if (kb.category_id !== null)
-      counts[kb.category_id] = (counts[kb.category_id] ?? 0) + 1
-  }
-  return counts
-})
+// ---- 分类树虚拟节点（全部/未分类）的启用中计数：来自分页响应的全局
+// summary（PRD §4.11 计数口径）；各分类节点的数字由树自己的 /categories
+// 接口提供 ----
+const totalActiveCount = computed(() => kbQuery.data.value?.summary.active_total ?? 0)
+const uncategorizedCount = computed(() => kbQuery.data.value?.summary.active_uncategorized ?? 0)
 
 const treeRef = ref<InstanceType<typeof CategoryTree>>()
 const formDialogRef = ref<InstanceType<typeof KnowledgeBaseFormDialog>>()
 const toggleDialogRef = ref<InstanceType<typeof ToggleKbStatusDialog>>()
+const deleteDialogRef = ref<InstanceType<typeof DeleteKbDialog>>()
 
 function openCreate() {
   // 预填当前选中的分类，省去建库后再改挂
@@ -99,6 +90,9 @@ function openEdit(kb: KnowledgeBase) {
 }
 function openToggle(kb: KnowledgeBase) {
   toggleDialogRef.value?.open(kb)
+}
+function openDelete(kb: KnowledgeBase) {
+  deleteDialogRef.value?.open(kb)
 }
 /** 知识库变化（建/改/停启）会影响树上的节点计数，两边一起刷 */
 function onKbMutated() {
@@ -117,7 +111,6 @@ function onKbMutated() {
       ref="treeRef"
       :total-active-count="totalActiveCount"
       :uncategorized-count="uncategorizedCount"
-      :kb-count-by-category="kbCountByCategory"
       @select="onScopeSelect"
       @changed="kbQuery.load"
     />
@@ -129,6 +122,9 @@ function onKbMutated() {
         <span class="sub">{{ scopeLabel }}</span>
         <span class="spacer" />
         <span class="ops">
+          <RouterLink to="/knowledge-bases/recycle-bin" class="btn">
+            回收站
+          </RouterLink>
           <button type="button" class="btn primary" @click="openCreate">+ 新增知识库</button>
         </span>
       </div>
@@ -211,6 +207,8 @@ function onKbMutated() {
                 <a :class="{ danger: kb.status === 'active' }" @click="openToggle(kb)">
                   {{ kb.status === 'active' ? '停用' : '启用' }}
                 </a>
+                <!-- 仅已停用的库可删（后端强校验），删除 = 进回收站 -->
+                <a v-if="kb.status === 'deprecated'" class="danger" @click="openDelete(kb)">删除</a>
               </td>
             </tr>
           </template>
@@ -220,7 +218,7 @@ function onKbMutated() {
         v-model:current-page="page"
         class="pager"
         layout="total, prev, pager, next"
-        :total="filtered.length"
+        :total="total"
         :page-size="PAGE_SIZE"
       />
     </div>
@@ -228,6 +226,7 @@ function onKbMutated() {
 
   <KnowledgeBaseFormDialog ref="formDialogRef" @success="onKbMutated" />
   <ToggleKbStatusDialog ref="toggleDialogRef" @success="onKbMutated" />
+  <DeleteKbDialog ref="deleteDialogRef" @success="onKbMutated" />
 </template>
 
 <style scoped>
